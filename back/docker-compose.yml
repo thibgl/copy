@@ -1,0 +1,23 @@
+version: "3.8"
+services:
+  web:
+    build: .
+    ports:
+      - "5001:5000"
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/mydatabase
+    command: flask run --host=0.0.0.0 --reload # for dev
+    volumes:
+      - .:/app # Bind mount your local project directory to /app in the container
+
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
