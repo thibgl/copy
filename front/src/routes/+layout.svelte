@@ -1,11 +1,25 @@
 <script lang="ts">
 	import '../app.postcss';
-	import { AppShell, AppBar } from '@skeletonlabs/skeleton';
-
+	import {
+		AppShell,
+		AppBar,
+		Modal,
+		initializeStores,
+		prefersReducedMotionStore,
+		getModalStore
+	} from '@skeletonlabs/skeleton';
+	import type { ModalSettings, ModalComponent, ModalStore } from '@skeletonlabs/skeleton';
 	// Floating UI for Popups
 	import { computePosition, autoUpdate, flip, shift, offset, arrow } from '@floating-ui/dom';
 	import { storePopup } from '@skeletonlabs/skeleton';
 	storePopup.set({ computePosition, autoUpdate, flip, shift, offset, arrow });
+
+	import LoginForm from '$lib/modals/login/LoginForm.svelte';
+	initializeStores();
+
+	const modalComponentRegistry: Record<string, ModalComponent> = {
+		Login: { ref: LoginForm }
+	};
 
 	export let data;
 	console.log(data);
@@ -50,3 +64,6 @@
 	<!-- Page Route Content -->
 	<slot />
 </AppShell>
+
+<!-- Modals -->
+<Modal components={modalComponentRegistry} />
