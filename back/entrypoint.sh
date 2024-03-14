@@ -2,7 +2,7 @@
 
 # Initialize MongoDB collections and indexes
 echo "Initializing MongoDB..."
-python /app/init_mongo.py
+python ./instance/init_database.py
 
 # Start the main process (e.g., Flask application)
 exec "$@"

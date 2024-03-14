@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_pymongo import PyMongo
+from werkzeug.security import generate_password_hash
 
 app = Flask(__name__)
 
@@ -13,12 +14,12 @@ def handle_data():
     if request.method == 'POST':
         # Store data sent by the Svelte front end in MongoDB
         data = request.json
-        mongo.db.data_collection.insert_one(data)
+        mongo.db.users.insert_one(data)
         return jsonify({"message": "Data stored successfully"}), 201
     
     elif request.method == 'GET':
         # Retrieve and return data from MongoDB
-        data = mongo.db.data_collection.find_one({}, {'_id': 0})  # Example: omitting the MongoDB ID
+        data = mongo.db.users.find_one({}, {'_id': 0})  # Example: omitting the MongoDB ID
         return jsonify(data), 200
 
 
