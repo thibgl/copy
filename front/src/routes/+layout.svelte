@@ -21,6 +21,16 @@
 		Login: { ref: LoginForm }
 	};
 
+	const modalStore = getModalStore();
+
+	const loginModal: ModalSettings = {
+		type: 'component',
+		component: 'Login',
+		title: 'Log-in',
+		body: '',
+		meta: {}
+		// meta: { categories: data.categories, category: data.category.slug }
+	};
 	export let data;
 	console.log(data);
 </script>
@@ -34,30 +44,11 @@
 				<strong class="text-xl uppercase">Skeleton</strong>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
-				<a
-					class="btn btn-sm variant-ghost-surface"
-					href="https://discord.gg/EXqV7W8MtY"
-					target="_blank"
-					rel="noreferrer"
+				<button
+					on:click={() => modalStore.trigger(loginModal)}
+					type="button"
+					class="btn variant-filled">Log-in</button
 				>
-					Discord
-				</a>
-				<a
-					class="btn btn-sm variant-ghost-surface"
-					href="https://twitter.com/SkeletonUI"
-					target="_blank"
-					rel="noreferrer"
-				>
-					Twitter
-				</a>
-				<a
-					class="btn btn-sm variant-ghost-surface"
-					href="https://github.com/skeletonlabs/skeleton"
-					target="_blank"
-					rel="noreferrer"
-				>
-					GitHub
-				</a>
 			</svelte:fragment>
 		</AppBar>
 	</svelte:fragment>

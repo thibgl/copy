@@ -1,6 +1,10 @@
 <!-- LoginForm.svelte -->
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { getModalStore } from '@skeletonlabs/skeleton';
+	import { isAuthenticated } from '$lib/stores/auth';
+
+	const modalStore = getModalStore();
 
 	let username = '';
 	let password = '';
@@ -8,35 +12,39 @@
 	let reset = true;
 </script>
 
-<form
-	use:enhance={() => {
-		creating = true;
-		return async ({ update, result, action, formData, formElement }) => {
-			console.log(result, action, formData, formElement);
-			await update({ reset: false });
-			reset = false;
-			if (result.data.status == 'success') {
-				reset = true;
-			}
-			creating = false;
-		};
-	}}
-	action="/login?/login"
-	method="POST"
-	class="form card p-4 w-modal shadow-xl space-y-4"
->
-	<div class="form-group">
-		<label for="username">Username</label>
-		<input type="text" name="username" bind:value={username} class="input" />
-	</div>
+{#if $modalStore[0]}
+	<form
+		use:enhance={() => {
+			creating = true;
+			return async ({ update, result, action, formData, formElement }) => {
+				console.log(result, action, formData, formElement);
+				await update({ reset: false });
+				reset = false;
+				if (result.status == 200) {
+					modalStore.close();
+					isAuthenticated.set(true);
+					reset = true;
+				}
+				creating = false;
+			};
+		}}
+		action="/login?/login"
+		method="POST"
+		class="form card p-4 w-modal shadow-xl space-y-4"
+	>
+		<div class="form-group">
+			<label for="username">Username</label>
+			<input type="text" name="username" bind:value={username} class="input" />
+		</div>
 
-	<div class="form-group">
-		<label for="password">Password</label>
-		<input type="password" name="password" bind:value={password} class="input" />
-	</div>
+		<div class="form-group">
+			<label for="password">Password</label>
+			<input type="password" name="password" bind:value={password} class="input" />
+		</div>
 
-	<button type="submit" class="btn variant-filled-primary">Login</button>
-</form>
+		<button type="submit" class="btn variant-filled-primary">Login</button>
+	</form>
+{/if}
 
 <style>
 	.form-group {

@@ -12,15 +12,17 @@ export const actions = {
 
         try {
             const response = await fetch(
-                "http://localhost:5001/api/data",
-                // {
-                //     body: formData,
-                //     method: "POST",
-                // }
-            ).then((response) => response.json())
-            console.log("response")
-            console.log(response)
-            return response
+                "http://localhost:5001/login",
+                {
+                    body: formData,
+                    method: "POST",
+                }
+            )
+
+            if (response.status === 200) {
+            }
+
+            return await response.json()
         } catch (error) {
             console.log(error)
         }
