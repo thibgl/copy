@@ -17,18 +17,19 @@
 		use:enhance={() => {
 			creating = true;
 			return async ({ update, result, action, formData, formElement }) => {
-				console.log(result, action, formData, formElement);
+				// console.log(result, action, formData, formElement);
+				console.log(result);
 				await update({ reset: false });
 				reset = false;
 				if (result.status == 200) {
 					modalStore.close();
-					isAuthenticated.set(true);
+					// ! TO CHANGE
 					reset = true;
 				}
 				creating = false;
 			};
 		}}
-		action="/login?/login"
+		action="/auth?/login"
 		method="POST"
 		class="form card p-4 w-modal shadow-xl space-y-4"
 	>

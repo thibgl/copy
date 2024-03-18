@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { isAuthenticated } from '$lib/stores/auth';
-	$: console.log($isAuthenticated);
 </script>
 
 <div class="container h-full mx-auto flex justify-center items-center">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isAuthenticated } from '$lib/stores/auth';
 	import '../app.postcss';
 	import {
 		AppShell,
@@ -31,8 +32,8 @@
 		meta: {}
 		// meta: { categories: data.categories, category: data.category.slug }
 	};
-	export let data;
-	console.log(data);
+	// export let data;
+	// console.log(data);
 </script>
 
 <!-- App Shell -->
@@ -41,14 +42,18 @@
 		<!-- App Bar -->
 		<AppBar>
 			<svelte:fragment slot="lead">
-				<strong class="text-xl uppercase">Skeleton</strong>
+				<strong class="text-xl uppercase">CopyTradz</strong>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
-				<button
-					on:click={() => modalStore.trigger(loginModal)}
-					type="button"
-					class="btn variant-filled">Log-in</button
-				>
+				{#if $isAuthenticated}
+					<button type="button" class="btn variant-filled">Log-out</button>
+				{:else}
+					<button
+						on:click={() => modalStore.trigger(loginModal)}
+						type="button"
+						class="btn variant-filled">Log-in</button
+					>
+				{/if}
 			</svelte:fragment>
 		</AppBar>
 	</svelte:fragment>
