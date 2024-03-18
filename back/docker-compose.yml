@@ -7,7 +7,7 @@ services:
     depends_on:
       - mongo
     environment:
-      - MONGO_URI=mongodb://mongo:27017/mydatabase
+      - MONGO_URI=mongodb://mongo:27017/db
     command: flask run --host=0.0.0.0 --reload # for dev
     volumes:
       - .:/app # Bind mount your local project directory to /app in the container

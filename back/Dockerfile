@@ -26,5 +26,8 @@ EXPOSE 5001
 ENV FLASK_ENV=development
 ENV FLASK_APP=app.py
 
+# To print() in DEV
+ENV PYTHONUNBUFFERED=1
+
 # Run app.py when the container launches
 CMD ["flask", "run", "--host=0.0.0.0", "--reload"]

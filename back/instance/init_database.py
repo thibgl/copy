@@ -22,7 +22,7 @@ if not root_user:
     root_user_data = {
         "username": "root",
         "email": "root@example.com",
-        "password_hash": generate_password_hash("your_secure_password")  # Replace with a secure password
+        "password_hash": generate_password_hash("root")  # Replace with a secure password
     }
     db.users.insert_one(root_user_data)
     print("Root user created.")
