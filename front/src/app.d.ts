@@ -8,6 +8,7 @@ declare global {
 	declare namespace App {
 		interface Locals {
 			user?: User
+			isAuthenticated: boolean = false
 		}
 
 		interface Platform { }

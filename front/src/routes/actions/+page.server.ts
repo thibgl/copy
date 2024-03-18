@@ -48,7 +48,7 @@ export const actions = {
 
             // Assuming your Flask backend clears the session cookie,
             // you might not need to manually delete the cookie here
-            // cookies.delete("AuthorizationToken");
+            cookies.delete("AuthorizationToken", { path: '/' })
 
             // throw redirect(302, "/user-auth")
         } catch (error) {
