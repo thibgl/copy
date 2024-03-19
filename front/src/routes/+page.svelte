@@ -1,5 +1,5 @@
 <script lang="ts">
-	// import { isAuthenticated } from '$lib/stores/auth';
+	// import Chart from '$lib/components/Chart.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import '../app.postcss';
@@ -8,6 +8,10 @@
 		AppBar,
 		Modal,
 		initializeStores,
+		AppRail,
+		AppRailTile,
+		AppRailAnchor,
+		ProgressRadial,
 		prefersReducedMotionStore,
 		getModalStore
 	} from '@skeletonlabs/skeleton';
@@ -34,6 +38,20 @@
 		meta: {}
 		// meta: { categories: data.categories, category: data.category.slug }
 	};
+
+	import StopIcon from '~icons/ph/stop';
+	import PlayIcon from '~icons/ph/play';
+	import HouseIcon from '~icons/ph/house-line';
+	import TradersIcon from '~icons/ph/users';
+	import TraderIcon from '~icons/ph/user';
+	import LogIcon from '~icons/ph/clock-counter-clockwise';
+	import LogoutIcon from '~icons/ph/eject';
+	import SettingsIcon from '~icons/ph/gear';
+	import BalanceIcon from '~icons/ph/piggy-bank';
+	import FavoriteIcon from '~icons/ph/star';
+	import CopyIcon from '~icons/ph/lightning';
+
+	let currentTile: number = 0;
 </script>
 
 <!-- App Shell -->
@@ -42,34 +60,94 @@
 		<!-- App Bar -->
 		<AppBar>
 			<svelte:fragment slot="lead">
-				<strong class="text-xl uppercase">CopyTradz</strong>
+				<h1 class="text-3xl">
+					<strong
+						class="bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone"
+						>CopyTrader</strong
+					>
+				</h1>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
 				{#if $page.data.isAuthenticated}
-					<button
-						type="button"
-						class="btn variant-filled"
-						on:click={async () => {
-							await fetch('/api/logout');
-							invalidateAll();
-						}}>Log-out</button
+					<button class="btn variant-filled-secondary"><BalanceIcon /><span>1000 USDT</span></button
 					>
+					<button class="btn variant-ghost-primary"><StopIcon /></button>
 				{:else}
 					<button
 						on:click={() => modalStore.trigger(loginModal)}
 						type="button"
-						class="btn variant-filled">Log-in</button
+						class="btn bg-gradient-to-br variant-gradient-primary-secondary">Log-in</button
 					>
 				{/if}
 			</svelte:fragment>
 		</AppBar>
 	</svelte:fragment>
+	<svelte:fragment slot="sidebarLeft">
+		{#if $page.data.isAuthenticated}
+			<AppRail width="w-full">
+				<!-- --- -->
+				<AppRailTile bind:group={currentTile} name="tile-1" value={0} title="tile-1">
+					<svelte:fragment slot="lead"><HouseIcon class="w-full h-8" /></svelte:fragment>
+					<span>Home</span>
+				</AppRailTile>
+				<AppRailTile bind:group={currentTile} name="tile-2" value={1} title="tile-2">
+					<svelte:fragment slot="lead"><TradersIcon class="w-full h-8" /></svelte:fragment>
+					<span>Traders</span>
+				</AppRailTile>
+				<AppRailTile bind:group={currentTile} name="tile-3" value={2} title="tile-3">
+					<svelte:fragment slot="lead"><LogIcon class="w-full h-8" /></svelte:fragment>
+					<span>Logs</span>
+				</AppRailTile>
+				<!-- --- -->
+				<svelte:fragment slot="trail">
+					<AppRailTile bind:group={currentTile} name="tile-4" value={3} title="tile-4">
+						<svelte:fragment slot="lead"><SettingsIcon class="w-full h-8" /></svelte:fragment>
+						<span>Settings</span>
+					</AppRailTile>
+
+					<button
+						type="button"
+						class="btn !bg-transparent aspect-square flex flex-col items-center space-x-0"
+						on:click={async () => {
+							await fetch('/api/logout');
+							invalidateAll();
+						}}
+						><LogoutIcon class="w-full h-8" /><span class="text-xs font-bold">Sign-out</span
+						></button
+					>
+				</svelte:fragment>
+			</AppRail>
+		{/if}
+	</svelte:fragment>
+
 	<!-- Page Route Content -->
 	<div class="container h-full mx-auto flex justify-center items-center">
 		<div class="space-y-10 text-center flex flex-col items-center">
 			<!-- Animated Logo -->
 			{#if $page.data.isAuthenticated}
-				Auth
+				{#if currentTile === 0}
+					<!-- <Chart /> -->
+					Tile 1
+				{/if}
+				{#if currentTile === 1}
+					<div class="card">
+						<header class="card-header flex">
+							<TraderIcon class="w-8 h-8" />
+							<FavoriteIcon class="w-8 h-8" />
+							<CopyIcon class="w-8 h-8" />
+						</header>
+						<section class="p-4">(content)</section>
+						<footer class="card-footer">
+							<ProgressRadial width="w-16" font={128} value={95}>95</ProgressRadial>
+						</footer>
+					</div>
+				{/if}
+				{#if currentTile === 2}
+					Tile 3
+				{/if}
+				{#if currentTile === 3}
+					Settings
+				{/if}
 			{:else}
 				<figure>
 					<section class="img-bg" />
