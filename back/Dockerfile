@@ -1,15 +1,6 @@
 # Use an official Python runtime as a parent image
 FROM python:3.9-slim
 
-# Copy the entrypoint script into the container
-COPY entrypoint.sh /entrypoint.sh
-
-# Make the entrypoint script executable
-RUN chmod +x /entrypoint.sh
-
-# Set the entrypoint script to run on container start
-ENTRYPOINT ["/entrypoint.sh"]
-
 # Set the working directory in the container
 WORKDIR /app
 
@@ -17,17 +8,21 @@ WORKDIR /app
 COPY . /app
 
 # Install any needed packages specified in requirements.txt
+# Ensure you have uvicorn and fastapi in your requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Make port 5000 available to the world outside this container
-EXPOSE 5001
+# Make port 8000 available to the world outside this container
+# FastAPI default port is 8000, but you can change it if needed
+EXPOSE 8000
 
 # Define environment variable
-ENV FLASK_ENV=development
-ENV FLASK_APP=app.py
+# FastAPI doesn't use FLASK_ENV. You can define custom env variables as needed
+ENV FASTAPI_ENV=development
 
 # To print() in DEV
 ENV PYTHONUNBUFFERED=1
 
-# Run app.py when the container launches
-CMD ["flask", "run", "--host=0.0.0.0", "--reload"]
+# Run app.py using uvicorn when the container launches
+# Replace 'app:app' with 'your_fastapi_file_name:app_instance_name'
+CMD ["pydantic2ts", "--module", "app.py", "--output", "../front/apiTypes.ts"]
+CMD ["uvicorn", "app:app", "--host=0.0.0.0", "--reload"]

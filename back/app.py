@@ -1,179 +1,239 @@
 import os
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, session, redirect, url_for
-from flask_cors import CORS
-from flask_login import (
-    LoginManager,
-    UserMixin,
-    current_user,
-    login_required,
-    login_user,
-    logout_user,
-)
-from flask_wtf.csrf import CSRFProtect, generate_csrf
-from flask_pymongo import PyMongo
-from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
-from bson.objectid import ObjectId  # Make sure to import ObjectId
+from fastapi import FastAPI, Depends, HTTPException, status, Cookie, Response
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.responses import JSONResponse
+from motor.motor_asyncio import AsyncIOMotorClient
+from passlib.hash import bcrypt
+from pydantic import BaseModel, Field, ConfigDict, PlainSerializer, AfterValidator, WithJsonSchema
+from starlette.middleware.cors import CORSMiddleware
+from bson.objectid import ObjectId
+from passlib.context import CryptContext
+from typing import Union, Annotated, Any
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 
 load_dotenv()
 
-app = Flask(__name__)
+SECRET_KEY = os.environ.get("SECRET_KEY", "secretkey")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-app.config.update(
-    DEBUG=True,
-    SECRET_KEY=os.environ.get('SECRET_KEY'),
-    SESSION_COOKIE_HTTPONLY=True,
-    REMEMBER_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    WTF_CSRF_ENABLED=False # for dev only
-)
+app = FastAPI()
 
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.session_protection = "strong"
-
-
-@login_manager.user_loader
-def load_user(user_id):
-    """
-    Flask-Login user_loader callback.
-    """
-    return User.get(user_id)
-
-
-csrf = CSRFProtect(app)
-
-# @app.after_request
-# def set_csrf_cookie(response):
-#     response.set_cookie('csrf_token', generate_csrf())
-#     return response
-
-
-cors = CORS(
-    app,
-    resources={r"*": {"origins": "http://localhost:5173"}},
+# CORS middleware setup
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
     expose_headers=["Content-Type", "X-CSRFToken"],
-    supports_credentials=True,
 )
 
-# Configure the MongoDB URI
-app.config["MONGO_URI"] = "mongodb://mongo:27017/db"
-mongo = PyMongo(app)
+async def get_db():
+    yield app.db
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Union[str, None] = None
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Serialize MongoDB ObjectId
+def validate_object_id(v: Any) -> ObjectId:
+    if isinstance(v, ObjectId):
+        return v
+    if ObjectId.is_valid(v):
+        return ObjectId(v)
+    raise ValueError("Invalid ObjectId")
+
+ObjectIdType = Annotated[
+    Union[str, ObjectId],
+    PlainSerializer(lambda x: str(x), return_type=str, when_used="json"),
+    AfterValidator(validate_object_id),
+    WithJsonSchema({"type": "string"}, mode="serialization"),
+]
+
+class User(BaseModel):
+    model_config = ConfigDict()
+
+    id: ObjectIdType = Field(None, alias="_id")
+    username: str
+    password_hash: str
+
+    class Config:
+        arbitrary_types_allowed = True
+        populate_by_alias=True
+        populate_by_name=True
+        validate_assignment=True
+
+# Pydantic model for login credentials
+class LoginCredentials(BaseModel):
+    username: str
+    password: str
+
+# Pydantic model for user registration
+class RegisterUser(BaseModel):
+    username: str
+    email: str  # Assuming you want to use this somewhere
+    password: str
 
 
-class User(UserMixin):
-    def __init__(self, user_data):
-        """
-        Initializes a User object with the data fetched from MongoDB.
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
 
-        Args:
-            user_data (dict): A dictionary containing user information fetched from MongoDB.
-        """
-        self.id = str(user_data['_id'])  # Convert ObjectId to string
-        self.username = user_data['username']
-        self.password_hash = user_data['password_hash']
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
-    @staticmethod
-    def get(user_id):
-        """
-        Static method to search the database and load a user by ID.
-
-        Args:
-            user_id (str): The ID of the user to load.
-
-        Returns:
-            User: The loaded user object if found, else None.
-        """
-        # Convert the string ID back to ObjectId for querying MongoDB
-        user_data = mongo.db.users.find_one({"_id": ObjectId(user_id)})
-        if user_data:
-            return User(user_data)
-        return None
-
-
-@app.route("/api/ping", methods=["GET"])
-def home():
-    return jsonify({"ping": "pong!"})
-
-
-@app.route("/api/get_csrf", methods=["GET"])
-def get_csrf():
-    token = generate_csrf()
-    response = jsonify({"csrf_token": token})  # Include the token in the JSON response body
-    return response
-
-
-@app.route('/api/login', methods=['POST'])
-def login():
-    data = request.get_json()  # Use this to parse JSON data
-    username = data.get('username')
-    password = data.get('password')
-    # Fetch the user from the database
-    user_data = mongo.db.users.find_one({"username": username})
-
-    if user_data and check_password_hash(user_data.get('password_hash'), password):
-        print('LOGIN SUCCESS')
-        # Login successful
-        user_obj = User(user_data)  # Create a User object from the fetched data
-        login_user(user_obj)  # Log the user in
-
-        # Remove sensitive information before returning response
-        user_data.pop('_id', None)
-        user_data.pop('password_hash', None)
-
-        return jsonify({"login": True, "message": "Login successful", "data": user_data}), 200
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
     else:
-        print('LOGIN FAIL')
-        # Login failed
-        return jsonify({"login": False, "message": "Invalid credentials"}), 401
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
+async def authenticate_user(db, username: str, password: str):
+    user = await db["users"].find_one({"username": username})
+    if user and verify_password(password, user["password_hash"]):
+        return User(**user)
+    return False
+
+async def get_current_user(db=Depends(get_db), token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    user = await db["users"].find_one({"username": token_data.username})
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+@app.on_event("startup")
+async def startup_db_client():
+    # Database connection
+    app.mongodb_client = AsyncIOMotorClient(os.environ.get("MONGO_URI", "mongodb://mongo:27017/db"))
+    app.db = app.mongodb_client.db
+
+    # Ensure collections exist
+    collections = await app.db.list_collection_names()
     
-
-@app.route("/api/get_session", methods=["GET"])
-def check_session():
-    if current_user.is_authenticated:
-        return jsonify({"login": True})
-
-    return jsonify({"login": False})
-
-
-@app.route("/api/logout", methods=["GET"])
-@login_required
-def logout():
-    logout_user()
-    return jsonify({"logout": True})
-
-
-@app.route('/api/data', methods=['POST', 'GET'])
-@login_required
-def handle_data():
-    if request.method == 'POST':
-        # Store data sent by the Svelte front end in MongoDB
-        data = request.json
-        mongo.db.users.insert_one(data)
-        return jsonify({"message": "Data stored successfully"}), 201
+    if "users" not in collections:
+        await app.db.create_collection("users")
+        # Create indexes here if needed
+        await app.db.users.create_index([("username", 1)], unique=True)
     
-    elif request.method == 'GET':
-        # Retrieve and return data from MongoDB
-        data = mongo.db.users.find_one({}, {'_id': 0})  # Example: omitting the MongoDB ID
-        return jsonify(data), 200
-
-
-@app.route('/api/register', methods=['POST'])
-def register_user():
-    # Example user data
-    user_data = {
-        "username": request.json['username'],
-        "email": request.json['email'],
-        "password_hash": generate_password_hash(request.json['password'])
-    }
+    if "traders" not in collections:
+        await app.db.create_collection("traders")
     
-    # Insert user data into MongoDB
-    mongo.db.users.insert_one(user_data)
+    # Check if root user exists
+    root_user = await app.db.users.find_one({"username": "root"})
     
-    return jsonify({"message": "User registered successfully"}), 201
+    if not root_user:
+        # Root user doesn't exist, so let's create one
+        root_user_data = {
+            "username": "root",
+            "email": "root@example.com",
+            "password_hash": bcrypt.hash("root")  # Replace with a secure password
+        }
+        await app.db.users.insert_one(root_user_data)
+        print("Root user created.")
+    else:
+        print("Root user already exists.")
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    app.mongodb_client.close()
+
+@app.post("/api/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await authenticate_user(app.db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/")
+async def read_root():
+    return {"message": "Hello World"}
+
+@app.get("/api/ping")
+async def home():
+    return {"ping": "pong!"}
+
+@app.post('/api/login')
+async def login(credentials: LoginCredentials):
+    user_data = await app.db.users.find_one({"username": credentials.username})
+    if user_data and bcrypt.verify(credentials.password, user_data["password_hash"]):
+        # Here you should handle login logic, session, or token generation
+        user_obj = User(
+            id=str(user_data["_id"]),
+            username=user_data["username"],
+            password_hash=user_data["password_hash"],
+        )
+        return {"login": True, "message": "Login successful", "data": user_obj.dict()}
+    else:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+@app.get("/api/logout")
+async def logout():
+    # Here you should handle logout logic, session termination, or token invalidation
+    return {"logout": True}
+
+@app.post('/api/data')
+async def handle_data_post(data: dict):
+    # Store data sent by the front end in MongoDB
+    result = await app.db.users.insert_one(data)
+    return {"message": "Data stored successfully", "id": str(result.inserted_id)}
+
+@app.get('/api/data')
+async def handle_data_get():
+    # Retrieve and return data from MongoDB
+    data = await app.db.users.find_one({}, {'_id': 0})
+    return data
+
+@app.post('/api/register')
+async def register_user(user: RegisterUser):
+    # Insert user data into MongoDB with hashed password
+    hashed_password = bcrypt.hash(user.password)
+    result = await app.db.users.insert_one({
+        "username": user.username,
+        "email": user.email,
+        "password_hash": hashed_password
+    })
+    return {"message": "User registered successfully", "id": str(result.inserted_id)}
+
+@app.get("/api/user", response_model=User)
+async def read_user(current_user: User = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return current_user
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

@@ -3,14 +3,16 @@ services:
   web:
     build: .
     ports:
-      - "5001:5000"
+      - "8000:8000" # FastAPI default port is 8000, but you can change it if needed
     depends_on:
       - mongo
     environment:
       - MONGO_URI=mongodb://mongo:27017/db
-    command: flask run --host=0.0.0.0 --reload # for dev
+    command: uvicorn app:app --host 0.0.0.0 --reload --port 8000 # Replace 'app:app' with your FastAPI app and instance name
     volumes:
       - .:/app # Bind mount your local project directory to /app in the container
+    environment:
+      - WATCHFILES_FORCE_POLLING=true
 
   mongo:
     image: mongo:latest
