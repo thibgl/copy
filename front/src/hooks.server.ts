@@ -1,6 +1,7 @@
 import type { Handle } from '@sveltejs/kit'
 import { parse } from 'cookie'
 
+
 export const handle: Handle = async ({ event, resolve }) => {
     const cookies = parse(event.request.headers.get('cookie') || '')
     const authToken = cookies['AuthorizationToken']
@@ -19,6 +20,7 @@ export const handle: Handle = async ({ event, resolve }) => {
             if (response.ok) {
                 // If the request is successful, set the user data in locals for use in endpoints/load functions
                 const userData = await response.json()
+                console.log(userData)
                 event.locals.user = userData
             } else {
                 console.error('Failed to verify user')
@@ -28,6 +30,7 @@ export const handle: Handle = async ({ event, resolve }) => {
             console.error('Error fetching user data:', error)
             // Handle error (e.g., logging, cleaning up, etc.)
         }
+    } else {
     }
 
     // Continue with the request handling

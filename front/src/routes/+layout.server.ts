@@ -8,7 +8,7 @@ export async function load({ fetch, cookies }) {
     if (authToken) {
         // User is authenticated
         const users = await fetch("http://localhost:8000/api/data").then((response) => response.json())
-
+        const binance = await fetch("http://localhost:8000/api/binance/snapshot")
         return { isAuthenticated: true, users }
 
         // return {
@@ -22,6 +22,8 @@ export async function load({ fetch, cookies }) {
         //     return {
         //         status: 302,
         //     }
+    } else {
+        await fetch('http://localhost:8000/api/user')
     }
 
     return { isAuthenticated: false }

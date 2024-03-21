@@ -31,17 +31,28 @@
 	}}
 	action="/actions?/login"
 	method="POST"
-	class="form card p-4 w-modal shadow-xl space-y-4"
+	class="form p-4 space-y-4"
 >
+	<h2 class="h2">Binance</h2>
 	<div class="form-group">
-		<label for="username">Username</label>
-		<input type="text" name="username" bind:value={username} class="input" />
+		<label for="username">API Key</label>
+		<input type="text" name="APILey" bind:value={username} class="input" />
 	</div>
 
 	<div class="form-group">
-		<label for="password">Password</label>
-		<input type="password" name="password" bind:value={password} class="input" />
+		<label for="password">Secret Key</label>
+		<input type="password" name="secretKey" bind:value={password} class="input" />
 	</div>
 
-	<button type="submit" class="btn variant-filled-primary">Login</button>
+	<h2 class="h2">Telegram</h2>
+	<div class="form-group">
+		<label for="username">API Key</label>
+		<input type="text" name="APILey" bind:value={username} class="input" />
+	</div>
+
+	<div class="form-group">
+		<label for="password">Secret Key</label>
+		<input type="password" name="secretKey" bind:value={password} class="input" />
+	</div>
+	<button type="submit" class="btn variant-filled-primary">Save</button>
 </form>
