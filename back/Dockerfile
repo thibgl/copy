@@ -24,5 +24,5 @@ ENV PYTHONUNBUFFERED=1
 
 # Run app.py using uvicorn when the container launches
 # Replace 'app:app' with 'your_fastapi_file_name:app_instance_name'
-CMD ["pydantic2ts", "--module", "app.py", "--output", "../front/apiTypes.ts"]
+# CMD ["pydantic2ts", "--module", "app.py", "--output", "../front/apiTypes.ts"]
 CMD ["uvicorn", "app:app", "--host=0.0.0.0", "--reload"]

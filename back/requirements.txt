@@ -12,3 +12,4 @@ httpx
 pymongo
 python-multipart
 pydantic-to-typescript
+binance-connector
