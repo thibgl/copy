@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, PlainSerializer, AfterValidator, WithJsonSchema
-from typing import Union, Annotated, Any
+from typing import Union, Annotated, Any, Optional
 from bson.objectid import ObjectId
 
 class Token(BaseModel):
@@ -9,7 +9,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: Union[str, None] = None
 
-# Serialize MongoDB ObjectId
+# DeSerialize MongoDB ObjectId
 def validate_object_id(v: Any) -> ObjectId:
     if isinstance(v, ObjectId):
         return v
@@ -23,6 +23,27 @@ ObjectIdType = Annotated[
     AfterValidator(validate_object_id),
     WithJsonSchema({"type": "string"}, mode="serialization"),
 ]
+
+class Lead(BaseModel):
+    model_config = ConfigDict()
+
+    id: ObjectIdType = Field(None, alias="_id")
+    encryptedUid: str
+    nickName: str
+    userPhotoUrl: str
+    rank: int
+    value: Optional[int] = None
+    positionShared: bool
+    twitterUrl: Optional[str] = None
+    updateTime: int
+    followerCount: int
+    leaderboardUrl: str
+
+    class Config:
+        arbitrary_types_allowed = True
+        populate_by_alias=True
+        populate_by_name=True
+        validate_assignment=True
 
 class User(BaseModel):
     model_config = ConfigDict()

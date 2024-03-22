@@ -1,4 +1,4 @@
-/** @type {import('./$types').LayoutLoad} */
+/** @type {import('./$types').LayoutServerLoad} */
 
 // src/routes/protected/+page.js or +layout.js
 export async function load({ fetch, cookies }) {
@@ -8,7 +8,7 @@ export async function load({ fetch, cookies }) {
     if (authToken) {
         // User is authenticated
         const users = await fetch("http://localhost:8000/api/data").then((response) => response.json())
-        const binance = await fetch("http://localhost:8000/api/binance/snapshot")
+        // const binance = await fetch("http://localhost:8000/api/binance/snapshot")
         return { isAuthenticated: true, users }
 
         // return {

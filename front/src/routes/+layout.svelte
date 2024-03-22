@@ -69,7 +69,7 @@
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
 				{#if $page.data.isAuthenticated}
-					<button class="btn variant-filled-secondary">
+					<button class="btn variant-filled-tertiary">
 						<span>0</span><BTCIcon />
 						<spans>/</spans>
 						<span>1000</span><USDTIcon />
@@ -77,7 +77,7 @@
 						<span>0</span><BNBIcon />
 					</button>
 					<button
-						class="btn space-x-0"
+						class="btn space-x-0 transition-colors duration-300 relative"
 						class:variant-ghost-secondary={!botOn}
 						class:variant-ghost-primary={botOn}
 						on:click={() => (botOn = !botOn)}
