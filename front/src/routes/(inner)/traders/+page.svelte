@@ -5,14 +5,26 @@
 	const tableArr = [{ name: 'test', position: 3, symbol: 'XXX', weight: 32 }];
 	const totalWeight = 42;
 
-	import TraderIcon from '~icons/ph/user';
+	import TraderIcon from '~icons/ph/user-plus';
 	import FavoriteIcon from '~icons/ph/star';
 	import CopyIcon from '~icons/ph/lightning';
 </script>
 
 <div class="flex flex-wrap gap-3 justify-center">
+	<form action="/actions?/addTrader" method="POST" class="card w-96 aspect-video">
+		<header class="card-header flex justify-between items-center">
+			<h2>Add a Trader</h2>
+		</header>
+		<section class="p-4 flex flex-col h-full justify-center items-center space-y-3">
+			<TraderIcon class="w-16 h-16" />
+			<input type="text" placeholder="Portfolio id" class="input" />
+		</section>
+		<footer class="card-footer">
+			<btn class="btn variant-outline-primary">Submit</btn>
+		</footer>
+	</form>
 	{#each $page.data.leads as lead}
-		<div class="card w-96">
+		<div class="card w-96 aspect-video">
 			<header class="card-header flex justify-between items-center">
 				<a class="flex space-x-3 items-center" href={lead.leaderboardUrl} target="_blank">
 					<!-- <Avatar src={lead.userPhotoUrl} fallback="src/lib/images/user.png" /> -->
