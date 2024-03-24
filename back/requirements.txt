@@ -13,3 +13,5 @@ pymongo
 python-multipart
 pydantic-to-typescript
 binance-connector
+requests-ip-rotator
+telegram

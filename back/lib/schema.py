@@ -68,3 +68,9 @@ class RegisterUser(BaseModel):
     username: str
     email: str  # Assuming you want to use this somewhere
     password: str
+
+class Params(BaseModel):
+    dataType:  Optional[str] = None
+    timeRange:  Optional[str] = None
+    pageNumber:  Optional[int] = None
+    pageSize:  Optional[int] = None

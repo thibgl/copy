@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.hash import bcrypt
@@ -34,25 +34,22 @@ app.scrap = Scrap(app)
 app.database = Database(app)
 
 
-@app.get('/api/getleaderboard')
-async def get_leaders():
-    await app.scrap.get_leaders()
+# @app.get('/api/getleaderboard')
+# async def get_leaders():
+#     await app.scrap.get_leaders()
 
-@app.get('/api/getperformance')
-async def get_lead_performance():
-    import time
-    while True:
-        app.scrap.request_positions('3892899974558976768')
-        time.sleep(30)
-    # app.scrap.request_leader_performance('3892899974558976768')
-    # await app.scrap.get_leaders_performances()
+@app.post('/scrap/{portfolioId}/{dataType}')
+async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
+    response = app.scrap.request_data(portfolioId, dataType, params.model_dump())
+
+    return response.json()
 
     # return leaderboard
-@app.get('/api/leads', response_model=List[Lead])
-async def get_leads():
-    leads = await app.database.get_all('traders')
-    print(leads)
-    return leads
+# @app.get('/api/leads', response_model=List[Lead])
+# async def get_leads():
+#     leads = await app.database.get_all('traders')
+#     print(leads)
+#     return leads
 
 @app.get("/api/binance/snapshot")
 # @protected_route
@@ -191,6 +188,7 @@ async def startup_db_client():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    app.scrap.cleanup()
     app.mongodb_client.close()
 
 
