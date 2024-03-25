@@ -7,9 +7,10 @@ from passlib.hash import bcrypt
 from starlette.middleware.cors import CORSMiddleware
 from datetime import timedelta
 from typing import List
-from services import Binance, Auth, Scrap, Database
+from services import Binance, Auth, Scrap, Database, Bot
 from lib.schema import *
 import uvicorn
+import time
 
 # Load env variables
 load_dotenv()
@@ -32,6 +33,7 @@ app.binance = Binance()
 app.auth = Auth(app)
 app.scrap = Scrap(app)
 app.database = Database(app)
+app.bot = Bot(app)
 
 
 # @app.get('/api/getleaderboard')
@@ -40,12 +42,52 @@ app.database = Database(app)
 
 @app.post('/scrap/{portfolioId}/{dataType}')
 async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
-    response = app.scrap.request_data(portfolioId, dataType, params.model_dump())
+    response = app.scrap.fetch_data(portfolioId, dataType, params.model_dump())
 
     return response.json()
 
+
+@app.get('/api/{leaderId}/create', response_model=LeaderTickResponse)
+async def create_leader(leaderId: str):
+    leader = await app.db.leaders.find_one({"leaderId": leaderId})
+
+    if leader is None:
+        leader_response = app.scrap.tick_leader(leaderId, False)
+
+        if leader_response["success"]:
+            leader_data = leader_response["data"]
+
+            await app.db.leaders.insert_one(leader_data["leader"])
+            if len(leader_data["positions"]) > 0:
+                await app.db.pool.insert_many(leader_data["positions"])
+            if len(leader_data["position_history"]) > 0:
+                await app.db.positions.insert_many(leader_data["position_history"])
+            if len(leader_data["transfer_history"]) > 0:
+                await app.db.transfers.insert_many(leader_data["transfer_history"])
+
+        return leader_response
+
+    else:
+        pass
+    
+    # print(leader)
+    # response = app.scrap.tick_leader(portfolioId, False)
+
+    # return response.json()
+@app.get('/api/start/{userId}')
+async def scrap_data(userId: str):
+    response = app.bot.start(userId)
+
+    return response.json()
+
+
+@app.get('/scrap/{portfolioId}')
+async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
+    response = app.scrap.fetch_data(portfolioId, dataType, params.model_dump())
+
+    return response.json()
     # return leaderboard
-# @app.get('/api/leads', response_model=List[Lead])
+# @app.get('/api/create', response_model=List[Lead])
 # async def get_leads():
 #     leads = await app.database.get_all('traders')
 #     print(leads)
@@ -135,42 +177,12 @@ async def startup_db_client():
     # Ensure collections exist
     collections = await app.db.list_collection_names()
     
-    if "users" not in collections:
-        await app.db.create_collection("users")
-        # Create indexes here if needed
-        await app.db.users.create_index([("username", 1)], unique=True)
+    if "users" in collections:
+        await app.db.users.drop()
+
+    await app.db.create_collection("users")
+    await app.db.users.create_index([("username", 1)], unique=True)
     
-    if "leaders" not in collections:
-        await app.db.create_collection("leaders")
-        await app.db.leads.create_index([("portfolioId", 1)], unique=True)
-
-    if "performances" not in collections:
-        await app.db.create_collection("performances")
-        await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
-
-    if "positions" not in collections:
-        await app.db.create_collection("positions")
-        await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
-    
-    if "details" not in collections:
-        await app.db.create_collection("details")
-        await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
-
-    if "transfers" not in collections:
-        await app.db.create_collection("transfers")
-        await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
-
-    if "pool" not in collections:
-        await app.db.create_collection("pool")
-        await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
-
-    if "live" not in collections:
-        await app.db.create_collection("live")
-        await app.db.leads_performances.create_index([("username", 1)], unique=True)
-
-    if "history" not in collections:
-        await app.db.create_collection("history")
-        await app.db.leads_performances.create_index([("username", 1)], unique=True)
     # Check if root user exists
     root_user = await app.db.users.find_one({"username": "root"})
     
@@ -179,16 +191,82 @@ async def startup_db_client():
         root_user_data = {
             "username": "root",
             "email": "root@example.com",
-            "password_hash": bcrypt.hash("root")  # Replace with a secure password
+            "password_hash": bcrypt.hash("root"),  # Replace with a secure password
+            "followedLeaders": [],
+            "active": False,
         }
+
         await app.db.users.insert_one(root_user_data)
         print("Root user created.")
     else:
         print("Root user already exists.")
 
+
+    if "leaders" in collections:
+        await app.db.leaders.drop()
+
+    await app.db.create_collection("leaders")
+    await app.db.leaders.create_index([("leaderId", 1)], unique=True)
+
+    # if "performances" not in collections:
+    #     await app.db.create_collection("performances")
+    #     await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
+
+    if "positions" in collections:
+        await app.db.positions.drop()
+    
+    await app.db.create_collection("positions")
+    await app.db.positions.create_index([("id", 1)], unique=True)
+    # await app.db.positions.create_index([("leaderId", 1)])
+    
+    # if "details" not in collections:
+    #     await app.db.create_collection("details")
+    #     await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
+
+    if "transfers" in collections:
+        await app.db.transfers.drop()
+    
+    await app.db.create_collection("transfers")
+    await app.db.transfers.create_index([("time", 1)], unique=True)
+
+    if "pool" in collections:
+        await app.db.pool.drop()
+    
+    await app.db.create_collection("pool")
+    await app.db.pool.create_index([("id", 1)], unique=True)
+
+    if "live" in collections:
+        await app.db.live.drop()
+    
+    await app.db.create_collection("live")
+    await app.db.live.create_index([("username", 1)], unique=True)
+
+    if "history" in collections:
+        await app.db.history.drop()
+
+    await app.db.create_collection("history")
+    await app.db.history.create_index([("logId", 1)], unique=True)
+
+    if "bot" in collections:
+        await app.db.bot.drop()
+
+    await app.db.create_collection("bot")
+
+    bot_data = {
+        "active": False,
+        "activeUsers": [],
+        "updateTime": int(time.time() * 1000),
+        "shutdownTime": 0,
+        "ticks": 0,
+        "orders": 0
+    }
+
+    await app.db.bot.insert_one(bot_data)
+    # await app.db.bot.create_index([("logId", 1)], unique=True)
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    app.scrap.cleanup()
+    # app.scrap.cleanup()
     app.mongodb_client.close()
 
 

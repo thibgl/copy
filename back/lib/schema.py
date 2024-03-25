@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict, PlainSerializer, AfterValidator, WithJsonSchema
-from typing import Union, Annotated, Any, Optional
+from typing import Union, Annotated, Any, Optional, List
 from bson.objectid import ObjectId
+
 
 class Token(BaseModel):
     access_token: str
@@ -24,10 +25,90 @@ ObjectIdType = Annotated[
     WithJsonSchema({"type": "string"}, mode="serialization"),
 ]
 
+class MongoModel(BaseModel):
+    id: ObjectIdType = Field(None, alias="_id")
+
+    class Config:
+        arbitrary_types_allowed = True
+        populate_by_alias=True
+        populate_by_name=True
+        validate_assignment=True
+
+class PositionHistory(MongoModel):
+    symbol: str
+    position_type: str = Field(alias='type')
+    opened: int
+    closed: int
+    avgCost: float
+    avgClosePrice: float
+    closingPnl: float
+    maxOpenInterest: float
+    closedVolume: float
+    isolated: str
+    side: str
+    status: str
+    updateTime: int
+    leaderId: str
+
+class Position(MongoModel):
+    symbol: str
+    collateral: str
+    positionAmount: str  # Assuming this is a string representation of a decimal number
+    entryPrice: str  # Same as above
+    unrealizedProfit: str  # Same as above
+    cumRealized: str  # Same as above
+    askNotional: str  # Same as above
+    bidNotional: str  # Same as above
+    notionalValue: str  # Same as above
+    markPrice: str  # Same as above
+    leverage: int
+    isolated: bool
+    isolatedWallet: str  # Assuming this is a string representation of a decimal number
+    adl: int
+    positionSide: str
+    breakEvenPrice: str  # Same as above
+    leaderId: str
+
+class Transfer(MongoModel):
+    time: int
+    coin: str
+    amount: float
+    from_account: str = Field(alias='from')  # 'from' is a Python reserved keyword, so we use an alias
+    to: str
+    transType: str
+    leaderId: str
+
+class Leader(MongoModel):
+    leaderId: str
+    leaderUrl: str
+    userId: int
+    nickname: str
+    avatarUrl: str
+    status: str
+    initInvestAsset: str
+    positionShow: bool
+    updateTime: int
+    totalBalance: float
+    liveRatio: float
+
+class APIResponse(BaseModel):
+    success: bool = False
+    message: str = ''
+
+class LeaderTickData(BaseModel):
+    leader: Leader = None
+    positions: Optional[List[Position]] = None
+    position_history: Optional[List[PositionHistory]] = None
+    transfer_history: Optional[List[Transfer]] = None
+
+class LeaderTickResponse(APIResponse):
+    data: LeaderTickData
+
 class Lead(BaseModel):
     model_config = ConfigDict()
 
     id: ObjectIdType = Field(None, alias="_id")
+    leadId: str
     encryptedUid: str
     nickName: str
     userPhotoUrl: str
@@ -44,6 +125,9 @@ class Lead(BaseModel):
         populate_by_alias=True
         populate_by_name=True
         validate_assignment=True
+
+
+
 
 class User(BaseModel):
     model_config = ConfigDict()
