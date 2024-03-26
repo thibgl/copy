@@ -70,7 +70,6 @@ class Scrap:
             # Interpolate strings
             path = endpoint["path"] % (leaderId, *filtered_params.values())
             url = '/'.join([self.API_PATH, path])
-            print(url)
 
             response = self.session.get(url)
 
@@ -131,7 +130,7 @@ class Scrap:
                 "positionsValue": 0,
                 "positionsNotionalValue": 0,
             }
-            print(leader)
+
             await self.app.db.leaders.insert_one(leader)
 
         else:
@@ -170,6 +169,7 @@ class Scrap:
 
                 for position in positions_data:
                     if float(position["positionAmount"]) != 0:
+                        position["positionId"] = position["id"]
                         position["leaderId"] = leader["_id"]
                         notional_value += abs(float(position["notionalValue"]))
                         positions_value += abs(float(position["notionalValue"])) / position["leverage"]
@@ -187,7 +187,9 @@ class Scrap:
 
             if position_history_response["success"]:
                 position_history = position_history_response["data"]
+
                 for position in position_history:
+                    position["positionId"] = position["id"]
                     position["leaderId"] = leader["_id"]
                     historic_PNL += float(position["closingPnl"])
 

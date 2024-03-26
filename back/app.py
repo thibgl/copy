@@ -59,12 +59,30 @@ async def tick_positions():
     bot = await app.db.bot.find_one()
     
     for leaderId in bot["activeLeaders"]:
-        leader = await app.db.leader.find_one({"leaderId": leaderId})
-        leaderPositions = await app.db.positions.find({"leaderId": leaderId}).to_list(length=None)
-        buoy = {}
+        leader = await app.db.leaders.find_one({"_id": leaderId})
+        updated_positions = app.scrap.tick_positions(leader["binanceId"])["data"]
 
-        for leaderPosition in leaderPositions:
-            buoy[leaderPosition[""]]
+        # positions = await app.db.positions.find({"leaderId": leaderId}).to_list(length=None)
+        positions = []
+
+        for updated_position in updated_positions:
+            position = await app.db.positions.find_one({"leaderId": leaderId, "id": updated_position["id"]})
+            print(position)
+
+        bag = {
+            "leaderId": leaderId
+        }
+
+        for position in positions:
+            symbol = position["symbol"]
+
+            if symbol not in bag:
+                bag[symbol] = 0
+
+            bag[symbol] += float(position["notionalValue"]) / leader["positionsNotionalValue"]
+
+        # await app.db.pool.insert_one(bag)
+        # print(bag)
     # positions = await app.db.positions.find({"leaderId": {"$in": bot["activeLeaders"]}}).to_list()
 
     # print(leader)
@@ -216,6 +234,7 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #             "password_hash": bcrypt.hash("root"),  # Replace with a secure password
 #             "followedLeaders": [],
 #             "active": False,
+#             "liveRatio": 0.5
 #         }
 
 #         await app.db.users.insert_one(root_user_data)
@@ -229,6 +248,7 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 
 #     await app.db.create_collection("leaders")
 #     await app.db.leaders.create_index([("binanceId", 1)], unique=True)
+#     # await app.db.leaders.create_index([("id", 1)], unique=True)
 
 #     # if "performances" not in collections:
 #     #     await app.db.create_collection("performances")
@@ -238,13 +258,13 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #         await app.db.positions.drop()
     
 #     await app.db.create_collection("positions")
-#     await app.db.positions.create_index([("id", 1)], unique=True)
+#     await app.db.positions.create_index([("leaderId", 1), ("positionId", -1)], unique=True)
 
 #     if "position_history" in collections:
 #         await app.db.position_history.drop()
     
 #     await app.db.create_collection("position_history")
-#     await app.db.position_history.create_index([("id", 1)], unique=True)
+#     await app.db.position_history.create_index([("leaderId", 1), ("positionId", -1)], unique=True)
 #     # await app.db.positions.create_index([("leaderId", 1)])
     
 #     # if "details" not in collections:
@@ -255,25 +275,25 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #         await app.db.transfer_history.drop()
     
 #     await app.db.create_collection("transfer_history")
-#     await app.db.transfer_history.create_index([("time", 1)], unique=True)
+#     await app.db.transfer_history.create_index([("leaderId", 1), ("time", -1)], unique=True)
 
 #     if "pool" in collections:
 #         await app.db.pool.drop()
     
 #     await app.db.create_collection("pool")
-#     await app.db.pool.create_index([("id", 1)], unique=True)
+#     await app.db.pool.create_index([("leaderId", 1)], unique=True)
 
 #     if "live" in collections:
 #         await app.db.live.drop()
     
 #     await app.db.create_collection("live")
-#     await app.db.live.create_index([("username", 1)], unique=True)
+#     await app.db.live.create_index([("userId", 1)], unique=True)
 
 #     if "log" in collections:
 #         await app.db.log.drop()
 
 #     await app.db.create_collection("log")
-#     await app.db.log.create_index([("logId", 1)], unique=True)
+#     await app.db.log.create_index([("userId", 1)], unique=True)
 
 #     if "bot" in collections:
 #         await app.db.bot.drop()
