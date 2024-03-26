@@ -110,23 +110,29 @@ class Scrap:
  
     # DB Injections
 
-    def tick_leader(self, leaderId, update=True):
+    async def tick_leader(self, leaderId, update=True):
         detail_reponse = self.fetch_data(leaderId, "detail").json()
 
         if detail_reponse["success"]:
             detail_data = detail_reponse["data"]
 
             leader = {
-                "leaderId": leaderId,
-                "leaderUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
+                "binanceId": leaderId,
+                "profileUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
                 "userId": detail_data["userId"],
                 "nickname": detail_data["nickname"],
                 "avatarUrl": detail_data["avatarUrl"],
                 "status": detail_data["status"],
                 "initInvestAsset": detail_data["initInvestAsset"],
                 "positionShow": detail_data["positionShow"],
-                "updateTime": int(time.time() * 1000)
+                "updateTime": int(time.time() * 1000),
+                "totalBalance": 0,
+                "liveRatio": 0,
+                "positionsValue": 0,
+                "positionsNotionalValue": 0,
             }
+            print(leader)
+            await self.app.db.leaders.insert_one(leader)
 
         else:
             return { "success": False, "message": "Could not fetch Detail" }
@@ -154,19 +160,24 @@ class Scrap:
         if update == False:
 
             self.cooldown()
-            positions_response = self.fetch_data(leaderId, "positions").json()
+            positions_response = self.tick_positions(leaderId)
 
             if positions_response["success"]:
                 positions_data = positions_response["data"]
+                notional_value = 0
                 positions_value = 0
                 positions = []
 
                 for position in positions_data:
                     if float(position["positionAmount"]) != 0:
-                        position["leaderId"] = leaderId
-                        positions_value += float(position["notionalValue"])
+                        position["leaderId"] = leader["_id"]
+                        notional_value += abs(float(position["notionalValue"]))
+                        positions_value += abs(float(position["notionalValue"])) / position["leverage"]
                         positions.append(position)
 
+                if len(positions) > 0:
+                    await self.app.db.positions.insert_many(positions)
+  
             else:
                 return { "success": False, "message": "Could not fetch Positions" }
                         
@@ -177,8 +188,11 @@ class Scrap:
             if position_history_response["success"]:
                 position_history = position_history_response["data"]
                 for position in position_history:
-                    position["leaderId"] = leaderId
+                    position["leaderId"] = leader["_id"]
                     historic_PNL += float(position["closingPnl"])
+
+                if len(position_history) > 0:
+                    await self.app.db.position_history.insert_many(position_history)
 
             else:
                 return { "success": False, "message": "Could not fetch Positions History" }
@@ -191,7 +205,7 @@ class Scrap:
                 transfer_history = transfer_history_response["data"]
 
                 for transfer in transfer_history:
-                    transfer["leaderId"] = leaderId
+                    transfer["leaderId"] = leader["_id"]
                     transfer_type = transfer["transType"]
 
                     if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
@@ -199,13 +213,32 @@ class Scrap:
 
                     if transfer_type == "LEAD_WITHDRAW":
                         transfer_balance -= float(transfer["amount"])
-            
+
+                if len(transfer_history) > 0:
+                    await self.app.db.transfer_history.insert_many(transfer_history)
+
             else:
                 return { "success": False, "message": "Could not fetch Transfer History" }
             
-            # leader = leader | performance
-            leader["totalBalance"] = positions_value + transfer_balance + historic_PNL
-            leader["liveRatio"] = positions_value / leader["totalBalance"]
+            total_balance = positions_value + transfer_balance + historic_PNL
+            live_ratio = positions_value / total_balance
+
+            updated_stats = {
+                "updateTime": int(time.time() * 1000),
+                "totalBalance": total_balance,
+                "liveRatio": live_ratio,
+                "positionsValue": positions_value,
+                "positionsNotionalValue": notional_value
+            }
+
+            await self.app.db.leaders.update_one(
+                {"_id": leader["_id"]}, 
+                {
+                    "$set": updated_stats
+                }
+            )
+
+            leader.update(updated_stats)
 
         return {
             "success": True,
@@ -219,10 +252,12 @@ class Scrap:
             }
 
     def tick_positions(self, leaderId):
-        positions = self.request_positions(leaderId)
-        self.app.db.pool.insert_one(positions)
+        positions_response = self.fetch_data(leaderId, "positions").json()
 
-        return {leaderId, positions}
+        if positions_response["success"]:
+            return {"success": True, "message": f'Successfully scraped positions for {leaderId}', "data": positions_response["data"]}
+        
+        return {"success": False, "message": f"Couldn't scrap postions for {leaderId}"}
 
     # Lifecycle
 

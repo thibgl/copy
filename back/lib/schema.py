@@ -38,7 +38,7 @@ class PositionHistory(MongoModel):
     symbol: str
     position_type: str = Field(alias='type')
     opened: int
-    closed: int
+    closed: Optional[int] = None
     avgCost: float
     avgClosePrice: float
     closingPnl: float
@@ -48,7 +48,7 @@ class PositionHistory(MongoModel):
     side: str
     status: str
     updateTime: int
-    leaderId: str
+    leaderId: ObjectIdType = Field(None)
 
 class Position(MongoModel):
     symbol: str
@@ -67,7 +67,7 @@ class Position(MongoModel):
     adl: int
     positionSide: str
     breakEvenPrice: str  # Same as above
-    leaderId: str
+    leaderId: ObjectIdType = Field(None)
 
 class Transfer(MongoModel):
     time: int
@@ -76,11 +76,11 @@ class Transfer(MongoModel):
     from_account: str = Field(alias='from')  # 'from' is a Python reserved keyword, so we use an alias
     to: str
     transType: str
-    leaderId: str
+    leaderId: ObjectIdType = Field(None)
 
 class Leader(MongoModel):
-    leaderId: str
-    leaderUrl: str
+    binanceId: str
+    profileUrl: str
     userId: int
     nickname: str
     avatarUrl: str
@@ -90,6 +90,8 @@ class Leader(MongoModel):
     updateTime: int
     totalBalance: float
     liveRatio: float
+    positionsValue: float
+    positionsNotionalValue: float
 
 class APIResponse(BaseModel):
     success: bool = False
