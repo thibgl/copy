@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, PlainSerializer, AfterValidator, WithJsonSchema
-from typing import Union, Annotated, Any, Optional, List
+from typing import Union, Annotated, Any, Optional, List, Dict
 from bson.objectid import ObjectId
 
 
@@ -92,6 +92,7 @@ class Leader(MongoModel):
     liveRatio: float
     positionsValue: float
     positionsNotionalValue: float
+    mix: Dict[str, float]
 
 class APIResponse(BaseModel):
     success: bool = False

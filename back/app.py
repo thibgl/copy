@@ -60,27 +60,53 @@ async def tick_positions():
     
     for leaderId in bot["activeLeaders"]:
         leader = await app.db.leaders.find_one({"_id": leaderId})
-        updated_positions = app.scrap.tick_positions(leader["binanceId"])["data"]
+        last_mix = leader["mix"]
+        current_positions_response = app.scrap.tick_positions(leader)
+        
+        if current_positions_response["success"]:
+            current_positions_data = current_positions_response["data"]
+            # current_mix = current_positions_data["mix"]
+            current_mix = {
+                'BNBUSDT':0,
+                'ETHUSDT':0,
+                'BTCUSDT':0.5,
+                'AVAUSDT':1
+            }
 
-        # positions = await app.db.positions.find({"leaderId": leaderId}).to_list(length=None)
-        positions = []
+            if current_mix == last_mix:
+                print('UNCHANGED')
+            
+            else:
+                current_set, last_set = set(current_mix.items()), set(last_mix.items())
+                current_difference = current_set.difference(last_set)
+                past_difference = last_set.difference(current_set)
+                print(past_difference, current_difference)
 
-        for updated_position in updated_positions:
-            position = await app.db.positions.find_one({"leaderId": leaderId, "id": updated_position["id"]})
-            print(position)
+                for symbol in current_difference:
+                    print(f'{symbol} NEW POSITION')
 
-        bag = {
-            "leaderId": leaderId
-        }
+                for symbol in past_difference:
+                    print(f'{symbol} CLOSED POSITION')
+                # for symbol, value in .items():
+                #     if symbol not in last_mix:
+                #         # await app.db.positions.insert_one(current_position)
 
-        for position in positions:
-            symbol = position["symbol"]
+                #     elif last_position["positionAmount"] != current_position["positionAmount"]:
+                #         print('Changed Position !')
+                #         notional_difference = last_position["positionAmount"] - current_position["positionAmount"]
 
-            if symbol not in bag:
-                bag[symbol] = 0
 
-            bag[symbol] += float(position["notionalValue"]) / leader["positionsNotionalValue"]
+            #     print(last_position)
 
+
+            # for position in positions:
+
+
+
+            #     bag["pairs"][symbol] += float(position["notionalValue"]) / leader["positionsNotionalValue"]
+
+              
+        # bag["mix"][symbol] += float(position["notionalValue"]) / leader["positionsNotionalValue"]
         # await app.db.pool.insert_one(bag)
         # print(bag)
     # positions = await app.db.positions.find({"leaderId": {"$in": bot["activeLeaders"]}}).to_list()
@@ -258,13 +284,13 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #         await app.db.positions.drop()
     
 #     await app.db.create_collection("positions")
-#     await app.db.positions.create_index([("leaderId", 1), ("positionId", -1)], unique=True)
+#     await app.db.positions.create_index([("leaderId", 1), ("id", -1)], unique=True)
 
 #     if "position_history" in collections:
 #         await app.db.position_history.drop()
     
 #     await app.db.create_collection("position_history")
-#     await app.db.position_history.create_index([("leaderId", 1), ("positionId", -1)], unique=True)
+#     await app.db.position_history.create_index([("leaderId", 1), ("id", -1)], unique=True)
 #     # await app.db.positions.create_index([("leaderId", 1)])
     
 #     # if "details" not in collections:

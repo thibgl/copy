@@ -129,6 +129,7 @@ class Scrap:
                 "liveRatio": 0,
                 "positionsValue": 0,
                 "positionsNotionalValue": 0,
+                "mix": {}
             }
 
             await self.app.db.leaders.insert_one(leader)
@@ -159,24 +160,12 @@ class Scrap:
         if update == False:
 
             self.cooldown()
-            positions_response = self.tick_positions(leaderId)
+            positions_response = self.tick_positions(leader)
 
             if positions_response["success"]:
                 positions_data = positions_response["data"]
-                notional_value = 0
-                positions_value = 0
-                positions = []
-
-                for position in positions_data:
-                    if float(position["positionAmount"]) != 0:
-                        position["positionId"] = position["id"]
-                        position["leaderId"] = leader["_id"]
-                        notional_value += abs(float(position["notionalValue"]))
-                        positions_value += abs(float(position["notionalValue"])) / position["leverage"]
-                        positions.append(position)
-
-                if len(positions) > 0:
-                    await self.app.db.positions.insert_many(positions)
+                if len(positions_data["positions"]) > 0:
+                    await self.app.db.positions.insert_many(positions_data["positions"])
   
             else:
                 return { "success": False, "message": "Could not fetch Positions" }
@@ -189,7 +178,6 @@ class Scrap:
                 position_history = position_history_response["data"]
 
                 for position in position_history:
-                    position["positionId"] = position["id"]
                     position["leaderId"] = leader["_id"]
                     historic_PNL += float(position["closingPnl"])
 
@@ -222,15 +210,16 @@ class Scrap:
             else:
                 return { "success": False, "message": "Could not fetch Transfer History" }
             
-            total_balance = positions_value + transfer_balance + historic_PNL
-            live_ratio = positions_value / total_balance
+            total_balance = positions_data["positionsNotionalValue"] + transfer_balance + historic_PNL
+            live_ratio = positions_data["positionsNotionalValue"] / total_balance
 
             updated_stats = {
                 "updateTime": int(time.time() * 1000),
                 "totalBalance": total_balance,
                 "liveRatio": live_ratio,
-                "positionsValue": positions_value,
-                "positionsNotionalValue": notional_value
+                "positionsValue": positions_data["positionsValue"],
+                "positionsNotionalValue": positions_data["positionsNotionalValue"],
+                "mix": positions_data["mix"]
             }
 
             await self.app.db.leaders.update_one(
@@ -247,19 +236,46 @@ class Scrap:
             "message": "Successfully scraped Leader",
             "data": {
                 "leader": leader,
-                "positions": positions,
+                "positions": positions_data["positions"],
                 "position_history": position_history,
                 "transfer_history": transfer_history
                 }
             }
 
-    def tick_positions(self, leaderId):
-        positions_response = self.fetch_data(leaderId, "positions").json()
+    def tick_positions(self, leader):
+        binanceId = leader["binanceId"]
+        positions_response = self.fetch_data(binanceId, "positions").json()
 
         if positions_response["success"]:
-            return {"success": True, "message": f'Successfully scraped positions for {leaderId}', "data": positions_response["data"]}
+            portfolio_notional_value = 0
+            portfolio_positions_value = 0
+            positions = []
+            mix = {}
+
+            for position in positions_response["data"]:
+                position_amount = float(position["positionAmount"])
+
+                if  position_amount != 0:
+                    position["leaderId"] = leader["_id"]
+                    notional_value = abs(float(position["notionalValue"]))
+                    symbol = position["symbol"]
+
+                    if symbol not in mix: 
+                        mix[symbol] = 0
+                    mix[symbol] += position_amount
+
+                    portfolio_notional_value += notional_value
+                    portfolio_positions_value += notional_value / position["leverage"]
+                    positions.append(position)
+            
+            return {"success": True, "message": f'Successfully scraped positions for {binanceId}', "data": {
+                "positions": positions,
+                "positionsValue": portfolio_positions_value,
+                "positionsNotionalValue": portfolio_notional_value,
+                "mix": mix
+            }}
         
-        return {"success": False, "message": f"Couldn't scrap postions for {leaderId}"}
+        return {"success": False, "message": f"Could not scrap postions for {binanceId}"}
 
     # Lifecycle
 
