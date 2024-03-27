@@ -22,10 +22,10 @@ class Auth:
     async def get_db(self):
         yield self.app.db
 
-    def verify_password(plain_password, hashed_password):
+    def verify_password(self, plain_password, hashed_password):
         return pwd_context.verify(plain_password, hashed_password)
 
-    def get_password_hash(password):
+    def get_password_hash(self, password):
         return pwd_context.hash(password)
 
     def create_access_token(self, data: dict, expires_delta: timedelta = None):
@@ -39,7 +39,7 @@ class Auth:
         return encoded_jwt
 
     async def authenticate_user(self, username: str, password: str):
-        user = await self.app.db["users"].find_one({"username": username})
+        user = await self.app.db.users.find_one({"username": username})
         if user and self.verify_password(password, user["password_hash"]):
             return User(**user)
         return False
@@ -59,13 +59,15 @@ class Auth:
             token_data = TokenData(username=username)
         except JWTError:
             raise credentials_exception
-        user = await db["users"].find_one({"username": token_data.username})
+        user = await self.app.db.users.find_one({"username": token_data.username})
         if user is None:
             raise credentials_exception
         return user
 
-    def protected_route(user_dependency: Callable = Depends(get_current_user)):
-        def decorator_route(func: Callable):
+    def protected_route():
+        def decorator_route(self, func: Callable):
+            user_dependency = Depends(self.get_current_user)
+
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
                 user = await user_dependency()
