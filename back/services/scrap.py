@@ -39,6 +39,7 @@ endpoints = {
 
 
 class Scrap:
+    # ! todo : RETRIES, ERROR BOUNDARY
     def __init__(self, app):
         self.app = app
 
@@ -124,9 +125,23 @@ class Scrap:
         if detail_reponse["success"]:
             detail_data = detail_reponse["data"]
 
+        else:
+            return { "success": False, "message": "Could not fetch Detail" }
+        
+        if detail_data["positionShow"] == True:
+            # todo: update leader if fail reasons
+
+            if detail_data["status"] != "ACTIVE":
+                return { "success": False, "message": "Leader is not Active" }
+
+            if detail_data["initInvestAsset"] != "USDT":
+                return { "success": False, "message": "Leader is not using USDT" }
+            
             leader_db = await self.app.db.leaders.find_one({"binanceId": leaderId})
+
             if leader_db:
                 leader = leader_db
+
             else:
                 leader = {
                         "binanceId": leaderId,
@@ -144,72 +159,31 @@ class Scrap:
                         "liveRatio": 0,
                         "positionsValue": 0,
                         "positionsNotionalValue": 0,
-                        "mix": {},
+                        "amounts": {},
+                        "values": {},
+                        "shares": {},
                         "followedBy": []
                     }
                 await self.app.db.leaders.insert_one(leader)
 
-        else:
-            return { "success": False, "message": "Could not fetch Detail" }
-        
-        if leader["positionShow"] == True:
+            print(leader_db)
 
-            if leader["status"] != "ACTIVE":
-                return { "success": False, "message": "Leader is not Active" }
+            self.cooldown()
+            await self.tick_positions(leader)
 
-            if leader["initInvestAsset"] != "USDT":
-                return { "success": False, "message": "Leader is not using USDT" }
-
+            self.cooldown()
+            await self.update_leader_stats(leader)
+            
+            #todo do not replace if nothing changed ?
+            await self.app.db.leaders.update_one(
+                {"_id": leader["_id"]}, 
+                {"$set": leader}
+            )
+            
+            print(leader)
         else:
             return { "success": False, "message": "Leader is not sharing Positions" }
-
-
-        # self.cooldown()
-        # performance_response = self.fetch_data(leaderId, "performance").json()
-
-        # if performance_response["success"] == True:
-        #     performance = performance_response["data"]
-        # else:
-        #     return { "success": False, "message": "Could not fetch Performance" }
             
-        self.cooldown()
-        positions_response = self.tick_positions(leader)
-
-        if positions_response["success"]:
-            positions_data = positions_response["data"]
-            if len(positions_data["positions"]) > 0:
-                await self.app.db.positions.insert_many(positions_data["positions"])
-
-        else:
-            return { "success": False, "message": "Could not fetch Positions" }
-                    
-        self.cooldown()
-        leader = self.tick_position_history(leader)
-
-        self.cooldown()
-        leader = self.tick_transfer_history(leader)
-        
-        leader["totalBalance"] = leader["historicPNL"] + leader["transferBalance"] + leader["liveValue"]
-        leader["liveRatio"] = positions_data["positionsNotionalValue"] / leader["totalBalance"]
-
-        # updated_stats = {
-        #     "updateTime": int(time.time() * 1000),
-        #     "totalBalance": total_balance,
-        #     "liveRatio": live_ratio,
-        #     "positionsValue": positions_data["positionsValue"],
-        #     "positionsNotionalValue": positions_data["positionsNotionalValue"],
-        #     "mix": positions_data["mix"]
-        # }
-
-        # await self.app.db.leaders.update_one(
-        #     {"_id": leader["_id"]}, 
-        #     {
-        #         "$set": updated_stats
-        #     }
-        # )
-
-        # leader.update(updated_stats)
-
         # return {
         #     "success": True,
         #     "message": "Successfully scraped Leader",
@@ -221,7 +195,18 @@ class Scrap:
         #         }
         #     }
 
+    async def update_leader_stats(self, leader):
+        await self.tick_position_history(leader)
 
+        self.cooldown()
+        await self.tick_transfer_history(leader)
+    
+        leader["totalBalance"] = leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"]
+        leader["liveRatio"] = leader["positionsValue"] / leader["totalBalance"]
+        leader["updateTime"] = int(time.time() * 1000)
+
+        return {"totalBalance": leader["totalBalance"], "liveRatio": leader["liveRatio"]}
+    
     async def tick_transfer_history(self, leader):
         latest_transfer = await self.app.db.transfer_history.find_one(
                 {"leaderId": leader["_id"]},
@@ -243,10 +228,11 @@ class Scrap:
                 if transfer_type == "LEAD_WITHDRAW":
                     leader["transferBalance"] -= float(transfer["amount"])
 
+                else:
+                    print(f"WARNING! UNKNOWN TRANFER TYPE: {transfer_type}")
+
             if len(transfer_history) > 0:
                 await self.app.db.transfer_history.insert_many(transfer_history)
-
-            return leader
 
         return fetch_pages_response
 
@@ -266,29 +252,26 @@ class Scrap:
                 position["leaderId"] = leader["_id"]
                 leader['historicPNL'] += float(position["closingPnl"])
 
-            if fetch_pages_response["reason"] == 'full':
-                if len(position_history) > 0:
-                    await self.app.db.position_history.insert_many(position_history)
-
-            if fetch_pages_response["reason"] == 'partial':
-                pass
+            if len(position_history) > 0:
+                await self.app.db.position_history.insert_many(position_history)
             
-            return leader
-
         return fetch_pages_response
 
 
-    def tick_positions(self, leader):
+    async def tick_positions(self, leader):
         binanceId = leader["binanceId"]
-        positions_response = self.fetch_data(binanceId, "positions").json()
+        fetch_data_response = self.fetch_data(binanceId, "positions").json()
 
-        if positions_response["success"]:
-            portfolio_notional_value = 0
-            portfolio_positions_value = 0
+        if fetch_data_response["success"]:
+            latest_amounts = leader["mix"]
+            positions_notional_value = 0
+            positions_value = 0
             positions = []
-            mix = {}
+            amounts = {}
+            values = {}
+            shares = {}
 
-            for position in positions_response["data"]:
+            for position in fetch_data_response["data"]:
                 position_amount = float(position["positionAmount"])
 
                 if  position_amount != 0:
@@ -296,22 +279,55 @@ class Scrap:
                     notional_value = abs(float(position["notionalValue"]))
                     symbol = position["symbol"]
 
-                    if symbol not in mix: 
-                        mix[symbol] = 0
-                    mix[symbol] += position_amount
+                    if symbol not in amounts: 
+                        amounts[symbol] = 0
+                    if symbol not in values: 
+                        values[symbol] = 0
 
-                    portfolio_notional_value += notional_value
-                    portfolio_positions_value += notional_value / position["leverage"]
+                    amounts[symbol] += position_amount
+                    values[symbol] += float(position["notionalValue"])
+
+                    positions_notional_value += notional_value
+                    positions_value += notional_value / position["leverage"]
                     positions.append(position)
-            
-            return {"success": True, "message": f'Successfully scraped positions for {binanceId}', "data": {
-                "positions": positions,
-                "positionsValue": portfolio_positions_value,
-                "positionsNotionalValue": portfolio_notional_value,
-                "mix": mix
-            }}
-        
-        return {"success": False, "message": f"Could not scrap postions for {binanceId}"}
+
+            if amounts != latest_amounts:
+                current_set, last_set = set(amounts.items()), set(latest_amounts.items())
+                current_difference, last_difference = current_set.difference(last_set), last_set.difference(current_set)
+
+                for bag in last_difference:
+                    symbol, amount = bag
+
+                    if amount != 0:
+                        if symbol not in amounts:
+                            print(f'{bag} CLOSED POSITION')
+                            await self.app.db.postions.delete_many({"leaderId": leader["_id"], "symbol": symbol})
+
+                for bag in current_difference:
+                    symbol, amount = bag
+
+                    if amount != 0:
+                        symbol_positions = [position for position in positions if position.get('symbol') == symbol]
+
+                        if symbol in latest_amounts:
+                            print(f'{bag} CHANGED POSITION')
+                            for symbol_position in symbol_positions:
+                                await self.app.db.positions.replace_one({"leaderId": leader["_id"], "id": symbol_position["id"]}, symbol_position)
+                        else:
+                            print(f'{bag} NEW POSITION')
+                            for symbol_position in symbol_positions:
+                                await self.app.db.positions.insert_one(symbol_position)
+
+            for symbol, value in values.items():
+                shares[symbol] = value / positions_notional_value
+
+            leader["positionsValue"] = positions_value
+            leader["positionsNotionalValue"] = positions_notional_value
+            leader["amounts"] = amounts
+
+            return {"amounts": amounts, "values": values, "shares": shares}
+
+        return fetch_data_response
 
     # Lifecycle
 

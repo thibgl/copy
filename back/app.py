@@ -61,113 +61,66 @@ async def tick_positions():
     pool = {}
     
     for leaderId in bot["activeLeaders"]:
-        diff = {}
-
         leader = await app.db.leaders.find_one({"_id": leaderId})
-        last_mix = leader["mix"]
-        current_positions_response = app.scrap.tick_positions(leader)
-        
-        if current_positions_response["success"]:
-            current_positions_data = current_positions_response["data"]
-            current_mix = current_positions_data["mix"]
-            current_mix = {
-                'BNBUSDT':0,
-                'ETHUSDT':0,
-                'BTCUSDT':0.5,
-                'AVAUSDT':1
-            }
+        leader_update = await app.scrap.tick_positions(leader)
+        pool[leader["_id"]] = leader_update
 
-            if current_mix != last_mix:
-                current_set, last_set = set(current_mix.items()), set(last_mix.items())
-                current_difference = current_set.difference(last_set)
-                last_difference = last_set.difference(current_set)
+    #     if leader_update["changed"]:
+    #         await app.scrap.update_leader_stats(leader)
 
-                # print(last_difference, current_difference)
-
-
-                for bag in last_difference:
-                    symbol, amount = bag
-
-                    if amount != 0:
-                        # await app.db.positions.delete_many({"leaderId": leader["_id"], "symbol": symbol})
-                        
-                        if symbol not in current_mix:
-                            if symbol not in diff:
-                                diff[symbol] = {}
-
-                            print(f'{bag} CLOSED POSITION')
-                            diff[symbol] = 0
-                            # app.binance.close_position()
-                            # await app.db.live.delete_one({"userId": 'root', "symbol": symbol})
-   
-
-                for bag in current_difference:
-                    symbol, amount = bag
-
-                    if amount != 0:
-                        if symbol not in diff:
-                            diff[symbol] = {}
-                        positions = [position for position in current_positions_data["positions"] if position.get('symbol') == symbol]
-                        # await app.db.positions.insert_many(positions)
-
-                        if symbol in last_mix:
-                            print(f'{bag} CHANGED POSITION')
-                            last_value = last_mix[symbol]
-                            diff[symbol] = amount / last_value
-
-                            # if amount > last_value:
-                            #     diff[symbol] = amount - last_value
-                            
-                            # if amount < last_value:
-                            #     diff[symbol] = last_value - amount
-                            # app.binance.update_position()
-                            # await app.db.live.update_one({"userId": 'root', "symbol": symbol}, {
-                            #     "$set": {
-
-                            #     }
-                            # })
-                        else:
-                            print(f'{bag} NEW POSITION')
-                            diff[symbol] = 1
-                            # app.binance.open_position()
-                            # await app.db.live.insert_one({"userId": 'root', "symbol": symbol})
-                pool[leaderId] = {
-                    "notionalValue": current_positions_data["positionsNotionalValue"],
-                    "mix": current_mix,
-                    "diff": diff
-                    }
-                # await app.db.leaders.update_one({"_id": leader["_id"]}, {
-                #     "$set": {
-                #         "updateTime": int(time.time() * 1000),
-                #         "mix": current_mix
-                #     }
-                # })
-    print(pool)
-    
     user = await app.db.users.find_one({"username": 'root'})
-    last_user_mix = user["mix"]
-    current_user_mix = {}
-    # ! to change for users followed leaders
+    latest_user_amounts = user["amounts"]
+    current_user_amounts = {}
+
+    # todo change for users followed leaders
     for leaderId in bot["activeLeaders"]:
-        leader_mix = pool[leaderId]["mix"]
+        leader_amounts = pool[leaderId]["amounts"]
         
-        for symbol, amount in leader_mix.items():
-            if symbol not in current_user_mix: 
-                current_user_mix[symbol] = 0
+        for symbol, amount in leader_amounts.items():
+            if symbol not in current_user_amounts: 
+                current_user_amounts[symbol] = 0
 
-            current_user_mix[symbol] += amount
+            current_user_amounts[symbol] += amount
 
-    print(last_user_mix)
-    print(current_user_mix)
+    if current_user_amounts != latest_user_amounts:
+        current_set, latest_set = set(current_user_amounts.items()), set(latest_user_amounts.items())
+        current_difference, last_difference = current_set.difference(latest_set), latest_set.difference(current_set)
 
-    if current_user_mix != last_user_mix:
-        print(set(current_user_mix.items()).symmetric_difference(set(last_user_mix.items())))
+        for bag in last_difference:
+            symbol, amount = bag
+
+            if amount != 0:
+                if symbol not in current_user_amounts:
+                    print(f'{bag} CLOSED POSITION')
+                    # app.binance.close_position()
+                    
+
+        for bag in current_difference:
+            symbol, amount = bag
+
+            if amount != 0:
+                for leaderId in bot["activeLeaders"]:
+                    if "account" not in pool[leader["_id"]].keys():
+                        pool[leader["_id"]]["account"] = await app.scrap.update_leader_stats(leader)
+                        print(pool)
+                if symbol in latest_user_amounts:
+                    print(f'{bag} CHANGED POSITION')
+                    last_value = latest_user_amounts[symbol]
+
+                else:
+                    print(f'{bag} NEW POSITION')
+        
+
+                    # app.binance.open_position()
+                    # await app.db.live.insert_one({"userId": 'root', "symbol": symbol})
+    # if current_user_amounts != last_user_amounts:
+    #     print(set(current_user_amounts.items()).symmetric_difference(set(last_user_amounts.items())))
         # print('user')
         # print(user)
                 # await app.db.bot.update_one({
                 #     "$set": {
                 #         "updateTime": int(time.time() * 1000),
-                #         "mix": current_mix
+                #         "amounts": current_amounts
                 #     }
                 # })
 
@@ -320,7 +273,11 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #             "password_hash": bcrypt.hash("root"),  # Replace with a secure password
 #             "followedLeaders": {},
 #             "active": False,
-#             "liveRatio": 0.5
+#             "liveRatio": 0.5,
+#             "leverage": 5,
+#             "amounts": {},
+#             "values": {},
+#             "shares": {}
 #         }
 
 #         await app.db.users.insert_one(root_user_data)
@@ -399,7 +356,7 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #     }
 
 #     await app.db.bot.insert_one(bot_data)
-#     # await app.db.bot.create_index([("logId", 1)], unique=True)
+    # await app.db.bot.create_index([("logId", 1)], unique=True)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
