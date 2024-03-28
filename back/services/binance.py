@@ -10,26 +10,27 @@ class Binance:
         self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY)
 
     def account_snapshot(self):
-        spot_snapshot = self.client.account_snapshot(type='SPOT')
-        time.sleep(0.2)
-        margin_snapshot = self.client.account_snapshot(type='MARGIN')
+        account_summary = {}
+        assets_lookup = ['USDT', 'BNB']
+        margin_account_data = self.client.margin_account()
+
+        for asset in margin_account_data["userAssets"]:
+            symbol = asset["asset"]
+            if symbol in assets_lookup:
+                account_summary[symbol] = asset["netAsset"]
+
+        account_summary["valueBTC"] = margin_account_data["totalNetAssetOfBtc"]
+        print(account_summary)
+        print(self.client.margin_account())
+        return account_summary
     
-        response_data = {}
+    def open_position(self, asset:str, amount:float, balance:float):
+        borrow_response = self.client.margin_max_borrowable(asset=asset)
+        response = self.client.margin_borrow(asset=asset, amount=amount)
 
-        # Iterate through balances to find BNB
-        for balance in spot_snapshot['snapshotVos'][-1]['data']['balances']:
-            if balance['asset'] == 'BNB':
-                # Combine free and locked amounts to get total BNB balance
-                response_data["BNB_available"] = float(balance['free'])  # + float(balance['locked'])
-                break  # Exit loop after finding BNB
+        return response
 
-        response_data["BTC_balance"] = margin_snapshot['snapshotVos'][-1]['data']['totalNetAssetOfBtc']
+    def close_position(self, asset:str, amount:float):
+        response = self.client.margin_repay(asset=asset, amount=amount)
 
-        print('spot_snapshot')
-        print(spot_snapshot)
-        print('margin_snapshot')
-        print(margin_snapshot)
-        print('response_data')
-        print(response_data)
-
-        return response_data
+        return response

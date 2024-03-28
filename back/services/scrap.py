@@ -83,25 +83,34 @@ class Scrap:
 
         return response
 
-    def fetch_pages(self, leaderId, endpointType, params={}, page_number=1, result=[]):
+    def fetch_pages(self, leaderId, endpointType, params={}, page_number=1, result=[], latest_item=None, reference=None):
         response = self.fetch_data(leaderId, endpointType, {"pageNumber": page_number} | params).json()
 
         if response["success"]:
             response_data = response["data"]
+            response_list = response_data["list"]
 
-            pages_length = response_data["total"] // 10
-            # If remainder, add another page
-            if response_data["total"] % 10:
-                pages_length += 1
-
-            if page_number <= pages_length:
-                result = result + response_data["list"]
-                next_page = page_number + 1
-                self.cooldown()
-                return self.fetch_pages(leaderId, endpointType, params, next_page, result)
-
+            if latest_item and reference:
+                for item in response_list:
+                    if item[reference] > latest_item[reference]:
+                        result.append(item)
+                    else:
+                        print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
+                        return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
             else:
-                return { "success": True, "message": f"Fetched all pages of {endpointType}", "data": result }
+                result = result + response_list
+                pages_length = response_data["total"] // 10
+                # If remainder, add another page
+                if response_data["total"] % 10:
+                    pages_length += 1
+
+                if page_number <= pages_length:
+                    next_page = page_number + 1
+                    self.cooldown()
+                    return self.fetch_pages(leaderId, endpointType, params, next_page, result)
+
+                else:
+                    return { "success": True, "reason": "full", "message": f"Fetched all pages of {endpointType}", "data": result }
         
         else:
             return { "success": False, "message": f"Could not fetch page {page_number}/{pages_length} of {endpointType}" }
@@ -109,30 +118,36 @@ class Scrap:
  
     # DB Injections
 
-    async def tick_leader(self, leaderId, update=True):
+    async def tick_leader(self, leaderId):
         detail_reponse = self.fetch_data(leaderId, "detail").json()
 
         if detail_reponse["success"]:
             detail_data = detail_reponse["data"]
 
-            leader = {
-                "binanceId": leaderId,
-                "profileUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
-                "userId": detail_data["userId"],
-                "nickname": detail_data["nickname"],
-                "avatarUrl": detail_data["avatarUrl"],
-                "status": detail_data["status"],
-                "initInvestAsset": detail_data["initInvestAsset"],
-                "positionShow": detail_data["positionShow"],
-                "updateTime": int(time.time() * 1000),
-                "totalBalance": 0,
-                "liveRatio": 0,
-                "positionsValue": 0,
-                "positionsNotionalValue": 0,
-                "mix": {}
-            }
-
-            await self.app.db.leaders.insert_one(leader)
+            leader_db = await self.app.db.leaders.find_one({"binanceId": leaderId})
+            if leader_db:
+                leader = leader_db
+            else:
+                leader = {
+                        "binanceId": leaderId,
+                        "profileUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
+                        "userId": detail_data["userId"],
+                        "nickname": detail_data["nickname"],
+                        "avatarUrl": detail_data["avatarUrl"],
+                        "status": detail_data["status"],
+                        "initInvestAsset": detail_data["initInvestAsset"],
+                        "positionShow": detail_data["positionShow"],
+                        "updateTime": int(time.time() * 1000),
+                        "historicPNL": 0,
+                        "transferBalance": 0,
+                        "totalBalance": 0,
+                        "liveRatio": 0,
+                        "positionsValue": 0,
+                        "positionsNotionalValue": 0,
+                        "mix": {},
+                        "followedBy": []
+                    }
+                await self.app.db.leaders.insert_one(leader)
 
         else:
             return { "success": False, "message": "Could not fetch Detail" }
@@ -157,90 +172,111 @@ class Scrap:
         # else:
         #     return { "success": False, "message": "Could not fetch Performance" }
             
-        if update == False:
+        self.cooldown()
+        positions_response = self.tick_positions(leader)
 
-            self.cooldown()
-            positions_response = self.tick_positions(leader)
+        if positions_response["success"]:
+            positions_data = positions_response["data"]
+            if len(positions_data["positions"]) > 0:
+                await self.app.db.positions.insert_many(positions_data["positions"])
 
-            if positions_response["success"]:
-                positions_data = positions_response["data"]
-                if len(positions_data["positions"]) > 0:
-                    await self.app.db.positions.insert_many(positions_data["positions"])
-  
-            else:
-                return { "success": False, "message": "Could not fetch Positions" }
-                        
-            self.cooldown()
-            historic_PNL = 0
-            position_history_response = self.fetch_pages(leaderId, "position_history")
+        else:
+            return { "success": False, "message": "Could not fetch Positions" }
+                    
+        self.cooldown()
+        leader = self.tick_position_history(leader)
 
-            if position_history_response["success"]:
-                position_history = position_history_response["data"]
+        self.cooldown()
+        leader = self.tick_transfer_history(leader)
+        
+        leader["totalBalance"] = leader["historicPNL"] + leader["transferBalance"] + leader["liveValue"]
+        leader["liveRatio"] = positions_data["positionsNotionalValue"] / leader["totalBalance"]
 
-                for position in position_history:
-                    position["leaderId"] = leader["_id"]
-                    historic_PNL += float(position["closingPnl"])
+        # updated_stats = {
+        #     "updateTime": int(time.time() * 1000),
+        #     "totalBalance": total_balance,
+        #     "liveRatio": live_ratio,
+        #     "positionsValue": positions_data["positionsValue"],
+        #     "positionsNotionalValue": positions_data["positionsNotionalValue"],
+        #     "mix": positions_data["mix"]
+        # }
 
+        # await self.app.db.leaders.update_one(
+        #     {"_id": leader["_id"]}, 
+        #     {
+        #         "$set": updated_stats
+        #     }
+        # )
+
+        # leader.update(updated_stats)
+
+        # return {
+        #     "success": True,
+        #     "message": "Successfully scraped Leader",
+        #     "data": {
+        #         "leader": leader,
+        #         "positions": positions_data["positions"],
+        #         "position_history": position_history,
+        #         "transfer_history": transfer_history
+        #         }
+        #     }
+
+
+    async def tick_transfer_history(self, leader):
+        latest_transfer = await self.app.db.transfer_history.find_one(
+                {"leaderId": leader["_id"]},
+                sort=[('time', -1)]
+            )
+
+        fetch_pages_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
+
+        if fetch_pages_response["success"]:
+            transfer_history = fetch_pages_response["data"]
+
+            for transfer in transfer_history:
+                transfer["leaderId"] = leader["_id"]
+                transfer_type = transfer["transType"]
+
+                if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
+                    leader["transferBalance"] += float(transfer["amount"])
+
+                if transfer_type == "LEAD_WITHDRAW":
+                    leader["transferBalance"] -= float(transfer["amount"])
+
+            if len(transfer_history) > 0:
+                await self.app.db.transfer_history.insert_many(transfer_history)
+
+            return leader
+
+        return fetch_pages_response
+
+
+    async def tick_position_history(self, leader):
+        latest_position = await self.app.db.position_history.find_one(
+            {"leaderId": leader["_id"]},
+            sort=[('updateTime', -1)]
+        )
+          
+        fetch_pages_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
+
+        if fetch_pages_response["success"]:
+            position_history = fetch_pages_response["data"]
+
+            for position in position_history:
+                position["leaderId"] = leader["_id"]
+                leader['historicPNL'] += float(position["closingPnl"])
+
+            if fetch_pages_response["reason"] == 'full':
                 if len(position_history) > 0:
                     await self.app.db.position_history.insert_many(position_history)
 
-            else:
-                return { "success": False, "message": "Could not fetch Positions History" }
-
-            self.cooldown()
-            transfer_balance = 0
-            transfer_history_response = self.fetch_pages(leaderId, "transfer_history")
-
-            if transfer_history_response["success"]:
-                transfer_history = transfer_history_response["data"]
-
-                for transfer in transfer_history:
-                    transfer["leaderId"] = leader["_id"]
-                    transfer_type = transfer["transType"]
-
-                    if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
-                        transfer_balance += float(transfer["amount"])
-
-                    if transfer_type == "LEAD_WITHDRAW":
-                        transfer_balance -= float(transfer["amount"])
-
-                if len(transfer_history) > 0:
-                    await self.app.db.transfer_history.insert_many(transfer_history)
-
-            else:
-                return { "success": False, "message": "Could not fetch Transfer History" }
+            if fetch_pages_response["reason"] == 'partial':
+                pass
             
-            total_balance = positions_data["positionsNotionalValue"] + transfer_balance + historic_PNL
-            live_ratio = positions_data["positionsNotionalValue"] / total_balance
+            return leader
 
-            updated_stats = {
-                "updateTime": int(time.time() * 1000),
-                "totalBalance": total_balance,
-                "liveRatio": live_ratio,
-                "positionsValue": positions_data["positionsValue"],
-                "positionsNotionalValue": positions_data["positionsNotionalValue"],
-                "mix": positions_data["mix"]
-            }
+        return fetch_pages_response
 
-            await self.app.db.leaders.update_one(
-                {"_id": leader["_id"]}, 
-                {
-                    "$set": updated_stats
-                }
-            )
-
-            leader.update(updated_stats)
-
-        return {
-            "success": True,
-            "message": "Successfully scraped Leader",
-            "data": {
-                "leader": leader,
-                "positions": positions_data["positions"],
-                "position_history": position_history,
-                "transfer_history": transfer_history
-                }
-            }
 
     def tick_positions(self, leader):
         binanceId = leader["binanceId"]
