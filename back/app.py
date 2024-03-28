@@ -29,7 +29,7 @@ app.add_middleware(
 app.mongodb_client = AsyncIOMotorClient(os.environ.get("MONGO_URI", "mongodb://mongo:27017/db"))
 app.db = app.mongodb_client.db
 # Custom Services
-app.binance = Binance()
+app.binance = Binance(app)
 app.auth = Auth(app)
 app.scrap = Scrap(app)
 app.database = Database(app)
@@ -57,24 +57,18 @@ async def create_leader(leaderId: str):
 
 @app.get('/api/tick_positions')
 async def tick_positions():
+    user = await app.db.users.find_one({"username": 'root'})
     bot = await app.db.bot.find_one()
     pool = {}
-    
-    for leaderId in bot["activeLeaders"]:
-        leader = await app.db.leaders.find_one({"_id": leaderId})
-        leader_update = await app.scrap.tick_positions(leader)
-        pool[leader["_id"]] = leader_update
-
-    #     if leader_update["changed"]:
-    #         await app.scrap.update_leader_stats(leader)
-
-    user = await app.db.users.find_one({"username": 'root'})
     latest_user_amounts = user["amounts"]
     current_user_amounts = {}
 
     # todo change for users followed leaders
     for leaderId in bot["activeLeaders"]:
-        leader_amounts = pool[leaderId]["amounts"]
+        leader = await app.db.leaders.find_one({"_id": leaderId})
+        await app.scrap.tick_positions(leader)
+        pool[leader["_id"]] = leader
+        leader_amounts = leader["amounts"]
         
         for symbol, amount in leader_amounts.items():
             if symbol not in current_user_amounts: 
@@ -93,25 +87,58 @@ async def tick_positions():
                 if symbol not in current_user_amounts:
                     print(f'{bag} CLOSED POSITION')
                     # app.binance.close_position()
-                    
+
+        leader_ratio = 1 / len(bot["activeLeaders"])
+
+        if len(current_difference) > 0:
+            user_account = app.binance.account_snapshot(user)
+            user_account_value = float(user_account["valueUSDT"])
 
         for bag in current_difference:
             symbol, amount = bag
 
             if amount != 0:
+                user_share = 0
+                index = 0
+
                 for leaderId in bot["activeLeaders"]:
                     if "account" not in pool[leader["_id"]].keys():
                         pool[leader["_id"]]["account"] = await app.scrap.update_leader_stats(leader)
-                        print(pool)
+
+                    leader_live_ratio = pool[leader["_id"]]["account"]["liveRatio"]
+
+                    if symbol in pool[leader["_id"]]["amounts"].keys():
+                        leader_amount = pool[leader["_id"]]["amounts"][symbol]
+                        leader_share = pool[leader["_id"]]["shares"][symbol]
+                        symbol_value = pool[leader["_id"]]["values"][symbol]
+
+                        user_share += leader_ratio * leader_live_ratio * leader_share
+
+                        if index == 0:
+                            symbol_price = abs(symbol_value / leader_amount)
+
+                        index += 1
+
+                print('user_share, symbol_price')
+                print(user_share, symbol_price)
                 if symbol in latest_user_amounts:
                     print(f'{bag} CHANGED POSITION')
-                    last_value = latest_user_amounts[symbol]
+                    laast_amount = latest_user_amounts[symbol]
+                    amount = (user_account_value * user_share) / symbol_price / user["leverage"]
+
 
                 else:
                     print(f'{bag} NEW POSITION')
+                    amount = (user_account_value * user_share) / symbol_price / user["leverage"]
+                    value = amount * symbol_price
+                    print('amount, value')
+                    print(amount, value)
+                    # app.binance.open_position()
+
+                    # for leaderId in bot["activeLeaders"]:
+                    #     position_ratio = 
         
 
-                    # app.binance.open_position()
                     # await app.db.live.insert_one({"userId": 'root', "symbol": symbol})
     # if current_user_amounts != last_user_amounts:
     #     print(set(current_user_amounts.items()).symmetric_difference(set(last_user_amounts.items())))
@@ -277,7 +304,13 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #             "leverage": 5,
 #             "amounts": {},
 #             "values": {},
-#             "shares": {}
+#             "shares": {},
+#             "account": {
+#                 "BNB": 0,
+#                 "USDT": 0,
+#                 "valueBTC": 0,
+#                 "valueUSDT": 0
+#             }
 #         }
 
 #         await app.db.users.insert_one(root_user_data)
@@ -356,7 +389,7 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #     }
 
 #     await app.db.bot.insert_one(bot_data)
-    # await app.db.bot.create_index([("logId", 1)], unique=True)
+#     await app.db.bot.create_index([("logId", 1)], unique=True)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

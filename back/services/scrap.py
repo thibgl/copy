@@ -201,11 +201,18 @@ class Scrap:
         self.cooldown()
         await self.tick_transfer_history(leader)
     
-        leader["totalBalance"] = leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"]
-        leader["liveRatio"] = leader["positionsValue"] / leader["totalBalance"]
-        leader["updateTime"] = int(time.time() * 1000)
+        update = {
+            "totalBalance": leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"],
+            "liveRatio": leader["positionsValue"] / leader["totalBalance"],
+            "updateTime": int(time.time() * 1000)
+        }
 
-        return {"totalBalance": leader["totalBalance"], "liveRatio": leader["liveRatio"]}
+        leader.update(update)
+
+        await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
+
+        return update
+
     
     async def tick_transfer_history(self, leader):
         latest_transfer = await self.app.db.transfer_history.find_one(
@@ -263,7 +270,7 @@ class Scrap:
         fetch_data_response = self.fetch_data(binanceId, "positions").json()
 
         if fetch_data_response["success"]:
-            latest_amounts = leader["mix"]
+            latest_amounts = leader["amounts"]
             positions_notional_value = 0
             positions_value = 0
             positions = []
@@ -321,11 +328,18 @@ class Scrap:
             for symbol, value in values.items():
                 shares[symbol] = value / positions_notional_value
 
-            leader["positionsValue"] = positions_value
-            leader["positionsNotionalValue"] = positions_notional_value
-            leader["amounts"] = amounts
+            update = {
+                "positionsValue": positions_value,
+                "positionsNotionalValue": positions_notional_value,
+                "amounts": amounts,
+                "amounts": amounts,
+                "values": values,
+                "shares": shares
+                }
+            
+            leader.update(update)
 
-            return {"amounts": amounts, "values": values, "shares": shares}
+            await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
 
         return fetch_data_response
 
