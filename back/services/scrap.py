@@ -201,9 +201,11 @@ class Scrap:
         self.cooldown()
         await self.tick_transfer_history(leader)
     
+        total_balance = leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"]
+
         update = {
-            "totalBalance": leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"],
-            "liveRatio": leader["positionsValue"] / leader["totalBalance"],
+            "totalBalance": total_balance,
+            "liveRatio": leader["positionsValue"] / total_balance,
             "updateTime": int(time.time() * 1000)
         }
 
@@ -275,7 +277,7 @@ class Scrap:
             positions_value = 0
             positions = []
             amounts = {}
-            values = {}
+            notional_values = {}
             shares = {}
 
             for position in fetch_data_response["data"]:
@@ -288,11 +290,11 @@ class Scrap:
 
                     if symbol not in amounts: 
                         amounts[symbol] = 0
-                    if symbol not in values: 
-                        values[symbol] = 0
+                    if symbol not in notional_values: 
+                        notional_values[symbol] = 0
 
                     amounts[symbol] += position_amount
-                    values[symbol] += float(position["notionalValue"])
+                    notional_values[symbol] += float(position["notionalValue"])
 
                     positions_notional_value += notional_value
                     positions_value += notional_value / position["leverage"]
@@ -325,15 +327,14 @@ class Scrap:
                             for symbol_position in symbol_positions:
                                 await self.app.db.positions.insert_one(symbol_position)
 
-            for symbol, value in values.items():
+            for symbol, value in notional_values.items():
                 shares[symbol] = value / positions_notional_value
 
             update = {
                 "positionsValue": positions_value,
                 "positionsNotionalValue": positions_notional_value,
                 "amounts": amounts,
-                "amounts": amounts,
-                "values": values,
+                "values": notional_values,
                 "shares": shares
                 }
             

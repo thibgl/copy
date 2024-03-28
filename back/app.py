@@ -54,14 +54,25 @@ async def create_leader(leaderId: str):
 
     # return leader_response
 
+def truncate_amount(amount, precision, price):
+    print(precision)
+    if amount < precision["minQty"]:
+        amount = precision["minQty"]
+
+    if amount * price < precision["minNotional"]:
+        amount = precision["minNotional"] / price * 1.05
+
+    truncated = round(amount / precision["stepSize"]) * precision["stepSize"] 
+    print(truncated)
+    return truncated
 
 @app.get('/api/tick_positions')
 async def tick_positions():
     user = await app.db.users.find_one({"username": 'root'})
     bot = await app.db.bot.find_one()
     pool = {}
-    latest_user_amounts = user["amounts"]
-    current_user_amounts = {}
+    latest_user_mix = user["mix"]
+    current_user_mix = {}
 
     # todo change for users followed leaders
     for leaderId in bot["activeLeaders"]:
@@ -71,20 +82,25 @@ async def tick_positions():
         leader_amounts = leader["amounts"]
         
         for symbol, amount in leader_amounts.items():
-            if symbol not in current_user_amounts: 
-                current_user_amounts[symbol] = 0
+            if symbol not in current_user_mix: 
+                current_user_mix[symbol] = 0
 
-            current_user_amounts[symbol] += amount
+            current_user_mix[symbol] += amount
 
-    if current_user_amounts != latest_user_amounts:
-        current_set, latest_set = set(current_user_amounts.items()), set(latest_user_amounts.items())
+    if current_user_mix != latest_user_mix:
+        current_set, latest_set = set(current_user_mix.items()), set(latest_user_mix.items())
         current_difference, last_difference = current_set.difference(latest_set), latest_set.difference(current_set)
 
         for bag in last_difference:
             symbol, amount = bag
 
+            if symbol not in bot["precisions"].keys():
+                bot["precisions"][symbol] = app.binance.get_asset_precision(symbol)
+            
+            precision = bot["precisions"][symbol]
+            
             if amount != 0:
-                if symbol not in current_user_amounts:
+                if symbol not in current_user_mix:
                     print(f'{bag} CLOSED POSITION')
                     # app.binance.close_position()
 
@@ -97,12 +113,18 @@ async def tick_positions():
         for bag in current_difference:
             symbol, amount = bag
 
+            if symbol not in bot["precisions"].keys():
+                bot["precisions"][symbol] = app.binance.get_asset_precision(symbol)
+            
+            precision = bot["precisions"][symbol]
+
             if amount != 0:
                 user_share = 0
                 index = 0
 
                 for leaderId in bot["activeLeaders"]:
                     if "account" not in pool[leader["_id"]].keys():
+                        # app.scrap.cooldown()
                         pool[leader["_id"]]["account"] = await app.scrap.update_leader_stats(leader)
 
                     leader_live_ratio = pool[leader["_id"]]["account"]["liveRatio"]
@@ -119,29 +141,31 @@ async def tick_positions():
 
                         index += 1
 
-                print('user_share, symbol_price')
-                print(user_share, symbol_price)
-                if symbol in latest_user_amounts:
-                    print(f'{bag} CHANGED POSITION')
-                    laast_amount = latest_user_amounts[symbol]
-                    amount = (user_account_value * user_share) / symbol_price / user["leverage"]
+                # print('user_share, symbol_price')
+                # print(user_share, symbol_price)
+                amount = (user_account_value * user_share) / symbol_price
+                # value = amount * symbol_price
+                # print('amount, value')
+                # print(amount, value)
 
+                if symbol in latest_user_mix:
+                    print(f'{bag} CHANGED POSITION')
+                    last_amount = latest_user_mix[symbol]
 
                 else:
                     print(f'{bag} NEW POSITION')
-                    amount = (user_account_value * user_share) / symbol_price / user["leverage"]
-                    value = amount * symbol_price
-                    print('amount, value')
-                    print(amount, value)
-                    # app.binance.open_position()
+                    open_response = app.binance.open_position(symbol, truncate_amount(amount, precision, symbol_price))
+                    open_response["userId"] = user['username']
+                    await app.db.live.insert_one(open_response)
+                    print(open_response)
 
                     # for leaderId in bot["activeLeaders"]:
                     #     position_ratio = 
-        
-
+        await app.db.users.update_one({"username": "root"}, {"$set": {"mix": current_user_mix}})
+        await app.db.bot.update_one({}, {"$set": {"precisions": bot["precisions"]}})
                     # await app.db.live.insert_one({"userId": 'root', "symbol": symbol})
-    # if current_user_amounts != last_user_amounts:
-    #     print(set(current_user_amounts.items()).symmetric_difference(set(last_user_amounts.items())))
+    # if current_user_mix != last_user_amounts:
+    #     print(set(current_user_mix.items()).symmetric_difference(set(last_user_amounts.items())))
         # print('user')
         # print(user)
                 # await app.db.bot.update_one({
@@ -175,7 +199,12 @@ async def add_to_roster(binanceId: str):
 
     # print(leader)
     # response = app.scrap.tick_leader(portfolioId, False)
-        
+@app.get('/api/precision/{symbol}')
+async def get_precision(symbol: str):
+    response = app.binance.get_asset_precision(symbol)
+    # print(response)
+    return response
+
 @app.get('/api/start/{userId}')
 async def scrap_data(userId: str):
     response = app.bot.start(userId)
@@ -302,6 +331,7 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #             "active": False,
 #             "liveRatio": 0.5,
 #             "leverage": 5,
+#             "mix": {},
 #             "amounts": {},
 #             "values": {},
 #             "shares": {},
@@ -364,7 +394,7 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #         await app.db.live.drop()
     
 #     await app.db.create_collection("live")
-#     await app.db.live.create_index([("userId", 1)], unique=True)
+#     await app.db.live.create_index([("userId", 1), ("symbol", -1)], unique=True)
 
 #     if "log" in collections:
 #         await app.db.log.drop()
@@ -385,7 +415,9 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #         "tickInterval": 30,
 #         "shutdownTime": 0,
 #         "ticks": 0,
-#         "orders": 0
+#         "orders": 0,
+#         "precisions": {},
+#         "totalWeight": 0,
 #     }
 
 #     await app.db.bot.insert_one(bot_data)
