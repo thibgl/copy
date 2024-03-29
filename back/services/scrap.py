@@ -2,7 +2,7 @@ import os
 import requests
 import time
 from requests_ip_rotator import ApiGateway, EXTRA_REGIONS
-
+from fake_useragent import UserAgent
 
 endpoints = {
     "positions" : {
@@ -51,10 +51,16 @@ class Scrap:
         self.gateway.start()
         self.session = requests.Session()
         self.session.mount(self.GATEWAY_HOST, self.gateway)
+        self.user_agent = UserAgent()
 
     def cooldown(self):
         time.sleep(self.COOLDOWN)
 
+    def gen_headers(self):
+        headers = {'User-Agent':str(self.user_agent.random)}
+        print(headers)
+
+        return headers
     # Requests
     
     def fetch_data(self, leaderId, endpointType, params={}):
@@ -72,14 +78,15 @@ class Scrap:
             path = endpoint["path"] % (leaderId, *filtered_params.values())
             url = '/'.join([self.API_PATH, path])
 
-            response = self.session.get(url)
+            response = self.session.get(url, headers=self.gen_headers())
 
         if endpoint["type"] == 'paginated':
             url = '/'.join([self.API_PATH, endpoint["path"]])
 
             response = self.session.post(
                 url,
-                json={"portfolioId": leaderId} | filtered_params
+                json={"portfolioId": leaderId} | filtered_params,
+                headers=self.gen_headers()
                 )
 
         return response
