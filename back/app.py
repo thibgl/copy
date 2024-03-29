@@ -1,4 +1,4 @@
-# todo: ositions avec les orders inside, history, get user, telegram, log, p, socket pour le front
+# todo: positions avec les orders inside, history, get user, telegram, log - erorr boundary, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -7,9 +7,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.hash import bcrypt
 from starlette.middleware.cors import CORSMiddleware
 from datetime import timedelta
-from typing import List
 from services import Binance, Auth, Scrap, Database, Bot
-from lib.schema import *
+from lib import *
 import uvicorn
 import time
 import asyncio
@@ -210,121 +209,10 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
     return current_user
 
 
-# @app.on_event("startup")
-# async def startup_db_client():
-#     # Ensure collections exist
-#     collections = await app.db.list_collection_names()
-    
-#     if "users" in collections:
-#         await app.db.users.drop()
-
-#     await app.db.create_collection("users")
-#     await app.db.users.create_index([("username", 1)], unique=True)
-    
-#     # Check if root user exists
-#     root_user = await app.db.users.find_one({"username": "root"})
-    
-#     if not root_user:
-#         # Root user doesn't exist, so let's create one
-#         root_user_data = {
-#             "username": "root",
-#             "email": "root@example.com",
-#             "password_hash": bcrypt.hash("root"),  # Replace with a secure password
-#             "followedLeaders": {},
-#             "active": False,
-#             "liveRatio": 0.5,
-#             "leverage": 5,
-#             "mix": {},
-#             "amounts": {},
-#             "values": {},
-#             "shares": {},
-#             "account": {
-#                 "BNB": 0,
-#                 "USDT": 0,
-#                 "valueBTC": 0,
-#                 "valueUSDT": 0
-#             }
-#         }
-
-#         await app.db.users.insert_one(root_user_data)
-#         print("Root user created.")
-#     else:
-#         print("Root user already exists.")
-
-
-#     if "leaders" in collections:
-#         await app.db.leaders.drop()
-
-#     await app.db.create_collection("leaders")
-#     await app.db.leaders.create_index([("binanceId", 1)], unique=True)
-#     # await app.db.leaders.create_index([("id", 1)], unique=True)
-
-#     # if "performances" not in collections:
-#     #     await app.db.create_collection("performances")
-#     #     await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
-
-#     if "positions" in collections:
-#         await app.db.positions.drop()
-    
-#     await app.db.create_collection("positions")
-#     await app.db.positions.create_index([("leaderId", 1), ("id", -1)], unique=True)
-#     await app.db.positions.create_index([("leaderId", 1), ("symbol", -1)])
-
-#     if "position_history" in collections:
-#         await app.db.position_history.drop()
-    
-#     await app.db.create_collection("position_history")
-#     await app.db.position_history.create_index([("leaderId", 1), ("id", -1)], unique=True)
-#     # await app.db.positions.create_index([("leaderId", 1)])
-    
-#     # if "details" not in collections:
-#     #     await app.db.create_collection("details")
-#     #     await app.db.leads_performances.create_index([("portfolioId", 1)], unique=True)
-
-#     if "transfer_history" in collections:
-#         await app.db.transfer_history.drop()
-    
-#     await app.db.create_collection("transfer_history")
-#     await app.db.transfer_history.create_index([("leaderId", 1), ("time", -1)], unique=True)
-
-#     if "history" in collections:
-#         await app.db.history.drop()
-    
-#     await app.db.create_collection("history")
-#     await app.db.history.create_index([("leaderId", 1)], unique=True)
-
-#     if "live" in collections:
-#         await app.db.live.drop()
-    
-#     await app.db.create_collection("live")
-#     await app.db.live.create_index([("userId", 1), ("symbol", -1)], unique=True)
-
-#     if "log" in collections:
-#         await app.db.log.drop()
-
-#     await app.db.create_collection("log")
-#     await app.db.log.create_index([("userId", 1)], unique=True)
-
-#     if "bot" in collections:
-#         await app.db.bot.drop()
-
-#     await app.db.create_collection("bot")
-
-#     bot_data = {
-#         "active": False,
-#         "activeUsers": [],
-#         "activeLeaders": [],
-#         "updateTime": int(time.time() * 1000),
-#         "tickInterval": 30,
-#         "shutdownTime": 0,
-#         "ticks": 0,
-#         "orders": 0,
-#         "precisions": {},
-#         "totalWeight": 0,
-#     }
-
-#     await app.db.bot.insert_one(bot_data)
-#     await app.db.bot.create_index([("logId", 1)], unique=True)
+@app.on_event("startup")
+async def startup():
+    # await db_startup(app.db)
+    pass
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

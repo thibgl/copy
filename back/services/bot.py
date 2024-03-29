@@ -1,4 +1,16 @@
 import asyncio
+from lib import utils
+
+default_live_position = {
+    "userId": None, 
+    "symbol": None,
+    "amount": 0,
+    "value": 0,
+    "orders": [],
+    "createdAt": None,
+    "updatedAt": None,
+    "closedAt": None
+}
 
 class Bot:
     def __init__(self, app):
@@ -45,10 +57,9 @@ class Bot:
                     if amount != 0:
                         if symbol not in current_user_mix:
                             try:
-                                print(f'{bag} CLOSED POSITION')
-                                close_response = self.app.binance.close_position(symbol, amount)
-                                print(close_response)
-                                user_amounts.pop(symbol)
+                                # * CLOSE
+                                await self.close_postion(user, symbol, amount, user_amounts)
+
                             except Exception as e:
                                 print(e)
                                 current_user_mix[symbol] = amount
@@ -94,39 +105,26 @@ class Bot:
                         # print('user_share, symbol_price')
                         # print(user_share, symbol_price)
                         amount = (user_account_value * user_share) / symbol_price
-                        # value = amount * symbol_price
+                        value = amount * symbol_price
                         # print('amount, value')
                         # print(amount, value)
 
                         if symbol in latest_user_mix:
                             try:
-                                print(f'{bag} CHANGED POSITION')
+
+                                # * CHANGE
                                 last_amount = latest_user_mix[symbol]
-                                if amount > last_amount:
-                                    to_open = amount - last_amount
-                                    final_amount = self.truncate_amount(to_open, precision, symbol_price)
-                                    binance_reponse = self.app.binance.open_position(symbol, final_amount)
-                                else:
-                                    to_close = - last_amount - amount
-                                    final_amount = self.truncate_amount(to_close, precision, symbol_price)
-                                    binance_reponse = self.app.binance.close_postion(symbol, final_amount)
-                                
+                                await self.change_position(user, symbol, amount, last_amount, precision, symbol_price, user_amounts, latest_user_mix)
                                 # await self.app.db.live.insert_one(binance_reponse)
-                                user_amounts[symbol] += final_amount
-                                n_orders += 1
+   
                             except Exception as e:
                                 print(e)
                                 current_user_mix[symbol] = last_amount
 
                         else:
                             try:
-                                print(f'{bag} NEW POSITION')
-                                final_amount = self.truncate_amount(amount, precision, symbol_price)
-                                open_response = self.app.binance.open_position(symbol, final_amount)
-                                open_response["userId"] = user['username']
-                                await self.app.db.live.insert_one(open_response)
-                                user_amounts[symbol] = final_amount
-                                n_orders += 1
+                                # * OPEN
+                                await self.open_position(user, symbol, amount, value, precision, symbol_price, user_amounts)
 
                             except Exception as e:
                                 print(e)
@@ -140,6 +138,66 @@ class Bot:
 
             await asyncio.sleep(30)
 
+    async def change_position(self, user, symbol, amount, last_amount, precision, symbol_price, user_amounts, latest_user_mix):
+        if amount > last_amount:
+            to_open = amount - last_amount
+            final_amount = self.truncate_amount(to_open, precision, symbol_price)
+            binance_reponse = self.app.binance.open_position(symbol, final_amount)
+        else:
+            to_close = - last_amount - amount
+            final_amount = self.truncate_amount(to_close, precision, symbol_price)
+            binance_reponse = self.app.binance.close_postion(symbol, final_amount)
+
+        user_amounts[symbol] += final_amount
+        n_orders += 1
+            
+        print(f'Ajusted Position: {symbol} - {amount}')
+
+    async def open_position(self, user, symbol, amount, value, precision, symbol_price, user_amounts):
+        final_amount = self.truncate_amount(amount, precision, symbol_price)
+
+        open_response = self.app.binance.open_position(symbol, final_amount)
+
+        current_time = utils.current_time()
+        await self.app.db.live.insert_one({
+            "userId": user["_id"], 
+            "symbol": symbol,
+            "amount": amount,
+            "value": value,
+            "orders": [open_response],
+            "createdAt": current_time,
+            "updatedAt": current_time,
+            "closedAt": None
+        })
+
+        user_amounts[symbol] += final_amount
+        n_orders += 1
+
+        print(f'Opened Position: {symbol} - {amount}')
+   
+    async def close_postion(self, user, symbol, amount, user_amounts):
+        close_response = self.app.binance.close_position(symbol, amount)
+
+        live_position = self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
+
+        current_time = utils.current_time()
+        live_position.update({
+            "amount": 0,
+            "value": 0,
+            "orders": live_position["orders"] + close_response,
+            "updatedAt": current_time,
+            "closedAt": current_time,
+        })
+
+        await self.app.db.history.insert_one(live_position)
+
+        await self.app.db.live.delete_one({"userId": user["_id"], "symbol": symbol})
+
+        print(close_response)
+        user_amounts.pop(symbol)
+        n_orders += 1
+
+        print(f'Closed Position: {symbol} - {amount}')
 
     def truncate_amount(self, amount, precision, price):
         asset_precision = precision["stepSize"].split('1')[0].count('0')

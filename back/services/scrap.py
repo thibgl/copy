@@ -1,8 +1,8 @@
 import os
 import requests
-import time
 from requests_ip_rotator import ApiGateway, EXTRA_REGIONS
 from fake_useragent import UserAgent
+from lib import utils
 
 endpoints = {
     "positions" : {
@@ -54,11 +54,12 @@ class Scrap:
         self.user_agent = UserAgent()
 
     def cooldown(self):
-        time.sleep(self.COOLDOWN)
+        # time.sleep(self.COOLDOWN)
+        pass
 
     def gen_headers(self):
         headers = {'User-Agent':str(self.user_agent.random)}
-        print(headers)
+        # print(headers)
 
         return headers
     # Requests
@@ -159,7 +160,7 @@ class Scrap:
                         "status": detail_data["status"],
                         "initInvestAsset": detail_data["initInvestAsset"],
                         "positionShow": detail_data["positionShow"],
-                        "updateTime": int(time.time() * 1000),
+                        "updateTime": utils.current_time(),
                         "historicPNL": 0,
                         "transferBalance": 0,
                         "totalBalance": 0,
@@ -213,7 +214,7 @@ class Scrap:
         update = {
             "totalBalance": total_balance,
             "liveRatio": leader["positionsValue"] / total_balance,
-            "updateTime": int(time.time() * 1000)
+            "updateTime": utils.current_time()
         }
 
         leader.update(update)
