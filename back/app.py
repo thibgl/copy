@@ -1,3 +1,4 @@
+# todo: CHANGED POS, threading / timer, get user, telegram, log, positions avec les orders inside, history, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -53,18 +54,28 @@ async def create_leader(leaderId: str):
     leader_response = await app.scrap.tick_leader(leaderId)
 
     # return leader_response
-
 def truncate_amount(amount, precision, price):
-    print(precision)
+    asset_precision = precision["stepSize"].split('1')[0].count('0')
+
+    positive = True
+    if amount < 0:
+        positive = False
+
+    amount = abs(amount)
+
     if amount < precision["minQty"]:
         amount = precision["minQty"]
 
-    if amount * price < precision["minNotional"]:
-        amount = precision["minNotional"] / price * 1.05
+    while amount * price < precision["minNotional"]:
+        amount += float(precision["stepSize"])
 
-    truncated = round(amount / precision["stepSize"]) * precision["stepSize"] 
-    print(truncated)
-    return truncated
+    amount = round(amount, asset_precision)
+
+    if positive:
+        return amount
+    
+    return -amount
+
 
 @app.get('/api/tick_positions')
 async def tick_positions():
@@ -74,20 +85,23 @@ async def tick_positions():
     latest_user_mix = user["mix"]
     current_user_mix = {}
 
-    # todo change for users followed leaders
     for leaderId in bot["activeLeaders"]:
         leader = await app.db.leaders.find_one({"_id": leaderId})
         await app.scrap.tick_positions(leader)
         pool[leader["_id"]] = leader
         leader_amounts = leader["amounts"]
         
+    # todo for user in active users / for leader is user followed
         for symbol, amount in leader_amounts.items():
             if symbol not in current_user_mix: 
                 current_user_mix[symbol] = 0
 
             current_user_mix[symbol] += amount
 
+    # todo for user in active users
     if current_user_mix != latest_user_mix:
+        n_orders = 0
+        user_amounts = user["amounts"]
         current_set, latest_set = set(current_user_mix.items()), set(latest_user_mix.items())
         current_difference, last_difference = current_set.difference(latest_set), latest_set.difference(current_set)
 
@@ -101,7 +115,14 @@ async def tick_positions():
             
             if amount != 0:
                 if symbol not in current_user_mix:
-                    print(f'{bag} CLOSED POSITION')
+                    try:
+                        print(f'{bag} CLOSED POSITION')
+                        close_response = app.binance.close_position(symbol, amount)
+                        print(close_response)
+                        user_amounts.pop(symbol)
+                    except Exception as e:
+                        print(e)
+                        current_user_mix[symbol] = amount
                     # app.binance.close_position()
 
         leader_ratio = 1 / len(bot["activeLeaders"])
@@ -149,31 +170,44 @@ async def tick_positions():
                 # print(amount, value)
 
                 if symbol in latest_user_mix:
-                    print(f'{bag} CHANGED POSITION')
-                    last_amount = latest_user_mix[symbol]
+                    try:
+                        print(f'{bag} CHANGED POSITION')
+                        last_amount = latest_user_mix[symbol]
+                        if amount > last_amount:
+                            to_open = amount - last_amount
+                            final_amount = truncate_amount(to_open, precision, symbol_price)
+                            binance_reponse = app.binance.open_position(symbol, final_amount)
+                        else:
+                            to_close = - last_amount - amount
+                            final_amount = truncate_amount(to_close, precision, symbol_price)
+                            binance_reponse = app.binance.close_postion(symbol, final_amount)
+                        
+                        await app.db.live.insert_one(binance_reponse)
+                        user_amounts[symbol] += final_amount
+                        n_orders += 1
+                    except Exception as e:
+                        print(e)
+                        current_user_mix[symbol] = last_amount
 
                 else:
-                    print(f'{bag} NEW POSITION')
-                    open_response = app.binance.open_position(symbol, truncate_amount(amount, precision, symbol_price))
-                    open_response["userId"] = user['username']
-                    await app.db.live.insert_one(open_response)
-                    print(open_response)
+                    try:
+                        print(f'{bag} NEW POSITION')
+                        final_amount = truncate_amount(amount, precision, symbol_price)
+                        open_response = app.binance.open_position(symbol, final_amount)
+                        open_response["userId"] = user['username']
+                        await app.db.live.insert_one(open_response)
+                        user_amounts[symbol] = final_amount
+                        n_orders += 1
 
+                    except Exception as e:
+                        print(e)
+                        current_user_mix.pop(symbol)
                     # for leaderId in bot["activeLeaders"]:
                     #     position_ratio = 
-        await app.db.users.update_one({"username": "root"}, {"$set": {"mix": current_user_mix}})
-        await app.db.bot.update_one({}, {"$set": {"precisions": bot["precisions"]}})
-                    # await app.db.live.insert_one({"userId": 'root', "symbol": symbol})
-    # if current_user_mix != last_user_amounts:
-    #     print(set(current_user_mix.items()).symmetric_difference(set(last_user_amounts.items())))
-        # print('user')
-        # print(user)
-                # await app.db.bot.update_one({
-                #     "$set": {
-                #         "updateTime": int(time.time() * 1000),
-                #         "amounts": current_amounts
-                #     }
-                # })
+        await app.db.users.update_one({"username": "root"}, {"$set": {"mix": current_user_mix, "amounts": user_amounts}})
+        await app.db.bot.update_one({}, {"$set": {"precisions": bot["precisions"]}, "$inc": {"ticks": 1, "orders": n_orders}})
+
+    await app.db.bot.update_one({}, {"$inc": {"ticks": 1}})
 
 @app.get('/api/{binanceId}/add_to_roster')
 async def add_to_roster(binanceId: str):
@@ -197,8 +231,25 @@ async def add_to_roster(binanceId: str):
             }
         )
 
-    # print(leader)
-    # response = app.scrap.tick_leader(portfolioId, False)
+@app.get('/api/close_all_positions')
+async def close_all_positions():
+    user = await app.db.users.find_one()
+    user_amounts, user_mix = user["amounts"], user["mix"] 
+
+    for symbol, value in list(user_amounts.items()):
+        try:
+            print(symbol, value)
+            response = app.binance.close_position(symbol, value)
+            print(response)
+            user_amounts.pop(symbol)
+            user_mix.pop(symbol)
+        except Exception as e:
+            print(e)
+            continue
+    
+    await app.db.live.delete_many({"userId": "root"})
+    await app.db.users.update_one({"username": "root"}, {"$set": {"mix": user_mix, "amounts": user_amounts}})
+
 @app.get('/api/precision/{symbol}')
 async def get_precision(symbol: str):
     response = app.binance.get_asset_precision(symbol)
@@ -384,11 +435,11 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 #     await app.db.create_collection("transfer_history")
 #     await app.db.transfer_history.create_index([("leaderId", 1), ("time", -1)], unique=True)
 
-#     if "pool" in collections:
-#         await app.db.pool.drop()
+#     if "history" in collections:
+#         await app.db.history.drop()
     
-#     await app.db.create_collection("pool")
-#     await app.db.pool.create_index([("leaderId", 1)], unique=True)
+#     await app.db.create_collection("history")
+#     await app.db.history.create_index([("leaderId", 1)], unique=True)
 
 #     if "live" in collections:
 #         await app.db.live.drop()

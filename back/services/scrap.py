@@ -107,7 +107,7 @@ class Scrap:
 
                 if page_number <= pages_length:
                     next_page = page_number + 1
-                    self.cooldown()
+                    # self.cooldown()
                     return self.fetch_pages(leaderId, endpointType, params, next_page, result)
 
                 else:
@@ -168,10 +168,10 @@ class Scrap:
 
             print(leader_db)
 
-            self.cooldown()
+            # self.cooldown()
             await self.tick_positions(leader)
 
-            self.cooldown()
+            # self.cooldown()
             await self.update_leader_stats(leader)
             
             #todo do not replace if nothing changed ?
@@ -198,7 +198,7 @@ class Scrap:
     async def update_leader_stats(self, leader):
         await self.tick_position_history(leader)
 
-        self.cooldown()
+        # self.cooldown()
         await self.tick_transfer_history(leader)
     
         total_balance = leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"]

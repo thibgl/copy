@@ -55,10 +55,10 @@ class Binance:
 
         response = self.client.exchange_info(symbol=symbol)
         details = response['symbols'][0]
-
+        print(details)
         for symbol_filter in details["filters"]:
             if symbol_filter["filterType"] == "LOT_SIZE":
-                step_size = float(symbol_filter["stepSize"])
+                step_size = symbol_filter["stepSize"]
                 min_quantity = float(symbol_filter["minQty"])
             if symbol_filter["filterType"] == "NOTIONAL":
                 min_notional = float(symbol_filter['minNotional'])
