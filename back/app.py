@@ -7,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.hash import bcrypt
 from starlette.middleware.cors import CORSMiddleware
 from datetime import timedelta
-from services import Binance, Auth, Scrap, Bot
+from services import Binance, Auth, Scrap, Bot, Log, Telegram
 from lib import *
 import uvicorn
 import time
@@ -34,7 +34,8 @@ app.binance = Binance(app)
 app.auth = Auth(app)
 app.scrap = Scrap(app)
 app.bot = Bot(app)
-
+app.log = Log(app)
+app.telegram = Telegram(app)
 
 @app.post('/scrap/{portfolioId}/{dataType}')
 async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
