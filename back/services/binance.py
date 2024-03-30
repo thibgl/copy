@@ -5,10 +5,11 @@ import time
 
 class Binance:
     def __init__(self, app):
+        BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY")
+        BINANCE_SECRET_KEY = os.environ.get("BINANCE_SECRET_KEY")
+
         self.app = app
-        self.BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY")
-        self.BINANCE_SECRET_KEY = os.environ.get("BINANCE_SECRET_KEY")
-        self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY)
+        self.client = Spot(api_key=BINANCE_API_KEY, api_secret=BINANCE_SECRET_KEY)
 
     def account_snapshot(self, user):
         weigth = 10
@@ -85,3 +86,5 @@ class Binance:
         await self.app.db.history.insert_many(live_positions)
         await self.app.db.live.delete_many({"userId": user["_id"]})
         await self.app.db.users.update_one({"username": "root"}, {"$set": {"mix": user_mix, "amounts": user_amounts}})
+
+        self.app.log.create(user, source='Binance Service', category='Positions', message='Closed all positions')

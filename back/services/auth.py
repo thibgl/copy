@@ -14,10 +14,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 class Auth:
     def __init__(self, app):
-        self.app = app
         self.SECRET_KEY = os.environ.get("SECRET_KEY", "secretkey")
         self.ALGORITHM = "HS256"
         self.ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+        self.app = app
 
     async def get_db(self):
         yield self.app.db

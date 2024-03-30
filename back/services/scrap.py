@@ -41,16 +41,15 @@ endpoints = {
 class Scrap:
     # ! todo : RETRIES, ERROR BOUNDARY
     def __init__(self, app):
-        self.app = app
-
-        self.GATEWAY_HOST = 'https://www.binance.com'
-        self.API_PATH = '/'.join([self.GATEWAY_HOST, 'bapi/futures/v1'])
+        GATEWAY_HOST = 'https://www.binance.com'
+        self.API_PATH = '/'.join([GATEWAY_HOST, 'bapi/futures/v1'])
         self.COOLDOWN = 0.2
 
-        self.gateway = ApiGateway(self.GATEWAY_HOST, regions=["eu-west-1", "eu-west-2"], access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'), access_key_secret=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+        self.app = app
+        self.gateway = ApiGateway(GATEWAY_HOST, regions=["eu-west-1", "eu-west-2"], access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'), access_key_secret=os.environ.get('AWS_SECRET_ACCESS_KEY'))
         self.gateway.start()
         self.session = requests.Session()
-        self.session.mount(self.GATEWAY_HOST, self.gateway)
+        self.session.mount(GATEWAY_HOST, self.gateway)
         self.user_agent = UserAgent()
 
     def cooldown(self):
@@ -170,7 +169,6 @@ class Scrap:
                         "amounts": {},
                         "values": {},
                         "shares": {},
-                        "followedBy": []
                     }
                 await self.app.db.leaders.insert_one(leader)
 

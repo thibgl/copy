@@ -16,3 +16,5 @@ binance-connector
 requests-ip-rotator
 python-telegram-bot
 bcrypt
+schedule
+fake_useragent

@@ -3,7 +3,7 @@
 // src/routes/protected/+page.js or +layout.js
 export async function load({ fetch, cookies }) {
     // Access session data
-    // const leads = await fetch("http://localhost:8000/api/leads").then((response) => response.json())
-    // console.log(leads)
-    return { leads: [] }
+    const leaders = await fetch("http://localhost:8000/leaders/all").then((response) => response.json())
+    // console.log(leaders)
+    return { leaders: leaders.data }
 }

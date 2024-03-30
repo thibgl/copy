@@ -23,17 +23,17 @@
 			<btn class="btn variant-outline-primary">Submit</btn>
 		</footer>
 	</form>
-	{#each $page.data.leads as lead}
+	{#each $page.data.leaders as leader}
 		<div class="card w-96 aspect-video">
 			<header class="card-header flex justify-between items-center">
-				<a class="flex space-x-3 items-center" href={lead.leaderboardUrl} target="_blank">
+				<a class="flex space-x-3 items-center" href={leader.profileUrl} target="_blank">
 					<!-- <Avatar src={lead.userPhotoUrl} fallback="src/lib/images/user.png" /> -->
 					<img
 						class="w-12 h-12 rounded-full bg-gray-500"
-						src={lead.userPhotoUrl.length > 0 ? lead.userPhotoUrl : 'src/lib/images/user.png'}
+						src={leader.avatarUrl.length > 0 ? leader.avatarUrl : 'src/lib/images/user.png'}
 						alt="user avatar"
 					/>
-					<p>{lead.nickName}</p>
+					<p>{leader.nickname}</p>
 				</a>
 
 				<div class="flex space-x-3">

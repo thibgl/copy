@@ -4,14 +4,15 @@ class Log:
     def __init__(self, app):
         self.app = app
 
-    def create(self, user, source, subject, message, notify=True, collection=None, itemId=None):
+    def create(self, user, source, category, message, details='', notify=True, collection=None, itemId=None):
         log = {
             "userId": user["_id"],
             "createdAt": utils.current_time(),
             "notification": notify,
             "source": source,
-            "subject": subject,
+            "category": category,
             "message": message,
+            "details": details
         }
 
         if collection and itemId:
@@ -19,9 +20,9 @@ class Log:
 
         self.app.db.log.insert_one(log)
 
-        content = f'[{utils.current_readable_time()}]: Ajusted Position: LOG'
+        content = f'[{utils.current_readable_time()}]: <f{source}> {message}'
 
         print(content)
 
         if notify and user["chatId"]:
-            self.app.telegram.send_message(content)
+            self.app.telegram.bot.send_message(content)

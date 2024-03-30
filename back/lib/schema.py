@@ -88,11 +88,14 @@ class Leader(MongoModel):
     initInvestAsset: str
     positionShow: bool
     updateTime: int
+    historicPNL: float
     totalBalance: float
     liveRatio: float
     positionsValue: float
     positionsNotionalValue: float
-    mix: Dict[str, float]
+    amounts: Dict[str, float]
+    values: Dict[str, float]
+    shares: Dict[str, float]
 
 class APIResponse(BaseModel):
     success: bool = False
@@ -107,27 +110,30 @@ class LeaderTickData(BaseModel):
 class LeaderTickResponse(APIResponse):
     data: LeaderTickData
 
-class Lead(BaseModel):
-    model_config = ConfigDict()
+class AllLeaders(APIResponse):
+    data: List[Leader]
 
-    id: ObjectIdType = Field(None, alias="_id")
-    leadId: str
-    encryptedUid: str
-    nickName: str
-    userPhotoUrl: str
-    rank: int
-    value: Optional[int] = None
-    positionShared: bool
-    twitterUrl: Optional[str] = None
-    updateTime: int
-    followerCount: int
-    leaderboardUrl: str
+# class Lead(BaseModel):
+#     model_config = ConfigDict()
 
-    class Config:
-        arbitrary_types_allowed = True
-        populate_by_alias=True
-        populate_by_name=True
-        validate_assignment=True
+#     id: ObjectIdType = Field(None, alias="_id")
+#     leadId: str
+#     encryptedUid: str
+#     nickName: str
+#     userPhotoUrl: str
+#     rank: int
+#     value: Optional[int] = None
+#     positionShared: bool
+#     twitterUrl: Optional[str] = None
+#     updateTime: int
+#     followerCount: int
+#     leaderboardUrl: str
+
+#     class Config:
+#         arbitrary_types_allowed = True
+#         populate_by_alias=True
+#         populate_by_name=True
+#         validate_assignment=True
 
 
 

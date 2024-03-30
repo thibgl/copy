@@ -18,7 +18,7 @@
 	import { storePopup } from '@skeletonlabs/skeleton';
 	storePopup.set({ computePosition, autoUpdate, flip, shift, offset, arrow });
 
-	import LoginForm from '$lib/modals/login/LoginForm.svelte';
+	import LoginForm from '$lib/modals/LoginForm.svelte';
 	initializeStores();
 
 	const modalComponentRegistry: Record<string, ModalComponent> = {

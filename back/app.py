@@ -1,4 +1,5 @@
-# todo: log - error boundaries, telegram, get user, socket pour le front
+# todo: log - error boundaries, telegram, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# RASPBERRY PI !!!
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -12,6 +13,7 @@ from lib import *
 import uvicorn
 import time
 import asyncio
+import schedule
 
 # Load env variables
 load_dotenv()
@@ -56,12 +58,12 @@ async def create_leader(leaderId: str):
 async def tick_positions():
     await app.bot.tick_positions(API=True)
 
-@app.get('/api/{binanceId}/add_to_roster')
-async def add_to_roster(binanceId: str):
+@app.get('/user/follow/{binanceId}')
+async def follow(binanceId: str):
     user = await app.db.users.find_one()
     leader = await app.db.leaders.find_one({"binanceId": binanceId})
 
-    if leader["_id"] not in user["followedLeaders"].keys():
+    if str(leader["_id"]) not in user["followedLeaders"].keys():
         user["followedLeaders"][str(leader["_id"])] = 1
 
         await app.db.users.update_one(
@@ -74,7 +76,7 @@ async def add_to_roster(binanceId: str):
             }
         )
 
-@app.get('/api/close_all_positions')
+@app.get('/user/close_all_positions')
 async def close_all_positions():
     user = await app.db.users.find_one()
     await app.binance.close_all_positions(user)
@@ -157,11 +159,11 @@ async def logout():
     # Here you should handle logout logic, session termination, or token invalidation
     return {"logout": True}
 
-@app.post('/api/data')
-async def handle_data_post(data: dict):
-    # Store data sent by the front end in MongoDB
-    result = await app.db.users.insert_one(data)
-    return {"message": "Data stored successfully", "id": str(result.inserted_id)}
+@app.get('/leaders/all', response_model=AllLeaders)
+async def all_leaders():
+    leaders_cursor = app.db.leaders.find()
+    leaders = await leaders_cursor.to_list(length=None)
+    return {"success": True, "message": "All Leaders List", "data": leaders}
 
 @app.get('/api/data')
 async def handle_data_get():
