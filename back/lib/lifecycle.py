@@ -1,5 +1,5 @@
 import time 
-import bcrypt
+from passlib.hash import bcrypt
 
 async def db_startup(db):
         # Ensure collections exist
@@ -81,7 +81,7 @@ async def db_startup(db):
         await db.history.drop()
     
     await db.create_collection("history")
-    await db.history.create_index([("leaderId", 1)], unique=True)
+    await db.history.create_index([("userId", 1), ("symbol", -1)])
 
     if "live" in collections:
         await db.live.drop()
@@ -101,9 +101,7 @@ async def db_startup(db):
     await db.create_collection("bot")
 
     bot_data = {
-        "active": False,
-        "activeUsers": [],
-        "activeLeaders": [],
+        "active": True,
         "updateTime": int(time.time() * 1000),
         "tickInterval": 30,
         "shutdownTime": 0,

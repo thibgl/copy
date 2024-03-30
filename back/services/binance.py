@@ -55,7 +55,7 @@ class Binance:
 
         response = self.client.exchange_info(symbol=symbol)
         details = response['symbols'][0]
-        print(details)
+        # print(details)
         for symbol_filter in details["filters"]:
             if symbol_filter["filterType"] == "LOT_SIZE":
                 step_size = symbol_filter["stepSize"]

@@ -104,7 +104,7 @@ class Scrap:
                     if item[reference] > latest_item[reference]:
                         result.append(item)
                     else:
-                        print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
+                        # print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
                         return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
             else:
                 result = result + response_list

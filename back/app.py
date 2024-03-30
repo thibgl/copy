@@ -37,11 +37,6 @@ app.database = Database(app)
 app.bot = Bot(app)
 
 
-# @app.get('/api/getleaderboard')
-# async def get_leaders():
-#     await app.scrap.get_leaders()
-asyncio.create_task(app.bot.tick_positions())
-
 @app.post('/scrap/{portfolioId}/{dataType}')
 async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
     response = app.scrap.fetch_data(portfolioId, dataType, params.model_dump())
@@ -58,26 +53,22 @@ async def create_leader(leaderId: str):
 
 @app.get('/api/tick_positions')
 async def tick_positions():
-    await app.bot.tick_positions()
+    await app.bot.tick_positions(API=True)
 
 @app.get('/api/{binanceId}/add_to_roster')
 async def add_to_roster(binanceId: str):
+    user = await app.db.users.find_one()
     leader = await app.db.leaders.find_one({"binanceId": binanceId})
-    bot = await app.db.bot.find_one()
 
-    # async for bot in bots:
-    #     bot = bot
+    if leader["_id"] not in user["followedLeaders"].keys():
+        user["followedLeaders"][str(leader["_id"])] = 1
 
-    # ! DO THE SAME THING FOR THE USERID
-    if leader["_id"] not in bot["activeLeaders"]:
-        activeLeaders = bot["activeLeaders"] + [leader["_id"]]
-
-        await app.db.bot.update_one(
-            {"_id": bot["_id"]}, 
+        await app.db.users.update_one(
+            {"username": "root"}, 
             {
                 "$set": {
                     "updateTime": int(time.time() * 1000),
-                    "activeLeaders": activeLeaders,
+                    "followedLeaders": user["followedLeaders"],
                 }
             }
         )
@@ -87,18 +78,22 @@ async def close_all_positions():
     user = await app.db.users.find_one()
     user_amounts, user_mix = user["amounts"], user["mix"] 
 
+    # doing this way so if we get an error, we don't remove the whole mix & amounts
     for symbol, value in list(user_amounts.items()):
         try:
             print(symbol, value)
-            response = app.binance.close_position(symbol, value)
-            print(response)
+            # response = app.binance.close_position(symbol, value)
+            # print(response)
             user_amounts.pop(symbol)
             user_mix.pop(symbol)
         except Exception as e:
             print(e)
             continue
     
-    await app.db.live.delete_many({"userId": "root"})
+    live_positions_cursor = app.db.live.find({"userId": user["_id"]})
+    live_positions = await live_positions_cursor.to_list(length=None)
+    await app.db.history.insert_many(live_positions)
+    await app.db.live.delete_many({"userId": user["_id"]})
     await app.db.users.update_one({"username": "root"}, {"$set": {"mix": user_mix, "amounts": user_amounts}})
 
 @app.get('/api/precision/{symbol}')
@@ -212,6 +207,24 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 @app.on_event("startup")
 async def startup():
     # await db_startup(app.db)
+    # leader_response = await app.scrap.tick_leader('3778840387155890433')
+    # user = await app.db.users.find_one()
+    # leader = await app.db.leaders.find_one({"binanceId": '3778840387155890433'})
+
+    # if leader["_id"] not in user["followedLeaders"].keys():
+    #     user["followedLeaders"][str(leader["_id"])] = 1
+
+    #     await app.db.users.update_one(
+    #         {"username": "root"}, 
+    #         {
+    #             "$set": {
+    #                 "updateTime": int(time.time() * 1000),
+    #                 "followedLeaders": user["followedLeaders"],
+    #             }
+    #         }
+    #     )
+    # asyncio.create_task(app.bot.tick_positions())
+    
     pass
 
 @app.on_event("shutdown")
