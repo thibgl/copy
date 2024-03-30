@@ -33,7 +33,8 @@ async def db_startup(db):
                 "USDT": 0,
                 "valueBTC": 0,
                 "valueUSDT": 0
-            }
+            },
+            "chatId": 1031182213
         }
 
         await db.users.insert_one(root_user_data)

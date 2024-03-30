@@ -37,6 +37,7 @@ app.bot = Bot(app)
 app.log = Log(app)
 app.telegram = Telegram(app)
 
+
 @app.post('/scrap/{portfolioId}/{dataType}')
 async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
     response = app.scrap.fetch_data(portfolioId, dataType, params.model_dump())
@@ -191,6 +192,7 @@ async def startup():
     # await db_startup(app.db)
     # leader_response = await app.scrap.tick_leader('3778840387155890433')
     # user = await app.db.users.find_one()
+    # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
     # leader = await app.db.leaders.find_one({"binanceId": '3778840387155890433'})
 
     # if leader["_id"] not in user["followedLeaders"].keys():
