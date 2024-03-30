@@ -64,3 +64,24 @@ class Binance:
                 min_notional = float(symbol_filter['minNotional'])
             
         return {"stepSize": step_size, "minQty": min_quantity, "minNotional": min_notional}
+    
+    async def close_all_positions(self, user):
+        user_amounts, user_mix = user["amounts"], user["mix"] 
+
+        # doing this way so if we get an error, we don't remove the whole mix & amounts
+        for symbol, amount in list(user_amounts.items()):
+            try:
+                # print(symbol, amount)
+                # response = app.binance.close_position(symbol, amount)
+                # print(response)
+                user_amounts.pop(symbol)
+                user_mix.pop(symbol)
+            except Exception as e:
+                print(e)
+                continue
+        
+        live_positions_cursor = self.app.db.live.find({"userId": user["_id"]})
+        live_positions = await live_positions_cursor.to_list(length=None)
+        await self.app.db.history.insert_many(live_positions)
+        await self.app.db.live.delete_many({"userId": user["_id"]})
+        await self.app.db.users.update_one({"username": "root"}, {"$set": {"mix": user_mix, "amounts": user_amounts}})

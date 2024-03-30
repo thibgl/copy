@@ -1,4 +1,4 @@
-# todo: positions avec les orders inside, history, get user, telegram, log - erorr boundary, socket pour le front
+# todo: log - error boundaries, telegram, get user, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -7,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.hash import bcrypt
 from starlette.middleware.cors import CORSMiddleware
 from datetime import timedelta
-from services import Binance, Auth, Scrap, Database, Bot
+from services import Binance, Auth, Scrap, Bot
 from lib import *
 import uvicorn
 import time
@@ -33,7 +33,6 @@ app.db = app.mongodb_client.db
 app.binance = Binance(app)
 app.auth = Auth(app)
 app.scrap = Scrap(app)
-app.database = Database(app)
 app.bot = Bot(app)
 
 
@@ -76,25 +75,7 @@ async def add_to_roster(binanceId: str):
 @app.get('/api/close_all_positions')
 async def close_all_positions():
     user = await app.db.users.find_one()
-    user_amounts, user_mix = user["amounts"], user["mix"] 
-
-    # doing this way so if we get an error, we don't remove the whole mix & amounts
-    for symbol, value in list(user_amounts.items()):
-        try:
-            print(symbol, value)
-            # response = app.binance.close_position(symbol, value)
-            # print(response)
-            user_amounts.pop(symbol)
-            user_mix.pop(symbol)
-        except Exception as e:
-            print(e)
-            continue
-    
-    live_positions_cursor = app.db.live.find({"userId": user["_id"]})
-    live_positions = await live_positions_cursor.to_list(length=None)
-    await app.db.history.insert_many(live_positions)
-    await app.db.live.delete_many({"userId": user["_id"]})
-    await app.db.users.update_one({"username": "root"}, {"$set": {"mix": user_mix, "amounts": user_amounts}})
+    await app.binance.close_all_positions(user)
 
 @app.get('/api/precision/{symbol}')
 async def get_precision(symbol: str):
