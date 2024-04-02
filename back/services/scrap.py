@@ -265,13 +265,11 @@ class Scrap:
             position_history = fetch_pages_response["data"]
             partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
 
-            print(partially_closed_positions)
-
             for position in position_history:
                 position["leaderId"] = leader["_id"]
             
                 if position["id"] in partially_closed_positions:
-                    partially_closed_position = await self.app.db.get_one({"id": position["id"]})
+                    partially_closed_position = await self.app.db.position_history.get_one({"id": position["id"]})
                     leader['historicPNL'] -= float(partially_closed_position["closingPnl"])
 
                     await self.app.db.position_history.delete_one({"id": position["id"]})

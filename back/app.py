@@ -39,6 +39,7 @@ app.scrap = Scrap(app)
 app.bot = Bot(app)
 app.log = Log(app)
 
+asyncio.create_task(app.bot.tick_positions())
 
 @app.post('/scrap/{portfolioId}/{dataType}')
 async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
@@ -209,7 +210,6 @@ async def startup():
     #     )
 
     # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
-    # asyncio.create_task(app.bot.tick_positions())
     
     pass
 
