@@ -63,7 +63,7 @@ class Bot:
 
                         # if they are mixes in the current difference, positions have been changed or opened
                         if len(current_mix_difference) > 0:
-                            leaders_weight = sum(user["followedLeaders"].values())
+                            leaders_total_weight = sum(user["followedLeaders"].values())
                             user_account = self.app.binance.account_snapshot(user)
                             user_account_value = float(user_account["valueUSDT"])
 
@@ -87,7 +87,7 @@ class Bot:
 
                                     pool_leader = pool[leaderId]
                                     leader_live_ratio = pool_leader["account"]["liveRatio"]
-                                    leader_weight_share = weight / leaders_weight
+                                    leader_weight_share = weight / leaders_total_weight
                                     # if the leader has the symbol in his amounts... calculate all the necessary stats to reproduce the shares
                                     if symbol in pool_leader["amounts"].keys():
                                         user_share += leader_weight_share * leader_live_ratio * pool_leader["shares"][symbol]

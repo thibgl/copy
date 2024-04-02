@@ -73,7 +73,7 @@ class Binance:
         for symbol, amount in list(user_amounts.items()):
             try:
                 # print(symbol, amount)
-                # response = app.binance.close_position(symbol, amount)
+                response = self.app.binance.close_position(symbol, amount)
                 # print(response)
                 user_amounts.pop(symbol)
                 user_mix.pop(symbol)
@@ -87,4 +87,4 @@ class Binance:
         await self.app.db.live.delete_many({"userId": user["_id"]})
         await self.app.db.users.update_one({"username": "root"}, {"$set": {"mix": user_mix, "amounts": user_amounts}})
 
-        await self.app.log.create(user, source='Binance Service', category='Positions', message='Closed all positions')
+        # await self.app.log.create(user, source='Binance Service', category='Positions', message='Closed all positions')
