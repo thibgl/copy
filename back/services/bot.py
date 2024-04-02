@@ -9,10 +9,11 @@ class Bot:
         self.app = app
 
     async def tick_positions(self, API=False):
-        try:
-            bot = await self.app.db.bot.find_one()
+        bot = await self.app.db.bot.find_one()
 
-            while bot["active"]:
+        while bot["active"]:
+            try:
+                bot = await self.app.db.bot.find_one()
                 print(f'[{utils.current_readable_time()}]: Fetching Positions')
 
                 users = self.app.db.users.find()
@@ -52,7 +53,7 @@ class Bot:
                                 if symbol not in current_user_mix:
                                     try:
                                         # * CLOSE
-                                        await self.close_position(user, symbol, mix_amount, current_user_amounts)
+                                        await self.close_position(user, symbol, current_user_amounts)
                                         n_orders += 1
 
                                     except Exception as e:
@@ -145,15 +146,15 @@ class Bot:
                 if not API:
                     await asyncio.sleep(bot["tickInterval"])
 
-        except Exception as e:
-            # print(e)
-            traceback.print_exc()
-            pass
-    
-
+            except Exception as e:
+                # print(e)
+                traceback.print_exc()
+                pass
 
     async def change_position(self, user, symbol, amount, precision, symbol_price, user_amounts):
         last_amount = user_amounts[symbol]
+        print(f'[{utils.current_readable_time()}]: Ajusting Position: {symbol} - {last_amount}')
+        live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
 
         if amount > last_amount:
             to_open = amount - last_amount
@@ -166,7 +167,7 @@ class Bot:
 
         await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": {
             "updatedAt": utils.current_time(),
-            "orders": user["oders"] + [binance_reponse]
+            "orders": live_position["orders"] + [binance_reponse]
         }})
             
         target_amount = self.truncate_amount(amount, precision, symbol_price)
@@ -177,6 +178,7 @@ class Bot:
 
     async def open_position(self, user, symbol, amount, value, precision, symbol_price, user_amounts):
         final_amount = self.truncate_amount(amount, precision, symbol_price)
+        print(f'[{utils.current_readable_time()}]: Opening Position: {symbol} - {final_amount}')
 
         open_response = self.app.binance.open_position(symbol, final_amount)
 
@@ -197,8 +199,10 @@ class Bot:
         print(f'[{utils.current_readable_time()}]: Opened Position: {symbol} - {final_amount}')
 
 
-    async def close_position(self, user, symbol, amount, user_amounts):
-        close_response = self.app.binance.close_position(symbol, amount)
+    async def close_position(self, user, symbol, user_amounts):
+        last_amount = user_amounts[symbol]
+        print(f'[{utils.current_readable_time()}]: Closing Position: {symbol} - {last_amount}')
+        close_response = self.app.binance.close_position(symbol, last_amount)
 
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
 
@@ -216,7 +220,7 @@ class Bot:
 
         user_amounts.pop(symbol)
 
-        print(f'[{utils.current_readable_time()}]: Closed Position: {symbol} - {amount}')
+        print(f'[{utils.current_readable_time()}]: Closed Position: {symbol} - {last_amount}')
 
 
     def truncate_amount(self, amount, precision, price):
@@ -240,4 +244,4 @@ class Bot:
             return amount
         
         return -amount
-    
+

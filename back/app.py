@@ -77,6 +77,19 @@ async def follow(binanceId: str):
             }
         )
 
+@app.get('/user/toogle_bot')
+async def toogle_bot():
+    bot = await app.db.bot.find_one()
+    active = not bot["active"]
+
+    await app.db.bot.update_one({}, {"$set": {"active": not bot["active"]}})
+
+    if active:
+        asyncio.create_task(app.bot.tick_positions())
+
+    print(f'[{utils.current_readable_time()}]: Bot is now Active: {not bot["active"]}')
+
+
 @app.get('/user/close_all_positions')
 async def close_all_positions():
     user = await app.db.users.find_one()
@@ -193,9 +206,9 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 @app.on_event("startup")
 async def startup():
     # await db_startup(app.db)
-    # leader_response = await app.scrap.tick_leader('3778840387155890433')
+    # leader_response = await app.scrap.tick_leader('3907342150781504256')
     # user = await app.db.users.find_one()
-    # leader = await app.db.leaders.find_one({"binanceId": '3778840387155890433'})
+    # leader = await app.db.leaders.find_one({"binanceId": '3907342150781504256'})
     # if leader["_id"] not in user["followedLeaders"].keys():
     #     user["followedLeaders"][str(leader["_id"])] = 1
 
