@@ -1,6 +1,8 @@
 import asyncio
 from lib import utils
 from bson.objectid import ObjectId
+import traceback
+
 
 class Bot:
     def __init__(self, app):
@@ -55,9 +57,10 @@ class Bot:
                                         n_orders += 1
 
                                     except Exception as e:
-                                        print(e)
+                                        # print(e)
                                         # did not close so the amount is still present in the current user mix
                                         current_user_mix[symbol] = amount
+                                        traceback.print_exc()
 
                         # if they are mixes in the current difference, positions have been changed or opened
                         if len(current_difference) > 0:
@@ -97,8 +100,8 @@ class Bot:
 
                                         leader_index += 1
 
-                                amount = (user_account_value * user_share) / symbol_price
-                                value = amount * symbol_price
+                                amount = (amount * user_account_value * user_share) / symbol_price
+                                value = abs(amount * symbol_price)
 
                                 # if the symbol is in the last mix, the position has changed
                                 if symbol in latest_user_mix:
@@ -108,9 +111,10 @@ class Bot:
                                         n_orders += 1
 
                                     except Exception as e:
-                                        print(e)
+                                        # print(e)
                                         # reset the amount to its previous value
                                         current_user_mix[symbol] = user_amounts[symbol]
+                                        traceback.print_exc()
 
                                 # if it is not, the position is new and has been opened
                                 else:
@@ -127,9 +131,10 @@ class Bot:
                                     # n_orders += 1
 
                                     except Exception as e:
-                                        print(e)
+                                        # print(e)
                                         # could not open so the symbol is removed from the mix
                                         current_user_mix.pop(symbol)
+                                        traceback.print_exc()
 
                         await self.app.db.users.update_one({"username": "root"}, {"$set": {"mix": current_user_mix, "amounts": user_amounts}})
                         await self.app.db.bot.update_one({}, {"$set": {"precisions": bot["precisions"]}, "$inc": {"ticks": 1, "orders": n_orders}})
@@ -140,7 +145,8 @@ class Bot:
                     await asyncio.sleep(bot["tickInterval"])
 
         except Exception as e:
-            print(e)
+            # print(e)
+            traceback.print_exc()
             pass
     
 
@@ -150,18 +156,18 @@ class Bot:
         if amount > last_amount:
             to_open = amount - last_amount
             final_amount = self.truncate_amount(to_open, precision, symbol_price)
-            # binance_reponse = self.app.binance.open_position(symbol, final_amount)
+            binance_reponse = self.app.binance.open_position(symbol, final_amount)
         else:
             to_close = last_amount - amount
             final_amount = self.truncate_amount(to_close, precision, symbol_price)
-            # binance_reponse = self.app.binance.close_position(symbol, final_amount)
+            binance_reponse = self.app.binance.close_position(symbol, final_amount)
 
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
 
         await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": {
             "updatedAt": utils.current_time(),
-            # "orders": user["oders"] + [binance_reponse]
-            "orders": live_position["orders"] + [{"position": "change", "symbol": symbol, "amount": final_amount}]
+            "orders": user["oders"] + [binance_reponse]
+            # "orders": live_position["orders"] + [{"position": "change", "symbol": symbol, "amount": final_amount}]
         }})
             
         target_amount = self.truncate_amount(amount, precision, symbol_price)
@@ -173,7 +179,7 @@ class Bot:
     async def open_position(self, user, symbol, amount, value, precision, symbol_price, user_amounts):
         final_amount = self.truncate_amount(amount, precision, symbol_price)
 
-        # open_response = self.app.binance.open_position(symbol, final_amount)
+        open_response = self.app.binance.open_position(symbol, final_amount)
 
         current_time = utils.current_time()
         await self.app.db.live.insert_one({
@@ -181,8 +187,8 @@ class Bot:
             "symbol": symbol,
             "amount": amount,
             "value": value,
-            # "orders": [open_response],
-            "orders": [{"position": "open", "symbol": symbol, "amount": final_amount}],
+            "orders": [open_response],
+            # "orders": [{"position": "open", "symbol": symbol, "amount": final_amount}],
             "createdAt": current_time,
             "updatedAt": current_time,
             "closedAt": None
@@ -194,7 +200,7 @@ class Bot:
 
 
     async def close_position(self, user, symbol, amount, user_amounts):
-        # close_response = self.app.binance.close_position(symbol, amount)
+        close_response = self.app.binance.close_position(symbol, amount)
 
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
 
@@ -202,8 +208,8 @@ class Bot:
         live_position.update({
             "amount": 0,
             "value": 0,
-            # "orders": live_position["orders"] + [close_response],
-            "orders": live_position["orders"] + [{"position": "close", "symbol": symbol, "amount": 0}],
+            "orders": live_position["orders"] + [close_response],
+            # "orders": live_position["orders"] + [{"position": "close", "symbol": symbol, "amount": 0}],
             "updatedAt": current_time,
             "closedAt": current_time,
         })

@@ -1,5 +1,6 @@
-# todo: log - error boundaries, telegram, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
-# RASPBERRY PI !!!
+
+# ! ERROR TRACEBACK ===> BLIND !!!
+# todo: log - error boundaries, partially closed position history, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -8,7 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.hash import bcrypt
 from starlette.middleware.cors import CORSMiddleware
 from datetime import timedelta
-from services import Binance, Auth, Scrap, Bot, Log, Telegram
+from services import Binance, Auth, Scrap, Bot, Log
 from lib import *
 import uvicorn
 import time
@@ -37,7 +38,6 @@ app.auth = Auth(app)
 app.scrap = Scrap(app)
 app.bot = Bot(app)
 app.log = Log(app)
-app.telegram = Telegram(app)
 
 
 @app.post('/scrap/{portfolioId}/{dataType}')
@@ -194,9 +194,7 @@ async def startup():
     # await db_startup(app.db)
     # leader_response = await app.scrap.tick_leader('3778840387155890433')
     # user = await app.db.users.find_one()
-    # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
     # leader = await app.db.leaders.find_one({"binanceId": '3778840387155890433'})
-
     # if leader["_id"] not in user["followedLeaders"].keys():
     #     user["followedLeaders"][str(leader["_id"])] = 1
 
@@ -209,6 +207,8 @@ async def startup():
     #             }
     #         }
     #     )
+
+    # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
     # asyncio.create_task(app.bot.tick_positions())
     
     pass

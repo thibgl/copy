@@ -3,6 +3,7 @@ import requests
 from requests_ip_rotator import ApiGateway, EXTRA_REGIONS
 from fake_useragent import UserAgent
 from lib import utils
+import traceback
 
 endpoints = {
     "positions" : {
@@ -240,7 +241,7 @@ class Scrap:
                 if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
                     leader["transferBalance"] += float(transfer["amount"])
 
-                if transfer_type == "LEAD_WITHDRAW":
+                elif transfer_type == "LEAD_WITHDRAW":
                     leader["transferBalance"] -= float(transfer["amount"])
 
                 else:
@@ -257,14 +258,24 @@ class Scrap:
             {"leaderId": leader["_id"]},
             sort=[('updateTime', -1)]
         )
-          
+
         fetch_pages_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
 
         if fetch_pages_response["success"]:
             position_history = fetch_pages_response["data"]
+            partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
+
+            print(partially_closed_positions)
 
             for position in position_history:
                 position["leaderId"] = leader["_id"]
+            
+                if position["id"] in partially_closed_positions:
+                    partially_closed_position = await self.app.db.get_one({"id": position["id"]})
+                    leader['historicPNL'] -= float(partially_closed_position["closingPnl"])
+
+                    await self.app.db.position_history.delete_one({"id": position["id"]})
+
                 leader['historicPNL'] += float(position["closingPnl"])
 
             if len(position_history) > 0:
@@ -334,7 +345,7 @@ class Scrap:
                                 await self.app.db.positions.insert_one(symbol_position)
 
             for symbol, value in notional_values.items():
-                shares[symbol] = value / positions_notional_value
+                shares[symbol] = abs(value / positions_notional_value)
 
             update = {
                 "positionsValue": positions_value,

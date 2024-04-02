@@ -94,7 +94,7 @@ async def db_startup(db):
         await db.log.drop()
 
     await db.create_collection("log")
-    await db.log.create_index([("userId", 1)], unique=True)
+    await db.log.create_index([("userId", 1)])
 
     if "bot" in collections:
         await db.bot.drop()
