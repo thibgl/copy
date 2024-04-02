@@ -1,6 +1,6 @@
 
 # ! ERROR TRACEBACK ===> BLIND !!!
-# todo: log - error boundaries, partially closed position history, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# todo: log - error boundaries, gérer changement de params leader, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body

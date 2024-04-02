@@ -63,7 +63,7 @@ class Bot:
 
                         # if they are mixes in the current difference, positions have been changed or opened
                         if len(current_mix_difference) > 0:
-                            leaders_weight = 0
+                            leaders_weight = sum(user["followedLeaders"].values())
                             user_account = self.app.binance.account_snapshot(user)
                             user_account_value = float(user_account["valueUSDT"])
 
@@ -84,7 +84,6 @@ class Bot:
                                     if "account" not in pool[leaderId].keys():
                                         # get the current balance and live ratio
                                         pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(leader)
-                                        leaders_weight += weight
 
                                     pool_leader = pool[leaderId]
                                     leader_live_ratio = pool_leader["account"]["liveRatio"]
