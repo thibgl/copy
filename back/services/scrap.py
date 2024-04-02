@@ -100,6 +100,8 @@ class Scrap:
             response_list = response_data["list"]
 
             if latest_item and reference:
+                response_list = sorted(response_list, key=lambda x: x[reference], reverse=True)
+
                 for item in response_list:
                     if item[reference] > latest_item[reference]:
                         result.append(item)
@@ -258,26 +260,31 @@ class Scrap:
             {"leaderId": leader["_id"]},
             sort=[('updateTime', -1)]
         )
-
+        print('latest_position["updateTime"]')
+        print(latest_position["updateTime"])
         fetch_pages_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
-
+        print(fetch_pages_response)
         if fetch_pages_response["success"]:
-            position_history = fetch_pages_response["data"]
+            new_position_history = fetch_pages_response["data"]
             partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
-
-            for position in position_history:
+            print('partially_closed_positions')
+            print(partially_closed_positions)
+            for position in new_position_history:
                 position["leaderId"] = leader["_id"]
             
                 if position["id"] in partially_closed_positions:
-                    partially_closed_position = await self.app.db.position_history.get_one({"id": position["id"]})
+                    partially_closed_position = await self.app.db.position_history.find_one({"id": position["id"]})
+                    print('partially_closed_position')
+                    print(partially_closed_position)
                     leader['historicPNL'] -= float(partially_closed_position["closingPnl"])
 
                     await self.app.db.position_history.delete_one({"id": position["id"]})
+                    partially_closed_positions.pop(position["id"])
 
                 leader['historicPNL'] += float(position["closingPnl"])
 
-            if len(position_history) > 0:
-                await self.app.db.position_history.insert_many(position_history)
+            if len(new_position_history) > 0:
+                await self.app.db.position_history.insert_many(new_position_history)
             
         return fetch_pages_response
 
