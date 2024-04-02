@@ -170,7 +170,7 @@ class Scrap:
                         "positionsValue": 0,
                         "positionsNotionalValue": 0,
                         "amounts": {},
-                        "values": {},
+                        "notionalValues": {},
                         "shares": {},
                     }
                 await self.app.db.leaders.insert_one(leader)
@@ -316,7 +316,7 @@ class Scrap:
                         notional_values[symbol] = 0
 
                     amounts[symbol] += position_amount
-                    notional_values[symbol] += float(position["notionalValue"])
+                    notional_values[symbol] += notional_value
 
                     positions_notional_value += notional_value
                     positions_value += notional_value / position["leverage"]
@@ -349,14 +349,14 @@ class Scrap:
                             for symbol_position in symbol_positions:
                                 await self.app.db.positions.insert_one(symbol_position)
 
-            for symbol, value in notional_values.items():
-                shares[symbol] = abs(value / positions_notional_value)
+            for symbol, notional_value in notional_values.items():
+                shares[symbol] = notional_value / positions_notional_value
 
             update = {
                 "positionsValue": positions_value,
                 "positionsNotionalValue": positions_notional_value,
                 "amounts": amounts,
-                "values": notional_values,
+                "notionalValues": notional_values,
                 "shares": shares
                 }
             
