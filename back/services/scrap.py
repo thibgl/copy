@@ -4,6 +4,7 @@ from requests_ip_rotator import ApiGateway, EXTRA_REGIONS
 from fake_useragent import UserAgent
 from lib import utils
 import traceback
+import time
 
 endpoints = {
     "positions" : {
@@ -226,146 +227,156 @@ class Scrap:
 
     
     async def tick_transfer_history(self, leader):
-        latest_transfer = await self.app.db.transfer_history.find_one(
-                {"leaderId": leader["_id"]},
-                sort=[('time', -1)]
-            )
+        try:
+            latest_transfer = await self.app.db.transfer_history.find_one(
+                    {"leaderId": leader["_id"]},
+                    sort=[('time', -1)]
+                )
 
-        fetch_pages_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
+            fetch_pages_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
 
-        if fetch_pages_response["success"]:
-            transfer_history = fetch_pages_response["data"]
+            if fetch_pages_response["success"]:
+                transfer_history = fetch_pages_response["data"]
 
-            for transfer in transfer_history:
-                transfer["leaderId"] = leader["_id"]
-                transfer_type = transfer["transType"]
+                for transfer in transfer_history:
+                    transfer["leaderId"] = leader["_id"]
+                    transfer_type = transfer["transType"]
 
-                if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
-                    leader["transferBalance"] += float(transfer["amount"])
+                    if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
+                        leader["transferBalance"] += float(transfer["amount"])
 
-                elif transfer_type == "LEAD_WITHDRAW":
-                    leader["transferBalance"] -= float(transfer["amount"])
+                    elif transfer_type == "LEAD_WITHDRAW":
+                        leader["transferBalance"] -= float(transfer["amount"])
 
-                else:
-                    print(f"WARNING! UNKNOWN TRANFER TYPE: {transfer_type}")
+                    else:
+                        print(f"WARNING! UNKNOWN TRANFER TYPE: {transfer_type}")
 
-            if len(transfer_history) > 0:
-                await self.app.db.transfer_history.insert_many(transfer_history)
+                if len(transfer_history) > 0:
+                    await self.app.db.transfer_history.insert_many(transfer_history)
 
-        return fetch_pages_response
-
+            return fetch_pages_response
+        except Exception:
+            traceback.print_exc()
+            time.wait(30)
 
     async def tick_position_history(self, leader):
-        latest_position = await self.app.db.position_history.find_one(
-            {"leaderId": leader["_id"]},
-            sort=[('updateTime', -1)]
-        )
-        print('latest_position["updateTime"]')
-        print(latest_position["updateTime"])
-        fetch_pages_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
-        print(fetch_pages_response)
-        if fetch_pages_response["success"]:
-            new_position_history = fetch_pages_response["data"]
-            partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
-            print('partially_closed_positions')
-            print(partially_closed_positions)
-            for position in new_position_history:
-                position["leaderId"] = leader["_id"]
-            
-                if position["id"] in partially_closed_positions:
-                    partially_closed_position = await self.app.db.position_history.find_one({"id": position["id"]})
-                    print('partially_closed_position')
-                    print(partially_closed_position)
-                    leader['historicPNL'] -= float(partially_closed_position["closingPnl"])
+        try:
+            latest_position = await self.app.db.position_history.find_one(
+                {"leaderId": leader["_id"]},
+                sort=[('updateTime', -1)]
+            )
+            fetch_pages_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
+            print(fetch_pages_response)
+            if fetch_pages_response["success"]:
+                new_position_history = fetch_pages_response["data"]
+                partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
+                new_positions = []
+                print('partially_closed_positions')
+                print(partially_closed_positions)
+                for position in new_position_history:
+                    position["leaderId"] = leader["_id"]
+                    print('position["id"], position["id"] in partially_closed_positions')
+                    print(position["id"], position["id"] in partially_closed_positions)
+                    if position["id"] in partially_closed_positions:
+                        partially_closed_position = await self.app.db.position_history.find_one({"leaderId": leader["_id"], "id": position["id"]})
+                        print('partially_closed_position')
+                        print(partially_closed_position)
+                        leader['historicPNL'] -= float(partially_closed_position["closingPnl"])
 
-                    await self.app.db.position_history.delete_one({"id": position["id"]})
-                    partially_closed_positions.pop(position["id"])
+                        await self.app.db.position_history.replace_one({"leaderId": leader["_id"], "id": position["id"]}, position)
+                    else:
+                        leader['historicPNL'] += float(position["closingPnl"])
+                        new_positions.append(position)
 
-                leader['historicPNL'] += float(position["closingPnl"])
-
-            if len(new_position_history) > 0:
-                await self.app.db.position_history.insert_many(new_position_history)
-            
-        return fetch_pages_response
-
+                if len(new_positions) > 0:
+                    print('new_positions')
+                    print(new_positions)
+                    await self.app.db.position_history.insert_many(new_positions)
+                
+            return fetch_pages_response
+        except Exception:
+            traceback.print_exc()
+            time.wait(30)
 
     async def tick_positions(self, leader):
-        binanceId = leader["binanceId"]
-        fetch_data_response = self.fetch_data(binanceId, "positions").json()
+        try:
+            binanceId = leader["binanceId"]
+            fetch_data_response = self.fetch_data(binanceId, "positions").json()
 
-        if fetch_data_response["success"]:
-            latest_amounts = leader["amounts"]
-            positions_notional_value = 0
-            positions_value = 0
-            positions = []
-            amounts = {}
-            notional_values = {}
-            shares = {}
+            if fetch_data_response["success"]:
+                latest_amounts = leader["amounts"]
+                positions_notional_value = 0
+                positions_value = 0
+                positions = []
+                amounts = {}
+                notional_values = {}
+                shares = {}
 
-            for position in fetch_data_response["data"]:
-                position_amount = float(position["positionAmount"])
+                for position in fetch_data_response["data"]:
+                    position_amount = float(position["positionAmount"])
 
-                if  position_amount != 0:
-                    position["leaderId"] = leader["_id"]
-                    notional_value = abs(float(position["notionalValue"]))
-                    symbol = position["symbol"]
+                    if  position_amount != 0:
+                        position["leaderId"] = leader["_id"]
+                        notional_value = float(position["notionalValue"])
+                        symbol = position["symbol"]
 
-                    if symbol not in amounts: 
-                        amounts[symbol] = 0
-                    if symbol not in notional_values: 
-                        notional_values[symbol] = 0
+                        if symbol not in amounts: 
+                            amounts[symbol] = 0
+                            notional_values[symbol] = 0
 
-                    amounts[symbol] += position_amount
-                    notional_values[symbol] += notional_value
+                        amounts[symbol] += position_amount
+                        notional_values[symbol] += float(position["notionalValue"])
 
-                    positions_notional_value += notional_value
-                    positions_value += notional_value / position["leverage"]
-                    positions.append(position)
+                        positions_notional_value += notional_value
+                        positions_value += notional_value / position["leverage"]
+                        positions.append(position)
 
-            if amounts != latest_amounts:
-                current_set, last_set = set(amounts.items()), set(latest_amounts.items())
-                current_difference, last_difference = current_set.difference(last_set), last_set.difference(current_set)
+                if amounts != latest_amounts:
+                    current_set, last_set = set(amounts.items()), set(latest_amounts.items())
+                    current_difference, last_difference = current_set.difference(last_set), last_set.difference(current_set)
 
-                for bag in last_difference:
-                    symbol, amount = bag
+                    for bag in last_difference:
+                        symbol, amount = bag
 
-                    if amount != 0:
-                        if symbol not in amounts:
-                            print(f'{bag} CLOSED POSITION')
-                            await self.app.db.postions.delete_many({"leaderId": leader["_id"], "symbol": symbol})
+                        if amount != 0:
+                            if symbol not in amounts:
+                                print(f'{bag} CLOSED POSITION')
+                                await self.app.db.postions.delete_many({"leaderId": leader["_id"], "symbol": symbol})
 
-                for bag in current_difference:
-                    symbol, amount = bag
+                    for bag in current_difference:
+                        symbol, amount = bag
 
-                    if amount != 0:
-                        symbol_positions = [position for position in positions if position.get('symbol') == symbol]
+                        if amount != 0:
+                            symbol_positions = [position for position in positions if position.get('symbol') == symbol]
 
-                        if symbol in latest_amounts:
-                            print(f'{bag} CHANGED POSITION')
-                            for symbol_position in symbol_positions:
-                                await self.app.db.positions.replace_one({"leaderId": leader["_id"], "id": symbol_position["id"]}, symbol_position)
-                        else:
-                            print(f'{bag} NEW POSITION')
-                            for symbol_position in symbol_positions:
-                                await self.app.db.positions.insert_one(symbol_position)
+                            if symbol in latest_amounts:
+                                print(f'{bag} CHANGED POSITION')
+                                for symbol_position in symbol_positions:
+                                    await self.app.db.positions.replace_one({"leaderId": leader["_id"], "id": symbol_position["id"]}, symbol_position)
+                            else:
+                                print(f'{bag} NEW POSITION')
+                                for symbol_position in symbol_positions:
+                                    await self.app.db.positions.insert_one(symbol_position)
 
-            for symbol, notional_value in notional_values.items():
-                shares[symbol] = notional_value / positions_notional_value
+                for symbol, notional_value in notional_values.items():
+                    shares[symbol] = notional_value / positions_notional_value
 
-            update = {
-                "positionsValue": positions_value,
-                "positionsNotionalValue": positions_notional_value,
-                "amounts": amounts,
-                "notionalValues": notional_values,
-                "shares": shares
-                }
-            
-            leader.update(update)
+                update = {
+                    "positionsValue": positions_value,
+                    "positionsNotionalValue": positions_notional_value,
+                    "amounts": amounts,
+                    "notionalValues": notional_values,
+                    "shares": shares
+                    }
+                
+                leader.update(update)
 
-            await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
+                await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
 
-        return fetch_data_response
-
+            return fetch_data_response
+        except Exception:
+            traceback.print_exc()
+            time.wait(30)
     # Lifecycle
 
     def cleanup(self):

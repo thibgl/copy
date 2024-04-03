@@ -36,11 +36,13 @@ class Bot:
                                 current_user_mix[symbol] = 0
 
                             current_user_mix[symbol] += amount
-
+                    # print(pool)
                     # if the mix are different, one leader has changed its positions
                     if current_user_mix != latest_user_mix:
                         n_orders = 0
                         current_user_amounts = user["amounts"]
+                        current_user_values = user["values"]
+                        current_user_shares = user["shares"]
 
                         current_mix_set, latest_mix_set = set(current_user_mix.items()), set(latest_user_mix.items())
                         current_mix_difference, last_mix_difference = current_mix_set.difference(latest_mix_set), latest_mix_set.difference(current_mix_set)
@@ -53,23 +55,27 @@ class Bot:
                                 if symbol not in current_user_mix:
                                     try:
                                         # * CLOSE
-                                        for leaderId in pool.keys():
-                                            if symbol in pool[leaderId]["amounts"].keys():
-                                                symbol_price = pool_leader["notionalValues"][symbol] / abs(pool_leader["amounts"][symbol])
-                                                break
-                                        
-                                        if current_user_amounts[symbol] * symbol_price < precision["minNotional"]:
-                                            precision = bot["precisions"][symbol]
-                                            await self.open_position(user, symbol, 0, precision, symbol_price, current_user_amounts)
+                                        # Find the current symbol price
+                                        current_price = float(self.app.binance.client.ticker_price(symbol)["price"])
+                                        precision = bot["precisions"][symbol]
 
-                                        await self.close_position(user, symbol, current_user_amounts)
+                                        if abs(current_user_amounts[symbol]) * current_price < precision["minNotional"]:
+                                            amount = precision["minQty"]
+
+                                            if current_user_amounts[symbol] < 0:
+                                                amount = -amount
+
+                                            await self.open_position(user, symbol, amount, precision, symbol_price, current_user_amounts, current_user_values, current_user_shares)
+
+                                        await self.close_position(user, symbol, current_user_amounts, current_user_values, current_user_shares)
                                         n_orders += 1
 
-                                    except Exception as e:
+                                    except Exception:
                                         # print(e)
                                         # did not close so the amount is still present in the current user mix
                                         current_user_mix[symbol] = mix_amount
                                         traceback.print_exc()
+                                        continue
 
                         # if they are mixes in the current difference, positions have been changed or opened
                         if len(current_mix_difference) > 0:
@@ -111,26 +117,28 @@ class Bot:
                                 new_user_amount = (user_account_value * user_share) / symbol_price
 
                                 if mix_amount < 0:
-                                    user_amount = -user_amount
+                                    new_user_amount = -new_user_amount
 
                                 # if the symbol is in the last mix, the position has changed
                                 if symbol in latest_user_mix:
                                     try:
                                         # * CHANGE
-                                        await self.change_position(user, symbol, new_user_amount, precision, symbol_price, current_user_amounts)
+                                        print(symbol_price)
+                                        await self.change_position(user, symbol, new_user_amount, precision, symbol_price, current_user_amounts, current_user_values, current_user_shares)
                                         n_orders += 1
 
-                                    except Exception as e:
+                                    except Exception:
                                         # print(e)
                                         # reset the amount to its previous value
                                         current_user_mix[symbol] = current_user_amounts[symbol]
                                         traceback.print_exc()
+                                        continue
 
                                 # if it is not, the position is new and has been opened
                                 else:
                                     try:
                                         # * OPEN
-                                        await self.open_position(user, symbol, new_user_amount, precision, symbol_price, current_user_amounts)
+                                        await self.open_position(user, symbol, new_user_amount, precision, symbol_price, current_user_amounts, current_user_values, current_user_shares)
                                         n_orders += 1
 
                                     # TESTING
@@ -140,13 +148,14 @@ class Bot:
                                     # current_user_mix.pop(symbol)
                                     # n_orders += 1
 
-                                    except Exception as e:
+                                    except Exception:
                                         # print(e)
                                         # could not open so the symbol is removed from the mix
                                         current_user_mix.pop(symbol)
                                         traceback.print_exc()
-
-                        await self.app.db.users.update_one({"username": "root"}, {"$set": {"mix": current_user_mix, "amounts": current_user_amounts}})
+                                        continue
+                        
+                        await self.app.db.users.update_one({"username": "root"}, {"$set": {"mix": current_user_mix, "amounts": current_user_amounts, "values": current_user_values, "shares": current_user_shares}})
                         await self.app.db.bot.update_one({}, {"$set": {"precisions": bot["precisions"]}, "$inc": {"orders": n_orders}})
 
                 await self.app.db.bot.update_one({}, {"$inc": {"ticks": 1}})
@@ -154,12 +163,12 @@ class Bot:
                 if not API:
                     await asyncio.sleep(bot["tickInterval"])
 
-            except Exception as e:
+            except Exception:
                 # print(e)
                 traceback.print_exc()
                 pass
 
-    async def change_position(self, user, symbol, amount, precision, symbol_price, user_amounts):
+    async def change_position(self, user, symbol, amount, precision, symbol_price, user_amounts, user_values, user_shares):
         last_amount = user_amounts[symbol]
         print(f'[{utils.current_readable_time()}]: Ajusting Position: {symbol} - {last_amount}')
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
@@ -167,10 +176,12 @@ class Bot:
         if amount > last_amount:
             to_open = amount - last_amount
             final_amount, final_value = self.truncate_amount(to_open, precision, symbol_price)
+            print(final_value)
             binance_reponse = self.app.binance.open_position(symbol, final_amount)
         else:
             to_close = last_amount - amount
             final_amount, final_value = self.truncate_amount(to_close, precision, symbol_price)
+            print(final_value)
             binance_reponse = self.app.binance.close_position(symbol, final_amount)
 
         await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": {
@@ -182,12 +193,14 @@ class Bot:
             
         target_amount, target_value = self.truncate_amount(amount, precision, symbol_price)
         user_amounts[symbol] = target_amount
+        user_values[symbol] = abs(target_value)
+        user_shares[symbol] = abs(target_value) / user["account"]["valueUSDT"]
 
         print(f'[{utils.current_readable_time()}]: Ajusted Position: {symbol} - {last_amount} to {target_amount}')
 
 
 
-    async def open_position(self, user, symbol, amount, precision, symbol_price, user_amounts):
+    async def open_position(self, user, symbol, amount, precision, symbol_price, user_amounts, user_values, user_shares):
         final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
         print(f'[{utils.current_readable_time()}]: Opening Position: {symbol} - {final_amount}')
 
@@ -202,15 +215,18 @@ class Bot:
             "orders": [open_response],
             "createdAt": current_time,
             "updatedAt": current_time,
-            "closedAt": None
+            "closedAt": None,
+            "PNL": 0
         })
 
         user_amounts[symbol] = final_amount
+        user_values[symbol] = abs(final_value)
+        user_shares[symbol] = abs(final_value) / user["account"]["valueUSDT"]
 
         print(f'[{utils.current_readable_time()}]: Opened Position: {symbol} - {final_amount}')
 
 
-    async def close_position(self, user, symbol, user_amounts):
+    async def close_position(self, user, symbol, user_amounts, user_values, user_shares):
         last_amount = user_amounts[symbol]
         print(f'[{utils.current_readable_time()}]: Closing Position: {symbol} - {last_amount}')
         close_response = self.app.binance.close_position(symbol, last_amount)
@@ -230,6 +246,8 @@ class Bot:
         await self.app.db.live.delete_one({"userId": user["_id"], "symbol": symbol})
 
         user_amounts.pop(symbol)
+        user_values.pop(symbol)
+        user_shares.pop(symbol)
 
         print(f'[{utils.current_readable_time()}]: Closed Position: {symbol} - {last_amount}')
 
