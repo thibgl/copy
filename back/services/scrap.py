@@ -257,7 +257,8 @@ class Scrap:
             return fetch_pages_response
         except Exception:
             traceback.print_exc()
-            time.wait(30)
+            time.sleep(30)
+            pass
 
     async def tick_position_history(self, leader):
         try:
@@ -296,7 +297,8 @@ class Scrap:
             return fetch_pages_response
         except Exception:
             traceback.print_exc()
-            time.wait(30)
+            time.sleep(30)
+            pass
 
     async def tick_positions(self, leader):
         try:
@@ -325,7 +327,7 @@ class Scrap:
                             notional_values[symbol] = 0
 
                         amounts[symbol] += position_amount
-                        notional_values[symbol] += float(position["notionalValue"])
+                        notional_values[symbol] += notional_value
 
                         positions_notional_value += notional_value
                         positions_value += notional_value / position["leverage"]
@@ -341,7 +343,7 @@ class Scrap:
                         if amount != 0:
                             if symbol not in amounts:
                                 print(f'{bag} CLOSED POSITION')
-                                await self.app.db.postions.delete_many({"leaderId": leader["_id"], "symbol": symbol})
+                                await self.app.db.positions.delete_one({"leaderId": leader["_id"], "symbol": symbol})
 
                     for bag in current_difference:
                         symbol, amount = bag
@@ -376,7 +378,8 @@ class Scrap:
             return fetch_data_response
         except Exception:
             traceback.print_exc()
-            time.wait(30)
+            time.sleep(30)
+            pass
     # Lifecycle
 
     def cleanup(self):

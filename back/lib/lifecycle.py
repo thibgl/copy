@@ -59,7 +59,7 @@ async def db_startup(db):
     
     await db.create_collection("positions")
     await db.positions.create_index([("leaderId", 1), ("id", -1)], unique=True)
-    await db.positions.create_index([("leaderId", 1), ("symbol", -1)])
+    # await db.positions.create_index([("leaderId", 1), ("symbol", -1)])
 
     if "position_history" in collections:
         await db.position_history.drop()

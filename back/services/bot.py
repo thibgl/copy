@@ -47,9 +47,7 @@ class Bot:
                         current_mix_set, latest_mix_set = set(current_user_mix.items()), set(latest_user_mix.items())
                         current_mix_difference, last_mix_difference = current_mix_set.difference(latest_mix_set), latest_mix_set.difference(current_mix_set)
 
-                        for mix_bag in last_mix_difference:
-                            symbol, mix_amount = mix_bag
-
+                        for symbol, mix_amount in last_mix_difference:
                             if mix_amount != 0:
                                 # if the symbol is not in the current user mix, then it has been closed
                                 if symbol not in current_user_mix:
@@ -66,6 +64,7 @@ class Bot:
                                                 amount = -amount
 
                                             await self.open_position(user, symbol, amount, precision, symbol_price, current_user_amounts, current_user_values, current_user_shares)
+                                            n_orders += 1
 
                                         await self.close_position(user, symbol, current_user_amounts, current_user_values, current_user_shares)
                                         n_orders += 1
@@ -81,14 +80,13 @@ class Bot:
                         if len(current_mix_difference) > 0:
                             leaders_total_weight = sum(user["followedLeaders"].values())
                             user_account = self.app.binance.account_snapshot(user)
-                            user_account_value = float(user_account["valueUSDT"])
+                            user_account_value = user_account["valueUSDT"]
 
-                        for mix_bag in current_mix_difference:
-                            symbol, mix_amount = mix_bag
-
+                        for symbol, mix_amount in current_mix_difference:
                             if mix_amount != 0:
                                 # we need to precision to calculate the formatted amounts to place the orders
                                 if symbol not in bot["precisions"].keys():
+                                    print('NO PRECISION, FETCHING')
                                     bot["precisions"][symbol] = self.app.binance.get_asset_precision(symbol)
                                 
                                 precision = bot["precisions"][symbol]
@@ -97,6 +95,8 @@ class Bot:
                                 leader_index = 0
 
                                 for leaderId, weight in user["followedLeaders"].items():
+                                    print('weight')
+                                    print(weight)
                                     if "account" not in pool[leaderId].keys():
                                         # get the current balance and live ratio
                                         pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(leader)
@@ -104,21 +104,23 @@ class Bot:
                                     pool_leader = pool[leaderId]
                                     leader_live_ratio = pool_leader["account"]["liveRatio"]
                                     leader_weight_share = weight / leaders_total_weight
+                                    print('leader_weight_share, leader_live_ratio')
+                                    print(leader_weight_share, leader_live_ratio)
                                     # if the leader has the symbol in his amounts... calculate all the necessary stats to reproduce the shares
                                     if symbol in pool_leader["amounts"].keys():
                                         user_share += leader_weight_share * leader_live_ratio * pool_leader["shares"][symbol]
 
                                         # calculate the symbol price only once
                                         if leader_index == 0:
-                                            symbol_price = pool_leader["notionalValues"][symbol] / abs(pool_leader["amounts"][symbol])
+                                            symbol_price = abs(pool_leader["notionalValues"][symbol] / pool_leader["amounts"][symbol])
 
                                         leader_index += 1
 
                                 new_user_amount = (user_account_value * user_share) / symbol_price
 
-                                if mix_amount < 0:
-                                    new_user_amount = -new_user_amount
-
+                                print('new_user_amount, symbol_price')
+                                print(new_user_amount, symbol_price)
+                            
                                 # if the symbol is in the last mix, the position has changed
                                 if symbol in latest_user_mix:
                                     try:
@@ -140,7 +142,7 @@ class Bot:
                                         # * OPEN
                                         await self.open_position(user, symbol, new_user_amount, precision, symbol_price, current_user_amounts, current_user_values, current_user_shares)
                                         n_orders += 1
-
+                                        print('HELLO BITCH')
                                     # TESTING
                                     # await self.change_position(user, symbol, amount * -1, precision, symbol_price, current_user_amounts)
                                     # n_orders += 1
@@ -172,7 +174,7 @@ class Bot:
         last_amount = user_amounts[symbol]
         print(f'[{utils.current_readable_time()}]: Ajusting Position: {symbol} - {last_amount}')
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
-
+        print(live_position)
         if amount > last_amount:
             to_open = amount - last_amount
             final_amount, final_value = self.truncate_amount(to_open, precision, symbol_price)
@@ -203,7 +205,7 @@ class Bot:
     async def open_position(self, user, symbol, amount, precision, symbol_price, user_amounts, user_values, user_shares):
         final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
         print(f'[{utils.current_readable_time()}]: Opening Position: {symbol} - {final_amount}')
-
+        print(final_amount, final_value)
         open_response = self.app.binance.open_position(symbol, final_amount)
 
         current_time = utils.current_time()
