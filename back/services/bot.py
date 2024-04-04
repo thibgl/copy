@@ -2,7 +2,7 @@ import asyncio
 from lib import utils
 from bson.objectid import ObjectId
 import traceback
-
+import time
 
 class Bot:
     def __init__(self, app):
@@ -26,7 +26,7 @@ class Bot:
                     for leaderId in user["followedLeaders"].keys():
                         if leaderId not in pool.keys():
                             leader = await self.app.db.leaders.find_one({"_id": ObjectId(leaderId)})
-                            await self.app.scrap.tick_positions(leader)
+                            await self.app.scrap.tick_positions(bot, leader)
                             pool[leaderId] = leader
                         
                         leader = pool[leaderId]
@@ -73,7 +73,11 @@ class Bot:
                                         # print(e)
                                         # did not close so the amount is still present in the current user mix
                                         current_user_mix[symbol] = mix_amount
-                                        traceback.print_exc()
+  
+                                        print(trace)
+
+                                        await self.app.log.create(user, 'ERROR', 'bot/close_position', 'TRADE',f'Closing Position: {symbol} - {current_user_amounts[symbol]}', details=trace)
+
                                         continue
 
                         # if they are mixes in the current difference, positions have been changed or opened
@@ -99,7 +103,7 @@ class Bot:
                                     print(weight)
                                     if "account" not in pool[leaderId].keys():
                                         # get the current balance and live ratio
-                                        pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(leader)
+                                        pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(bot, leader)
 
                                     pool_leader = pool[leaderId]
                                     leader_live_ratio = pool_leader["account"]["liveRatio"]
@@ -133,7 +137,10 @@ class Bot:
                                         # print(e)
                                         # reset the amount to its previous value
                                         current_user_mix[symbol] = current_user_amounts[symbol]
-                                        traceback.print_exc()
+                                        print(trace)
+
+                                        await self.app.log.create(user, 'ERROR', 'bot/change_position', 'TRADE',f'Ajusting Position: {symbol} - {current_user_amounts[symbol]} to {new_user_amount}', details=trace)
+
                                         continue
 
                                 # if it is not, the position is new and has been opened
@@ -142,7 +149,6 @@ class Bot:
                                         # * OPEN
                                         await self.open_position(user, symbol, new_user_amount, precision, symbol_price, current_user_amounts, current_user_values, current_user_shares)
                                         n_orders += 1
-                                        print('HELLO BITCH')
                                     # TESTING
                                     # await self.change_position(user, symbol, amount * -1, precision, symbol_price, current_user_amounts)
                                     # n_orders += 1
@@ -154,7 +160,11 @@ class Bot:
                                         # print(e)
                                         # could not open so the symbol is removed from the mix
                                         current_user_mix.pop(symbol)
-                                        traceback.print_exc()
+                                        trace = traceback.print_exc()
+                                        print(trace)
+
+                                        await self.app.log.create(user, 'ERROR', 'bot/open_position', 'TRADE',f'Opening Position: {symbol} - {new_user_amount}', details=trace)
+
                                         continue
                         
                         await self.app.db.users.update_one({"username": "root"}, {"$set": {"mix": current_user_mix, "amounts": current_user_amounts, "values": current_user_values, "shares": current_user_shares}})
@@ -167,13 +177,17 @@ class Bot:
 
             except Exception:
                 # print(e)
-                traceback.print_exc()
-                pass
+                trace = traceback.print_exc()
+                print(trace)
+
+                await self.app.log.create(user, 'ERROR', 'bot/tick_position', 'TRADE',f'Error in tick_position', details=traceback)
+
+                time.sleep(30)
 
     async def change_position(self, user, symbol, amount, precision, symbol_price, user_amounts, user_values, user_shares):
         last_amount = user_amounts[symbol]
-        print(f'[{utils.current_readable_time()}]: Ajusting Position: {symbol} - {last_amount}')
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
+
         print(live_position)
         if amount > last_amount:
             to_open = amount - last_amount
@@ -198,17 +212,17 @@ class Bot:
         user_values[symbol] = abs(target_value)
         user_shares[symbol] = abs(target_value) / user["account"]["valueUSDT"]
 
-        print(f'[{utils.current_readable_time()}]: Ajusted Position: {symbol} - {last_amount} to {target_amount}')
+        await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE',f'Ajusted Position: {symbol} - {last_amount} to {target_amount}', details=binance_reponse)
 
 
 
     async def open_position(self, user, symbol, amount, precision, symbol_price, user_amounts, user_values, user_shares):
         final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
-        print(f'[{utils.current_readable_time()}]: Opening Position: {symbol} - {final_amount}')
-        print(final_amount, final_value)
         open_response = self.app.binance.open_position(symbol, final_amount)
-
         current_time = utils.current_time()
+
+        print(final_amount, final_value)
+
         await self.app.db.live.insert_one({
             "userId": user["_id"], 
             "symbol": symbol,
@@ -225,17 +239,15 @@ class Bot:
         user_values[symbol] = abs(final_value)
         user_shares[symbol] = abs(final_value) / user["account"]["valueUSDT"]
 
-        print(f'[{utils.current_readable_time()}]: Opened Position: {symbol} - {final_amount}')
+        await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Opened Position: {symbol} - {final_amount}', details=open_response)
 
 
     async def close_position(self, user, symbol, user_amounts, user_values, user_shares):
         last_amount = user_amounts[symbol]
-        print(f'[{utils.current_readable_time()}]: Closing Position: {symbol} - {last_amount}')
         close_response = self.app.binance.close_position(symbol, last_amount)
-
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
-
         current_time = utils.current_time()
+
         live_position.update({
             "amount": 0,
             "value": 0,
@@ -251,7 +263,7 @@ class Bot:
         user_values.pop(symbol)
         user_shares.pop(symbol)
 
-        print(f'[{utils.current_readable_time()}]: Closed Position: {symbol} - {last_amount}')
+        await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE',f'Closed Position: {symbol} - {last_amount}', details=close_response)
 
 
     def truncate_amount(self, amount, precision, price):

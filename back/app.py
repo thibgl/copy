@@ -206,7 +206,8 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 @app.on_event("startup")
 async def startup():
     # await db_startup(app.db)
-    # leader_response = await app.scrap.tick_leader('3907342150781504256')
+    # the_bot = await app.db.bot.find_one()
+    # leader_response = await app.scrap.tick_leader(the_bot, '3907342150781504256')
     # user = await app.db.users.find_one()
     # leader = await app.db.leaders.find_one({"binanceId": '3907342150781504256'})
     # if leader["_id"] not in user["followedLeaders"].keys():
@@ -228,7 +229,7 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    # app.scrap.cleanup()
+    app.scrap.cleanup()
     app.mongodb_client.close()
 
 

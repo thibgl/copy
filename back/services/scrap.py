@@ -130,103 +130,111 @@ class Scrap:
  
     # DB Injections
 
-    async def tick_leader(self, leaderId):
-        detail_reponse = self.fetch_data(leaderId, "detail").json()
+    async def tick_leader(self, bot, leaderId):
+        try:   
+            detail_reponse = self.fetch_data(leaderId, "detail").json()
 
-        if detail_reponse["success"]:
-            detail_data = detail_reponse["data"]
-
-        else:
-            return { "success": False, "message": "Could not fetch Detail" }
-        
-        if detail_data["positionShow"] == True:
-            # todo: update leader if fail reasons
-
-            if detail_data["status"] != "ACTIVE":
-                return { "success": False, "message": "Leader is not Active" }
-
-            if detail_data["initInvestAsset"] != "USDT":
-                return { "success": False, "message": "Leader is not using USDT" }
-            
-            leader_db = await self.app.db.leaders.find_one({"binanceId": leaderId})
-
-            if leader_db:
-                leader = leader_db
+            if detail_reponse["success"]:
+                detail_data = detail_reponse["data"]
 
             else:
-                leader = {
-                        "binanceId": leaderId,
-                        "profileUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
-                        "userId": detail_data["userId"],
-                        "nickname": detail_data["nickname"],
-                        "avatarUrl": detail_data["avatarUrl"],
-                        "status": detail_data["status"],
-                        "initInvestAsset": detail_data["initInvestAsset"],
-                        "positionShow": detail_data["positionShow"],
-                        "updateTime": utils.current_time(),
-                        "historicPNL": 0,
-                        "transferBalance": 0,
-                        "totalBalance": 0,
-                        "liveRatio": 0,
-                        "positionsValue": 0,
-                        "positionsNotionalValue": 0,
-                        "amounts": {},
-                        "notionalValues": {},
-                        "shares": {},
-                    }
-                await self.app.db.leaders.insert_one(leader)
+                return { "success": False, "message": "Could not fetch Detail" }
+            
+            if detail_data["positionShow"] == True:
+                # todo: update leader if fail reasons
 
-            print(leader_db)
+                if detail_data["status"] != "ACTIVE":
+                    return { "success": False, "message": "Leader is not Active" }
+
+                if detail_data["initInvestAsset"] != "USDT":
+                    return { "success": False, "message": "Leader is not using USDT" }
+                
+                leader_db = await self.app.db.leaders.find_one({"binanceId": leaderId})
+
+                if leader_db:
+                    leader = leader_db
+
+                else:
+                    leader = {
+                            "binanceId": leaderId,
+                            "profileUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
+                            "userId": detail_data["userId"],
+                            "nickname": detail_data["nickname"],
+                            "avatarUrl": detail_data["avatarUrl"],
+                            "status": detail_data["status"],
+                            "initInvestAsset": detail_data["initInvestAsset"],
+                            "positionShow": detail_data["positionShow"],
+                            "updateTime": utils.current_time(),
+                            "historicPNL": 0,
+                            "transferBalance": 0,
+                            "totalBalance": 0,
+                            "liveRatio": 0,
+                            "positionsValue": 0,
+                            "positionsNotionalValue": 0,
+                            "amounts": {},
+                            "notionalValues": {},
+                            "shares": {},
+                        }
+                    await self.app.db.leaders.insert_one(leader)
+
+                # print(leader_db)
+
+                # self.cooldown()
+                await self.tick_positions(bot, leader)
+
+                # self.cooldown()
+                await self.update_leader_stats(bot, leader)
+                
+                #todo do not replace if nothing changed ?
+                await self.app.db.leaders.update_one(
+                    {"_id": leader["_id"]}, 
+                    {"$set": leader}
+                )
+                
+                # print(leader)
+            else:
+                return { "success": False, "message": "Leader is not sharing Positions" }
+            
+        except Exception:
+            trace = traceback.print_exc()
+            print(trace)
+
+            await self.app.log.create(bot, 'ERROR', 'scrap/tick_leader', 'TRADE',f'Error in tick_leader', details=trace)
+
+            time.sleep(30)
+            pass
+
+    async def update_leader_stats(self, bot, leader):
+        try:
+            await self.tick_position_history(bot, leader)
 
             # self.cooldown()
-            await self.tick_positions(leader)
+            await self.tick_transfer_history(bot, leader)
+        
+            total_balance = leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"]
 
-            # self.cooldown()
-            await self.update_leader_stats(leader)
-            
-            #todo do not replace if nothing changed ?
-            await self.app.db.leaders.update_one(
-                {"_id": leader["_id"]}, 
-                {"$set": leader}
-            )
-            
-            print(leader)
-        else:
-            return { "success": False, "message": "Leader is not sharing Positions" }
-            
-        # return {
-        #     "success": True,
-        #     "message": "Successfully scraped Leader",
-        #     "data": {
-        #         "leader": leader,
-        #         "positions": positions_data["positions"],
-        #         "position_history": position_history,
-        #         "transfer_history": transfer_history
-        #         }
-        #     }
+            update = {
+                "totalBalance": total_balance,
+                "liveRatio": leader["positionsValue"] / total_balance,
+                "updateTime": utils.current_time()
+            }
 
-    async def update_leader_stats(self, leader):
-        await self.tick_position_history(leader)
+            leader.update(update)
 
-        # self.cooldown()
-        await self.tick_transfer_history(leader)
+            await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
+
+            return update
+
+        except Exception:
+            # print(e)
+            trace = traceback.print_exc()
+            print(trace)
+
+            await self.app.log.create(bot, 'ERROR', 'scrap/update_leader_stats', 'TRADE',f'Error in update_leader_stats', details=traceback)
+
+            time.sleep(30)
     
-        total_balance = leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"]
-
-        update = {
-            "totalBalance": total_balance,
-            "liveRatio": leader["positionsValue"] / total_balance,
-            "updateTime": utils.current_time()
-        }
-
-        leader.update(update)
-
-        await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
-
-        return update
-
-    
-    async def tick_transfer_history(self, leader):
+    async def tick_transfer_history(self, bot, leader):
         try:
             latest_transfer = await self.app.db.transfer_history.find_one(
                     {"leaderId": leader["_id"]},
@@ -255,12 +263,17 @@ class Scrap:
                     await self.app.db.transfer_history.insert_many(transfer_history)
 
             return fetch_pages_response
+        
         except Exception:
-            traceback.print_exc()
+            trace = traceback.print_exc()
+            print(trace)
+
+            await self.app.log.create(bot, 'ERROR', 'scrap/tick_transfer_history', 'TRADE',f'Error in tick_transfer_history', details=trace)
+
             time.sleep(30)
             pass
 
-    async def tick_position_history(self, leader):
+    async def tick_position_history(self, bot, leader):
         try:
             latest_position = await self.app.db.position_history.find_one(
                 {"leaderId": leader["_id"]},
@@ -295,12 +308,17 @@ class Scrap:
                     await self.app.db.position_history.insert_many(new_positions)
                 
             return fetch_pages_response
+        
         except Exception:
-            traceback.print_exc()
+            trace = traceback.print_exc()
+            print(trace)
+
+            await self.app.log.create(bot, 'ERROR', 'scrap/tick_position_history', 'TRADE',f'Error in tick_position_history', details=trace)
+
             time.sleep(30)
             pass
 
-    async def tick_positions(self, leader):
+    async def tick_positions(self, bot, leader):
         try:
             binanceId = leader["binanceId"]
             fetch_data_response = self.fetch_data(binanceId, "positions").json()
@@ -342,7 +360,7 @@ class Scrap:
 
                         if amount != 0:
                             if symbol not in amounts:
-                                print(f'{bag} CLOSED POSITION')
+                                # print(f'{bag} CLOSED POSITION')
                                 await self.app.db.positions.delete_one({"leaderId": leader["_id"], "symbol": symbol})
 
                     for bag in current_difference:
@@ -352,11 +370,11 @@ class Scrap:
                             symbol_positions = [position for position in positions if position.get('symbol') == symbol]
 
                             if symbol in latest_amounts:
-                                print(f'{bag} CHANGED POSITION')
+                                # print(f'{bag} CHANGED POSITION')
                                 for symbol_position in symbol_positions:
                                     await self.app.db.positions.replace_one({"leaderId": leader["_id"], "id": symbol_position["id"]}, symbol_position)
                             else:
-                                print(f'{bag} NEW POSITION')
+                                # print(f'{bag} NEW POSITION')
                                 for symbol_position in symbol_positions:
                                     await self.app.db.positions.insert_one(symbol_position)
 
@@ -376,8 +394,13 @@ class Scrap:
                 await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
 
             return fetch_data_response
+        
         except Exception:
-            traceback.print_exc()
+            trace = traceback.print_exc()
+            print(trace)
+
+            await self.app.log.create(bot, 'ERROR', 'scrap/tick_positions', 'TRADE',f'Error in tick_positions', details=trace)
+
             time.sleep(30)
             pass
     # Lifecycle
