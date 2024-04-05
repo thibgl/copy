@@ -105,14 +105,16 @@ class Bot:
                                     pool_leader = pool[leaderId]
                                     leader_live_ratio = pool_leader["account"]["liveRatio"]
                                     leader_weight_share = weight / leaders_total_weight
+                                    leverage_ratio = pool_leader["leverages"][symbol] / user["leverage"]
+
                                     print('leader_weight_share, leader_live_ratio')
                                     print(leader_weight_share, leader_live_ratio)
                                     # if the leader has the symbol in his amounts... calculate all the necessary stats to reproduce the shares
                                     if symbol in pool_leader["amounts"].keys():
                                         if pool_leader["amounts"][symbol] > 0:
-                                            user_share += leader_weight_share * leader_live_ratio * pool_leader["shares"][symbol]
+                                            user_share += leader_weight_share * leader_live_ratio * leverage_ratio * pool_leader["shares"][symbol]
                                         else:
-                                            user_share -= leader_weight_share * leader_live_ratio * pool_leader["shares"][symbol]
+                                            user_share -= leader_weight_share * leader_live_ratio * leverage_ratio * pool_leader["shares"][symbol]
                                         # calculate the symbol price only once
                                         if leader_index == 0:
                                             symbol_price = abs(pool_leader["notionalValues"][symbol] / pool_leader["amounts"][symbol])

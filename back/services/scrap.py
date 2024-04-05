@@ -175,6 +175,7 @@ class Scrap:
                             "notionalValues": {},
                             "values": {},
                             "shares": {},
+                            "leverages": {}
                         }
                     await self.app.db.leaders.insert_one(leader)
 
@@ -344,21 +345,23 @@ class Scrap:
                         leverage = position["leverage"]
                         notional_value = float(position["notionalValue"])
                         position_value = abs(notional_value / leverage)
+                        # print(notional_value, position_value)
                         symbol = position["symbol"]
 
                         if symbol not in amounts: 
                             amounts[symbol] = 0
                             notional_values[symbol] = 0
+                            values[symbol] = 0
 
                         amounts[symbol] += position_amount
                         notional_values[symbol] += notional_value
-                        values[symbol] = position_value
+                        values[symbol] += position_value
                         leverages[symbol] = leverage
 
                         positions_notional_value += abs(notional_value)
                         positions_value += position_value
                         positions.append(position)
-
+                # print(values)
                 if amounts != latest_amounts:
                     current_set, last_set = set(amounts.items()), set(latest_amounts.items())
                     current_difference, last_difference = current_set.difference(last_set), last_set.difference(current_set)
@@ -395,9 +398,10 @@ class Scrap:
                     "amounts": amounts,
                     "notionalValues": notional_values,
                     "shares": shares,
-                    "values": values
+                    "values": values,
+                    "leverages": leverages
                     }
-                
+                # print(update)
                 leader.update(update)
 
                 await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
