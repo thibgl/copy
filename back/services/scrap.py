@@ -159,7 +159,7 @@ class Scrap:
                             "binanceId": leaderId,
                             "profileUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
                             "userId": detail_data["userId"],
-                            "nickname": detail_data["nickname"],
+                            "nickname": detail_data["nicknameTranslate"],
                             "avatarUrl": detail_data["avatarUrl"],
                             "status": detail_data["status"],
                             "initInvestAsset": detail_data["initInvestAsset"],
@@ -173,6 +173,7 @@ class Scrap:
                             "positionsNotionalValue": 0,
                             "amounts": {},
                             "notionalValues": {},
+                            "values": {},
                             "shares": {},
                         }
                     await self.app.db.leaders.insert_one(leader)
@@ -195,11 +196,11 @@ class Scrap:
             else:
                 return { "success": False, "message": "Leader is not sharing Positions" }
             
-        except Exception:
-            trace = traceback.print_exc()
+        except Exception as e:
+            trace = traceback.format_exc()
             print(trace)
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/tick_leader', 'TRADE',f'Error in tick_leader', details=trace)
+            await self.app.log.create(bot, 'ERROR', 'scrap/tick_leader', 'TRADE',f'Error in tick_leader - {e}', details=trace)
 
             time.sleep(30)
             pass
@@ -225,12 +226,12 @@ class Scrap:
 
             return update
 
-        except Exception:
+        except Exception as e:
             # print(e)
-            trace = traceback.print_exc()
+            trace = traceback.format_exc()
             print(trace)
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/update_leader_stats', 'TRADE',f'Error in update_leader_stats', details=traceback)
+            await self.app.log.create(bot, 'ERROR', 'scrap/update_leader_stats', 'TRADE',f'Error in update_leader_stats - {e}', details=traceback)
 
             time.sleep(30)
     
@@ -242,7 +243,8 @@ class Scrap:
                 )
 
             fetch_pages_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
-
+            print('tick_transfer_history fetch_pages_response')
+            print(fetch_pages_response)
             if fetch_pages_response["success"]:
                 transfer_history = fetch_pages_response["data"]
 
@@ -264,11 +266,11 @@ class Scrap:
 
             return fetch_pages_response
         
-        except Exception:
-            trace = traceback.print_exc()
+        except Exception as e:
+            trace = traceback.format_exc()
             print(trace)
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/tick_transfer_history', 'TRADE',f'Error in tick_transfer_history', details=trace)
+            await self.app.log.create(bot, 'ERROR', 'scrap/tick_transfer_history', 'TRADE',f'Error in tick_transfer_history - {e}', details=trace)
 
             time.sleep(30)
             pass
@@ -309,11 +311,11 @@ class Scrap:
                 
             return fetch_pages_response
         
-        except Exception:
-            trace = traceback.print_exc()
+        except Exception as e:
+            trace = traceback.format_exc()
             print(trace)
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/tick_position_history', 'TRADE',f'Error in tick_position_history', details=trace)
+            await self.app.log.create(bot, 'ERROR', 'scrap/tick_position_history', 'TRADE',f'Error in tick_position_history - {e}', details=trace)
 
             time.sleep(30)
             pass
@@ -329,15 +331,19 @@ class Scrap:
                 positions_value = 0
                 positions = []
                 amounts = {}
+                values = {}
                 notional_values = {}
                 shares = {}
+                leverages = {}
 
                 for position in fetch_data_response["data"]:
                     position_amount = float(position["positionAmount"])
 
                     if  position_amount != 0:
                         position["leaderId"] = leader["_id"]
+                        leverage = position["leverage"]
                         notional_value = float(position["notionalValue"])
+                        position_value = abs(notional_value / leverage)
                         symbol = position["symbol"]
 
                         if symbol not in amounts: 
@@ -346,9 +352,11 @@ class Scrap:
 
                         amounts[symbol] += position_amount
                         notional_values[symbol] += notional_value
+                        values[symbol] = position_value
+                        leverages[symbol] = leverage
 
-                        positions_notional_value += notional_value
-                        positions_value += notional_value / position["leverage"]
+                        positions_notional_value += abs(notional_value)
+                        positions_value += position_value
                         positions.append(position)
 
                 if amounts != latest_amounts:
@@ -378,15 +386,16 @@ class Scrap:
                                 for symbol_position in symbol_positions:
                                     await self.app.db.positions.insert_one(symbol_position)
 
-                for symbol, notional_value in notional_values.items():
-                    shares[symbol] = notional_value / positions_notional_value
+                for symbol, value in values.items():
+                    shares[symbol] = value / positions_value
 
                 update = {
                     "positionsValue": positions_value,
                     "positionsNotionalValue": positions_notional_value,
                     "amounts": amounts,
                     "notionalValues": notional_values,
-                    "shares": shares
+                    "shares": shares,
+                    "values": values
                     }
                 
                 leader.update(update)
@@ -395,11 +404,11 @@ class Scrap:
 
             return fetch_data_response
         
-        except Exception:
-            trace = traceback.print_exc()
+        except Exception as e:
+            trace = traceback.format_exc()
             print(trace)
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/tick_positions', 'TRADE',f'Error in tick_positions', details=trace)
+            await self.app.log.create(bot, 'ERROR', 'scrap/tick_positions', 'TRADE',f'Error in tick_positions - {e}', details=trace)
 
             time.sleep(30)
             pass

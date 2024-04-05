@@ -25,9 +25,7 @@ class Binance:
         user["account"]["valueBTC"] = float(margin_account_data["totalNetAssetOfBtc"])
         user["account"]["valueUSDT"] = float(margin_account_data["totalCollateralValueInUSDT"])
 
-        self.app.db.users.update_one({"username": "root"}, {"$set": {"account": user["account"]}})
-
-        return user["account"]
+        # self.app.db.users.update_one({"username": "root"}, {"$set": {"account": user["account"]}})
     
     def open_position(self, symbol:str, amount:float):
         weight = 6

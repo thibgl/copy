@@ -22,10 +22,11 @@ async def db_startup(db):
             "password_hash": bcrypt.hash("root"),  # Replace with a secure password
             "followedLeaders": {},
             "active": False,
-            "liveRatio": 0.5,
+            "liveRatio": 0,
             "leverage": 5,
             "mix": {},
             "amounts": {},
+            "notionalValues": {},
             "values": {},
             "shares": {},
             "account": {
@@ -34,7 +35,9 @@ async def db_startup(db):
                 "valueBTC": 0,
                 "valueUSDT": 0
             },
-            "chatId": 1031182213
+            "chatId": 1031182213,
+            "notionalValue": 0,
+            "positionsValue": 0
         }
 
         await db.users.insert_one(root_user_data)
@@ -110,6 +113,8 @@ async def db_startup(db):
         "orders": 0,
         "precisions": {},
         "totalWeight": 0,
+        "chatId": 1031182213,
+        "logLevel": "INFO"
     }
 
     await db.bot.insert_one(bot_data)
