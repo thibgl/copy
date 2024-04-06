@@ -43,16 +43,16 @@ endpoints = {
 class Scrap:
     # ! todo : RETRIES, ERROR BOUNDARY
     def __init__(self, app):
-        GATEWAY_HOST = 'https://www.binance.com'
-        self.API_PATH = '/'.join([GATEWAY_HOST, 'bapi/futures/v1'])
+        self.GATEWAY_HOST = 'https://www.binance.com'
+        self.API_PATH = '/'.join([self.GATEWAY_HOST, 'bapi/futures/v1'])
         self.COOLDOWN = 0.2
 
         self.app = app
-        self.gateway = ApiGateway(GATEWAY_HOST, regions=["eu-west-1", "eu-west-2"], access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'), access_key_secret=os.environ.get('AWS_SECRET_ACCESS_KEY'))
-        self.gateway.start()
-        self.session = requests.Session()
-        self.session.mount(GATEWAY_HOST, self.gateway)
+        self.gateway = None
+        self.session = None
         self.user_agent = UserAgent()
+
+        self.start()
 
     def cooldown(self):
         # time.sleep(self.COOLDOWN)
@@ -197,6 +197,10 @@ class Scrap:
                 return { "success": False, "message": "Leader is not sharing Positions" }
 
         except Exception as e:
+            if e.startswith('HTTPSConnectionPool'):
+                self.cleanup()
+                self.start()
+                
             trace = traceback.format_exc()
             print(trace)
 
@@ -227,6 +231,10 @@ class Scrap:
                 )
             
         except Exception as e:
+            if e.startswith('HTTPSConnectionPool'):
+                self.cleanup()
+                self.start()
+                
             trace = traceback.format_exc()
             print(trace)
 
@@ -256,6 +264,10 @@ class Scrap:
 
             return update
         except Exception as e:
+            if e.startswith('HTTPSConnectionPool'):
+                self.cleanup()
+                self.start()
+                
             # print(e)
             trace = traceback.format_exc()
             print(trace)
@@ -296,6 +308,10 @@ class Scrap:
             return transfer_history_response
         
         except Exception as e:
+            if e.startswith('HTTPSConnectionPool'):
+                self.cleanup()
+                self.start()
+                
             trace = traceback.format_exc()
             print(trace)
 
@@ -341,6 +357,10 @@ class Scrap:
             return position_history_response
         
         except Exception as e:
+            if e.startswith('HTTPSConnectionPool'):
+                self.cleanup()
+                self.start()
+                
             trace = traceback.format_exc()
             print(trace)
 
@@ -437,6 +457,10 @@ class Scrap:
             return fetch_data_response
         
         except Exception as e:
+            if e.startswith('HTTPSConnectionPool'):
+                self.cleanup()
+                self.start()
+                
             trace = traceback.format_exc()
             print(trace)
 
@@ -445,6 +469,12 @@ class Scrap:
             time.sleep(30)
             pass
     # Lifecycle
+
+    def start(self):
+        self.gateway = ApiGateway(self.GATEWAY_HOST, regions=["eu-west-1", "eu-west-2"], access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'), access_key_secret=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+        self.gateway.start()
+        self.session = requests.Session()
+        self.session.mount(self.GATEWAY_HOST, self.gateway)
 
     def cleanup(self):
         self.gateway.shutdown()

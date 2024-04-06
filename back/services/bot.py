@@ -43,7 +43,8 @@ class Bot:
                                     dropped_leaders.append(leaderId)
 
                     for leaderId in dropped_leaders:
-                        user["followedLeaders"].pop(leaderId)
+                        if leaderId in user["followedLeaders"].keys():
+                            user["followedLeaders"].pop(leaderId)
 
                     # print(pool)
                     # if the mix are different, one leader has changed its positions
