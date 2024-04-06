@@ -77,14 +77,9 @@ class Bot:
                                         n_orders += 1
 
                                     except Exception as e:
-                                        # print(e)
-                                        # did not close so the amount is still present in the current user mix
                                         current_user_mix[symbol] = mix_amount
                                         
-                                        trace = traceback.format_exc()
-                                        print(trace)
-
-                                        await self.app.log.create(user, 'ERROR', 'bot/close_position', 'TRADE',f'Error Closing Position: {symbol} - {user["amounts"][symbol]} - {e}', details=trace)
+                                        self.handle_exception(user, e, 'close_position', symbol)
 
                                         continue
 
@@ -152,12 +147,9 @@ class Bot:
                                             n_orders += 1
 
                                         except Exception as e:
-                                            # print(e)
-                                            # reset the amount to its previous value
                                             current_user_mix[symbol] = user["amounts"][symbol]
-                                            print(trace)
 
-                                            await self.app.log.create(user, 'ERROR', 'bot/change_position', 'TRADE',f'Error Ajusting Position: {symbol} - {user["amounts"][symbol]} to {new_user_amount} - {e}', details=trace)
+                                            self.handle_exception(user, e, 'change_position', symbol)
 
                                             continue
 
@@ -175,13 +167,9 @@ class Bot:
                                         # n_orders += 1
 
                                         except Exception as e:
-                                            # print(e)
-                                            # could not open so the symbol is removed from the mix
                                             current_user_mix.pop(symbol)
-                                            trace = traceback.format_exc()
-                                            print(trace)
 
-                                            await self.app.log.create(user, 'ERROR', 'bot/open_position', 'TRADE',f'Error Opening Position: {symbol} - {new_user_amount} - {e}', details=trace)
+                                            self.handle_exception(user, e, 'open_position', symbol)
 
                                             continue
                             else:
@@ -204,13 +192,13 @@ class Bot:
                     await asyncio.sleep(bot["tickInterval"])
 
             except Exception as e:
-                # print(e)
                 trace = traceback.format_exc()
                 print(trace)
 
-                await self.app.log.create(user, 'ERROR', 'bot/tick_position', 'TRADE',f'Error in tick_position - {e}', details=traceback)
+                await self.app.log.create(user, 'ERROR', 'bot/tick_positions', 'TRADE',f'Error in tick_position - {e}', details=traceback)
 
                 time.sleep(30)
+
 
     async def open_position(self, user, symbol, amount, precision, symbol_price):
             final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
@@ -331,4 +319,13 @@ class Bot:
         print('-amount, -amount * price')
         print(-amount, -amount * price)
         return -amount, -amount * price
+    
+
+    async def handle_exception(self, user, error, source, symbol):
+        trace = traceback.format_exc()
+        print(trace)
+
+        await self.app.log.create(user, 'ERROR', f'bot/{source}', 'TRADE',f'Error Closing Position: {symbol} - {user["amounts"][symbol]} - {error}', details=trace)
+
+  
 
