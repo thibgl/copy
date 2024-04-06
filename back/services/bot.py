@@ -230,7 +230,8 @@ class Bot:
                 await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
 
     async def change_position(self, user, symbol, amount, precision, symbol_price):
-        last_amount = user["amounts"][symbol]
+        last_amount = user["liveAmounts"][symbol]
+
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
 
         if amount > last_amount:
@@ -266,7 +267,8 @@ class Bot:
 
 
     async def close_position(self, user, symbol):
-        last_amount = user["amounts"][symbol]
+        last_amount = user["liveAmounts"][symbol]
+
         close_response = self.app.binance.close_position(symbol, last_amount)
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
         current_time = utils.current_time()
