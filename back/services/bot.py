@@ -204,7 +204,7 @@ class Bot:
 
 
     async def open_position(self, user, symbol, amount, precision, symbol_price):
-            if user["collateralMarginLevel"] < 2:
+            if user["collateralMarginLevel"] > 2:
                 final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
                 open_response = self.app.binance.open_position(symbol, final_amount)
                 current_time = utils.current_time()
@@ -227,20 +227,20 @@ class Bot:
 
                 await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Opened Position: {symbol} - {final_amount}', details=open_response)
             else:
-                await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - {final_amount} / Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
+                await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
 
     async def change_position(self, user, symbol, amount, precision, symbol_price):
         last_amount = user["amounts"][symbol]
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
 
         if amount > last_amount:
-            if user["collateralMarginLevel"] < 2:
+            if user["collateralMarginLevel"] > 2:
                 to_open = amount - last_amount
                 final_amount, final_value = self.truncate_amount(to_open, precision, symbol_price)
                 binance_reponse = self.app.binance.open_position(symbol, final_amount)
 
             else:
-                await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - {final_amount} / Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
+                await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
 
                 time.sleep(5)
                 return

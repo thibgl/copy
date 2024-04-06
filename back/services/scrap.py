@@ -257,22 +257,23 @@ class Scrap:
                 )
 
             transfer_history_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
-
+            print(transfer_history_response)
             if transfer_history_response["success"]:
                 transfer_history = transfer_history_response["data"]
 
                 for transfer in transfer_history:
-                    transfer["leaderId"] = leader["_id"]
-                    transfer_type = transfer["transType"]
+                    if "transType" in transfer.keys():
+                        transfer["leaderId"] = leader["_id"]
+                        transfer_type = transfer["transType"]
 
-                    if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
-                        leader["transferBalance"] += float(transfer["amount"])
+                        if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
+                            leader["transferBalance"] += float(transfer["amount"])
 
-                    elif transfer_type == "LEAD_WITHDRAW":
-                        leader["transferBalance"] -= float(transfer["amount"])
+                        elif transfer_type == "LEAD_WITHDRAW":
+                            leader["transferBalance"] -= float(transfer["amount"])
 
-                    else:
-                        print(f"WARNING! UNKNOWN TRANFER TYPE: {transfer_type}")
+                        else:
+                            print(f"WARNING! UNKNOWN TRANFER TYPE: {transfer_type}")
 
                 if len(transfer_history) > 0:
                     await self.app.db.transfer_history.insert_many(transfer_history)

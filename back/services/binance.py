@@ -55,7 +55,7 @@ class Binance:
 
         # print(liveAmounts)
         assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
-        valueUSDT = float(self.app.binance.client.ticker_price("BTC")["price"]) * assetBTC
+        valueUSDT = float(self.app.binance.client.ticker_price("BTCUSDT")["price"]) * assetBTC
 
         user["liveAmounts"] = liveAmounts
         user["valueBTC"] = assetBTC
