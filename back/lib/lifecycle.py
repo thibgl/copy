@@ -34,7 +34,9 @@ async def db_startup(db):
             "liveAmounts": {},
             "chatId": 1031182213,
             "notionalValue": 0,
-            "positionsValue": 0
+            "positionsValue": 0,
+            "collateralMarginLevel": 0,
+            "collateralValueUSDT": 0
         }
 
         await db.users.insert_one(root_user_data)

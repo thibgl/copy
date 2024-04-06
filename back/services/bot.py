@@ -44,7 +44,8 @@ class Bot:
                                             {"leaderId": leader["_id"]},
                                             sort=[('updateTime', -1)]
                                     )
-                                    if latest_position == None or utils.current_time() - latest_position["updateTime"] < 1800000:
+
+                                    if latest_position != None and utils.current_time() - latest_position["updateTime"] < 1800000:
                                         pool[leaderId] = leader
                                         leaders_total_weight += weight
 
@@ -104,17 +105,9 @@ class Bot:
                         if len(current_mix_difference) > 0:
                             self.app.binance.account_snapshot(user)
                             symbol_prices = {}
-                            print('user["liveAmounts"]')
-                            print(user["liveAmounts"])
 
                         for symbol, mix_amount in current_mix_difference:
-                            print(symbol)
-                            if symbol in user["liveAmounts"].keys():
-                                print(user["liveAmounts"][symbol], mix_amount)
-                                print(user["liveAmounts"][symbol] - mix_amount)
-                                print(abs(user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol])
-                                print(abs(user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol] > 0.1)
-                            if symbol not in user["liveAmounts"].keys() or abs(user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol] > 0.1:
+                            if symbol not in user["liveAmounts"].keys() or abs((user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol]) > 0.05:
                                 if mix_amount != 0:
                                     # we need to precision to calculate the formatted amounts to place the orders
                                     if symbol not in bot["precisions"].keys():
@@ -184,6 +177,7 @@ class Bot:
                             else:
                                 print('DIFF NOT SUPERIOR TO 0.1')
 
+                        user["positionsValue"] = sum(abs(value) for value in user["values"].values()) 
                         user["notionalValue"] = sum(user["notionalValues"].values())
                         user["liveRatio"] = user["notionalValue"] / user["valueUSDT"]
 
@@ -258,7 +252,6 @@ class Bot:
         user["amounts"][symbol] = target_amount
         user["values"][symbol] = target_value
         user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
-        user['positionsValue'] += abs(target_value)
 
         await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE',f'Ajusted Position: {symbol} - {last_amount} to {target_amount}', details=binance_reponse)
 
@@ -280,7 +273,6 @@ class Bot:
         await self.app.db.history.insert_one(live_position)
         await self.app.db.live.delete_one({"userId": user["_id"], "symbol": symbol})
 
-        user['positionsValue'] -= abs(user["values"][symbol])
         user["amounts"].pop(symbol)
         user["shares"].pop(symbol)
         user["values"].pop(symbol)

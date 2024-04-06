@@ -1,5 +1,5 @@
 
-# todo: sortir leader du mix temporariement si pas de position pendant un certain moment, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# todo: calculer correctement BALANCE ACTUELLE, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -205,22 +205,24 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 @app.on_event("startup")
 async def startup():
     # await db_startup(app.db)
-    # the_bot = await app.db.bot.find_one()
-    # leader_response = await app.scrap.create_leader(the_bot, '3907342150781504256')
-    # user = await app.db.users.find_one()
-    # leader = await app.db.leaders.find_one({"binanceId": '3907342150781504256'})
-    # if leader["_id"] not in user["followedLeaders"].keys():
-    #     user["followedLeaders"][str(leader["_id"])] = 1
+    # leaders = [{'3876446298872838657': 2}, {'3907342150781504256': 1}, {'3842534998056366337': 1}]
+    # followed_leaders = {}
+    # for leaderId, ratio in leaders.items():
+    #     await app.scrap.create_leader(leaderId)
+    #     user = await app.db.users.find_one()
+    #     leader = await app.db.leaders.find_one({"binanceId": leaderId})
+    #     if leader["_id"] not in user["followedLeaders"].keys():
+    #         followed_leaders[str(leader["_id"])] = ratio
 
-    #     await app.db.users.update_one(
-    #         {"username": "root"}, 
-    #         {
-    #             "$set": {
-    #                 "updateTime": int(time.time() * 1000),
-    #                 "followedLeaders": user["followedLeaders"],
-    #             }
+    # await app.db.users.update_one(
+    #     {"username": "root"}, 
+    #     {
+    #         "$set": {
+    #             "updateTime": int(time.time() * 1000),
+    #             "followedLeaders": user["followedLeaders"],
     #         }
-    #     )
+    #     }
+    # )
 
     # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
     
