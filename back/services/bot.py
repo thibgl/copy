@@ -35,7 +35,9 @@ class Bot:
                                 leaders_total_weight += weight
 
                             else: 
-                                await self.app.scrap.tick_leader(bot, leader)
+                                if utils.current_time() - leader["updateTime"] > 3600000:
+                                    await self.app.scrap.tick_leader(bot, leader)
+                                    await self.app.db.leaders.replace_one({"_id": leader["_id"]}, leader)
 
                                 if leader["positionShow"] == True and leader["status"] == "ACTIVE" and leader["initInvestAsset"] == "USDT":
                                     latest_position = await self.app.db.position_history.find_one(
@@ -52,20 +54,15 @@ class Bot:
                                 elif leaderId not in dropped_leaders:
                                     dropped_leaders.append(leaderId)
 
-                    for leaderId, weight in user["followedLeaders"].items():
+                    for leaderId in user["followedLeaders"].keys():
                         if leaderId not in dropped_leaders:
                             leader = pool[leaderId]
-                            leader_weight_share = weight / leaders_total_weight
                     
                             for symbol, amount in leader["amounts"].items():
-                                if symbol not in current_user_mix: 
+                                if symbol not in current_user_mix:
                                     current_user_mix[symbol] = 0
 
-                                current_user_mix[symbol] += amount * leader_weight_share
-
-                    # for leaderId in dropped_leaders:
-                    #     if leaderId in user["followedLeaders"].keys():
-                    #         user["followedLeaders"].pop(leaderId)
+                                current_user_mix[symbol] += amount
 
                     # if the mix are different, one leader has changed its positions
                     if current_user_mix != user["mix"]:
@@ -245,12 +242,10 @@ class Bot:
             to_open = amount - last_amount
             final_amount, final_value = self.truncate_amount(to_open, precision, symbol_price)
             binance_reponse = self.app.binance.open_position(symbol, final_amount)
-            user['positionsValue'] += abs(final_value)
         else:
             to_close = last_amount - amount
             final_amount, final_value = self.truncate_amount(to_close, precision, symbol_price)
             binance_reponse = self.app.binance.close_position(symbol, final_amount)
-            user['positionsValue'] -= abs(final_value)
 
         await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": {
             "amount": live_position["amount"] + final_amount,
@@ -263,6 +258,7 @@ class Bot:
         user["amounts"][symbol] = target_amount
         user["values"][symbol] = target_value
         user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
+        user['positionsValue'] += abs(target_value)
 
         await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE',f'Ajusted Position: {symbol} - {last_amount} to {target_amount}', details=binance_reponse)
 

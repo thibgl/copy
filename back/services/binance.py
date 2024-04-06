@@ -51,7 +51,7 @@ class Binance:
             amount = float(asset["netAsset"])
  
             if symbol != 'USDT' and amount != 0:
-                liveAmounts[symbol] = amount
+                liveAmounts[symbol + 'USDT'] = amount
 
         # print(liveAmounts)
         user["liveAmounts"] = liveAmounts
