@@ -49,15 +49,14 @@ class Binance:
         for asset in margin_account_data["userAssets"]:
             symbol = asset["asset"]
             amount = float(asset["netAsset"])
-            
-            if symbol in assets_lookup:
-                user["account"][symbol] = amount
+ 
             if symbol != 'USDT' and amount != 0:
                 liveAmounts[symbol] = amount
 
-        print(liveAmounts)
-        user["account"]["valueBTC"] = float(margin_account_data["totalNetAssetOfBtc"])
-        user["account"]["valueUSDT"] = float(margin_account_data["totalCollateralValueInUSDT"])
+        # print(liveAmounts)
+        user["liveAmounts"] = liveAmounts
+        user["valueBTC"] = float(margin_account_data["totalNetAssetOfBtc"])
+        user["valueUSDT"] = float(margin_account_data["totalCollateralValueInUSDT"])
 
         # self.app.db.users.update_one({"username": "root"}, {"$set": {"account": user["account"]}})
     

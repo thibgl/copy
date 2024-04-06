@@ -24,17 +24,14 @@ async def db_startup(db):
             "active": False,
             "liveRatio": 0,
             "leverage": 5,
+            "valueBTC": 0,
+            "valueUSDT": 0,
             "mix": {},
             "amounts": {},
             "notionalValues": {},
             "values": {},
             "shares": {},
-            "account": {
-                "BNB": 0,
-                "USDT": 0,
-                "valueBTC": 0,
-                "valueUSDT": 0
-            },
+            "liveAmounts": {},
             "chatId": 1031182213,
             "notionalValue": 0,
             "positionsValue": 0

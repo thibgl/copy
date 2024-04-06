@@ -50,7 +50,7 @@ async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(defau
 # @app.get('/api/{leaderId}/create', response_model=LeaderTickResponse)
 @app.get('/api/{leaderId}/create')
 async def create_leader(leaderId: str):
-    leader_response = await app.scrap.tick_leader(leaderId)
+    leader_response = await app.scrap.create_leader(leaderId)
 
     # return leader_response
 
@@ -206,7 +206,7 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 async def startup():
     # await db_startup(app.db)
     # the_bot = await app.db.bot.find_one()
-    # leader_response = await app.scrap.tick_leader(the_bot, '3907342150781504256')
+    # leader_response = await app.scrap.create_leader(the_bot, '3907342150781504256')
     # user = await app.db.users.find_one()
     # leader = await app.db.leaders.find_one({"binanceId": '3907342150781504256'})
     # if leader["_id"] not in user["followedLeaders"].keys():

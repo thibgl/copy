@@ -129,8 +129,7 @@ class Scrap:
 
  
     # DB Injections
-
-    async def tick_leader(self, bot, leaderId):
+    async def create_leader(self, bot, leaderId):
         try:   
             detail_reponse = self.fetch_data(leaderId, "detail").json()
 
@@ -196,6 +195,36 @@ class Scrap:
                 # print(leader)
             else:
                 return { "success": False, "message": "Leader is not sharing Positions" }
+
+        except Exception as e:
+            trace = traceback.format_exc()
+            print(trace)
+
+            await self.app.log.create(bot, 'ERROR', 'scrap/create_leader', 'TRADE',f'Error in create_leader - {e}', details=trace)
+
+            time.sleep(30)
+            pass
+
+
+    async def tick_leader(self, bot, leader):
+        try:   
+            detail_reponse = self.fetch_data(leader["binanceId"], "detail").json()
+
+            if detail_reponse["success"]:
+                detail_data = detail_reponse["data"]
+
+                leader.update({
+                    "status": detail_data["status"],
+                    "initInvestAsset": detail_data["initInvestAsset"],
+                    "positionShow": detail_data["positionShow"],
+                    "updateTime": utils.current_time(),
+                })
+
+
+                await self.app.db.leaders.update_one(
+                    {"_id": leader["_id"]}, 
+                    {"$set": leader}
+                )
             
         except Exception as e:
             trace = traceback.format_exc()
@@ -226,7 +255,6 @@ class Scrap:
             await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
 
             return update
-
         except Exception as e:
             # print(e)
             trace = traceback.format_exc()
