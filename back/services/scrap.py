@@ -159,7 +159,7 @@ class Scrap:
                             "binanceId": leaderId,
                             "profileUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
                             "userId": detail_data["userId"],
-                            "nickname": detail_data["nicknameTranslate"],
+                            "nickname": detail_data["nickname"],
                             "avatarUrl": detail_data["avatarUrl"],
                             "status": detail_data["status"],
                             "initInvestAsset": detail_data["initInvestAsset"],
@@ -395,7 +395,8 @@ class Scrap:
                     "notionalValues": notional_values,
                     "shares": shares,
                     "values": values,
-                    "leverages": leverages
+                    "leverages": leverages,
+                    "updateTime": utils.current_time(),
                     }
                 # print(update)
                 leader.update(update)
@@ -410,7 +411,7 @@ class Scrap:
     # Lifecycle
 
     async def handle_exception(self, bot, error, source):
-            if error.startswith('HTTPSConnectionPool'):
+            if str(error).startswith('HTTPSConnectionPool'):
                 self.cleanup()
                 self.start()
 

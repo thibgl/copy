@@ -22,32 +22,50 @@ class Bot:
 
                 async for user in users:
                     current_user_mix = {}
-                    leaders_total_weight = sum(user["followedLeaders"].values())
+                    leaders_total_weight = 0
 
                     for leaderId, weight in user["followedLeaders"].items():
-                        if leaderId not in pool.keys() and leaderId not in dropped_leaders:
+                        if leaderId not in dropped_leaders and leaderId not in pool.keys():
                             leader = await self.app.db.leaders.find_one({"_id": ObjectId(leaderId)})
                             
                             await self.app.scrap.tick_positions(bot, leader)
 
                             if len(leader["amounts"].keys()) > 0:
                                 pool[leaderId] = leader
-                                leader_weight_share = weight / leaders_total_weight
-                        
-                                for symbol, amount in leader["amounts"].items():
-                                    if symbol not in current_user_mix: 
-                                        current_user_mix[symbol] = 0
+                                leaders_total_weight += weight
 
-                                    current_user_mix[symbol] += amount * leader_weight_share
-                            
-                            else:
+                            else: 
                                 await self.app.scrap.tick_leader(bot, leader)
-                                if leader["positionShow"] != True or leader["status"] != "ACTIVE" or leader["initInvestAsset"] != "USDT":
+
+                                if leader["positionShow"] == True and leader["status"] == "ACTIVE" and leader["initInvestAsset"] == "USDT":
+                                    latest_position = await self.app.db.position_history.find_one(
+                                            {"leaderId": leader["_id"]},
+                                            sort=[('updateTime', -1)]
+                                    )
+                                    if latest_position == None or utils.current_time() - latest_position["updateTime"] < 1800000:
+                                        pool[leaderId] = leader
+                                        leaders_total_weight += weight
+
+                                    elif leaderId not in dropped_leaders:
+                                        dropped_leaders.append(leaderId)
+                                        
+                                elif leaderId not in dropped_leaders:
                                     dropped_leaders.append(leaderId)
 
-                    for leaderId in dropped_leaders:
-                        if leaderId in user["followedLeaders"].keys():
-                            user["followedLeaders"].pop(leaderId)
+                    for leaderId, weight in user["followedLeaders"].items():
+                        if leaderId not in dropped_leaders:
+                            leader = pool[leaderId]
+                            leader_weight_share = weight / leaders_total_weight
+                    
+                            for symbol, amount in leader["amounts"].items():
+                                if symbol not in current_user_mix: 
+                                    current_user_mix[symbol] = 0
+
+                                current_user_mix[symbol] += amount * leader_weight_share
+
+                    # for leaderId in dropped_leaders:
+                    #     if leaderId in user["followedLeaders"].keys():
+                    #         user["followedLeaders"].pop(leaderId)
 
                     # if the mix are different, one leader has changed its positions
                     if current_user_mix != user["mix"]:
@@ -89,8 +107,16 @@ class Bot:
                         if len(current_mix_difference) > 0:
                             self.app.binance.account_snapshot(user)
                             symbol_prices = {}
+                            print('user["liveAmounts"]')
+                            print(user["liveAmounts"])
 
                         for symbol, mix_amount in current_mix_difference:
+                            print(symbol)
+                            if symbol in user["liveAmounts"].keys():
+                                print(user["liveAmounts"][symbol], mix_amount)
+                                print(user["liveAmounts"][symbol] - mix_amount)
+                                print(abs(user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol])
+                                print(abs(user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol] > 0.1)
                             if symbol not in user["liveAmounts"].keys() or abs(user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol] > 0.1:
                                 if mix_amount != 0:
                                     # we need to precision to calculate the formatted amounts to place the orders
@@ -101,26 +127,27 @@ class Bot:
                                     user_shares = 0
 
                                     for leaderId, weight in user["followedLeaders"].items():
-                                        if "account" not in pool[leaderId].keys():
-                                            # get the current balance and live ratio
-                                            pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(bot, leader)
+                                        if leaderId not in dropped_leaders:
+                                            if "account" not in pool[leaderId].keys():
+                                                # get the current balance and live ratio
+                                                pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(bot, leader)
 
-                                        pool_leader = pool[leaderId]
+                                            pool_leader = pool[leaderId]
 
-                                        # if the leader has the symbol in his amounts... calculate all the necessary stats to reproduce the shares
-                                        if symbol in pool_leader["amounts"].keys():
-                                            leader_weight_share = weight / leaders_total_weight
-                                            position_leverage_ratio = pool_leader["leverages"][symbol] / user["leverage"]
+                                            # if the leader has the symbol in his amounts... calculate all the necessary stats to reproduce the shares
+                                            if symbol in pool_leader["amounts"].keys():
+                                                leader_weight_share = weight / leaders_total_weight
+                                                position_leverage_ratio = pool_leader["leverages"][symbol] / user["leverage"]
 
-                                            user_share = leader_weight_share * pool_leader["account"]["liveRatio"] * pool_leader["shares"][symbol] * position_leverage_ratio * user["leverage"]
+                                                user_share = leader_weight_share * pool_leader["account"]["liveRatio"] * pool_leader["shares"][symbol] * position_leverage_ratio * user["leverage"]
 
-                                            if pool_leader["amounts"][symbol] > 0:
-                                                user_shares += user_share
-                                            else:
-                                                user_shares -= user_share
-                                            # calculate the symbol price only once
-                                            if symbol not in symbol_prices.keys():
-                                                symbol_prices[symbol] = abs(pool_leader["notionalValues"][symbol] / pool_leader["amounts"][symbol])
+                                                if pool_leader["amounts"][symbol] > 0:
+                                                    user_shares += user_share
+                                                else:
+                                                    user_shares -= user_share
+                                                # calculate the symbol price only once
+                                                if symbol not in symbol_prices.keys():
+                                                    symbol_prices[symbol] = abs(pool_leader["notionalValues"][symbol] / pool_leader["amounts"][symbol])
 
                                     new_user_amount = (user["valueUSDT"] * user_shares) / symbol_prices[symbol]
                                 
@@ -218,10 +245,12 @@ class Bot:
             to_open = amount - last_amount
             final_amount, final_value = self.truncate_amount(to_open, precision, symbol_price)
             binance_reponse = self.app.binance.open_position(symbol, final_amount)
+            user['positionsValue'] += abs(final_value)
         else:
             to_close = last_amount - amount
             final_amount, final_value = self.truncate_amount(to_close, precision, symbol_price)
             binance_reponse = self.app.binance.close_position(symbol, final_amount)
+            user['positionsValue'] -= abs(final_value)
 
         await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": {
             "amount": live_position["amount"] + final_amount,
@@ -234,7 +263,6 @@ class Bot:
         user["amounts"][symbol] = target_amount
         user["values"][symbol] = target_value
         user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
-        user['positionsValue'] += final_value
 
         await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE',f'Ajusted Position: {symbol} - {last_amount} to {target_amount}', details=binance_reponse)
 
