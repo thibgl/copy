@@ -2,14 +2,42 @@ import os
 from binance.spot import Spot
 import requests
 import time
+import json
+from urllib.parse import urlencode
+import hmac
+import hashlib
 
 class Binance:
     def __init__(self, app):
-        BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY")
-        BINANCE_SECRET_KEY = os.environ.get("BINANCE_SECRET_KEY")
+        self.BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY")
+        self.BINANCE_SECRET_KEY = os.environ.get("BINANCE_SECRET_KEY")
 
         self.app = app
-        self.client = Spot(api_key=BINANCE_API_KEY, api_secret=BINANCE_SECRET_KEY)
+        self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY)
+        
+        # self.servertimeint = None
+        # self.hashedsig = None
+        # self.request_server_time()
+
+    # def request_server_time(self):
+    #     servertime = requests.get("https://api.binance.com/api/v1/time")
+    #     servertimeobject = json.loads(servertime.text)
+    #     self.servertimeint = servertimeobject['serverTime']
+    #     self.hashedsig = hmac.new(self.BINANCE_SECRET_KEY.encode(), urlencode({
+    #             "timestamp" : self.servertimeint,
+    #         }).encode(), hashlib.sha256).hexdigest()
+
+    # def request_binance_no_wrapper(self):
+    #     userdata = requests.get("https://api.binance.com/sapi/v1/margin/account",
+    #         params = {
+    #             "signature" : self.hashedsig,
+    #             "timestamp" : self.servertimeint,
+    #         },
+    #         headers = {
+    #             "X-MBX-APIKEY" : self.BINANCE_API_KEY,
+    #         }
+    #     )
+    #     print(userdata)
 
     def account_snapshot(self, user):
         weigth = 10

@@ -69,7 +69,8 @@ class Bot:
                                         # print(e)
                                         # did not close so the amount is still present in the current user mix
                                         current_user_mix[symbol] = mix_amount
-  
+                                        
+                                        trace = traceback.format_exc()
                                         print(trace)
 
                                         await self.app.log.create(user, 'ERROR', 'bot/close_position', 'TRADE',f'Error Closing Position: {symbol} - {user["amounts"][symbol]} - {e}', details=trace)
@@ -171,12 +172,11 @@ class Bot:
 
                                         continue
                         
-                        user["notionalValue"] = sum(user["values"].values()) * user["leverage"]
-                        user['positionsValue'] = sum(user["values"].values())
-                        user["liveRatio"] = user["positionsValue"] / user["account"]["valueUSDT"]
+                        user["notionalValue"] = sum(user["notionalValues"].values())
+                        user["liveRatio"] = user["notionalValue"] / user["account"]["valueUSDT"]
 
-                        for symbol, value in user["values"].items():
-                            user["shares"][symbol] = value / user["positionsValue"]
+                        for symbol, notional_value in user["notionalValues"].items():
+                            user["shares"][symbol] = notional_value / user["notionalValue"]
 
                         user["mix"] = current_user_mix
 
@@ -196,6 +196,33 @@ class Bot:
                 await self.app.log.create(user, 'ERROR', 'bot/tick_position', 'TRADE',f'Error in tick_position - {e}', details=traceback)
 
                 time.sleep(30)
+
+    async def open_position(self, user, symbol, amount, precision, symbol_price):
+            final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
+            open_response = self.app.binance.open_position(symbol, final_amount)
+            current_time = utils.current_time()
+
+            print(final_amount, final_value)
+
+            await self.app.db.live.insert_one({
+                "userId": user["_id"], 
+                "symbol": symbol,
+                "amount": amount,
+                "value": final_value,
+                "orders": [open_response],
+                "createdAt": current_time,
+                "updatedAt": current_time,
+                "closedAt": None,
+                "PNL": 0
+            })
+
+            user["amounts"][symbol] = final_amount
+            user["values"][symbol] = final_value
+            user["notionalValues"][symbol] = abs(final_value) / user["leverage"]
+            user['positionsValue'] += abs(final_value)
+
+            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Opened Position: {symbol} - {final_amount}', details=open_response)
+
 
     async def change_position(self, user, symbol, amount, precision, symbol_price):
         last_amount = user["amounts"][symbol]
@@ -229,37 +256,11 @@ class Bot:
         print('target_amount')
         print(target_amount)
         user["amounts"][symbol] = target_amount
-        user["values"][symbol] = abs(target_value)
-        user["notionalValues"][symbol] = target_value * user["leverage"]
+        user["values"][symbol] = target_value
+        user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
+        user['positionsValue'] += final_value
 
         await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE',f'Ajusted Position: {symbol} - {last_amount} to {target_amount}', details=binance_reponse)
-
-
-
-    async def open_position(self, user, symbol, amount, precision, symbol_price):
-        final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
-        open_response = self.app.binance.open_position(symbol, final_amount)
-        current_time = utils.current_time()
-
-        print(final_amount, final_value)
-
-        await self.app.db.live.insert_one({
-            "userId": user["_id"], 
-            "symbol": symbol,
-            "amount": amount,
-            "value": final_value,
-            "orders": [open_response],
-            "createdAt": current_time,
-            "updatedAt": current_time,
-            "closedAt": None,
-            "PNL": 0
-        })
-
-        user["amounts"][symbol] = final_amount
-        user["values"][symbol] = abs(final_value)
-        user["notionalValues"][symbol] = final_value * user["leverage"]
-
-        await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Opened Position: {symbol} - {final_amount}', details=open_response)
 
 
     async def close_position(self, user, symbol):
@@ -279,10 +280,11 @@ class Bot:
         await self.app.db.history.insert_one(live_position)
         await self.app.db.live.delete_one({"userId": user["_id"], "symbol": symbol})
 
+        user['positionsValue'] -= abs(user["values"][symbol])
         user["amounts"].pop(symbol)
         user["shares"].pop(symbol)
         user["values"].pop(symbol)
-        user["notionalValues"][symbol].pop(symbol)
+        user["notionalValues"].pop(symbol)
 
         await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE',f'Closed Position: {symbol} - {last_amount}', details=close_response)
 
