@@ -197,17 +197,7 @@ class Scrap:
                 return { "success": False, "message": "Leader is not sharing Positions" }
 
         except Exception as e:
-            if e.startswith('HTTPSConnectionPool'):
-                self.cleanup()
-                self.start()
-                
-            trace = traceback.format_exc()
-            print(trace)
-
-            await self.app.log.create(bot, 'ERROR', 'scrap/create_leader', 'TRADE',f'Error in create_leader - {e}', details=trace)
-
-            time.sleep(30)
-            pass
+            await self.handle_exception(bot, e, 'create_leader')
 
 
     async def tick_leader(self, bot, leader):
@@ -231,17 +221,8 @@ class Scrap:
                 )
             
         except Exception as e:
-            if e.startswith('HTTPSConnectionPool'):
-                self.cleanup()
-                self.start()
-                
-            trace = traceback.format_exc()
-            print(trace)
+            await self.handle_exception(bot, e, 'tick_leader')
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/tick_leader', 'TRADE',f'Error in tick_leader - {e}', details=trace)
-
-            time.sleep(30)
-            pass
 
     async def update_leader_stats(self, bot, leader):
         try:
@@ -264,17 +245,8 @@ class Scrap:
 
             return update
         except Exception as e:
-            if e.startswith('HTTPSConnectionPool'):
-                self.cleanup()
-                self.start()
-                
-            # print(e)
-            trace = traceback.format_exc()
-            print(trace)
+            await self.handle_exception(bot, e, 'update_leader_stats')
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/update_leader_stats', 'TRADE',f'Error in update_leader_stats - {e}', details=traceback)
-
-            time.sleep(30)
     
     async def tick_transfer_history(self, bot, leader):
         try:
@@ -308,17 +280,8 @@ class Scrap:
             return transfer_history_response
         
         except Exception as e:
-            if e.startswith('HTTPSConnectionPool'):
-                self.cleanup()
-                self.start()
-                
-            trace = traceback.format_exc()
-            print(trace)
+            await self.handle_exception(bot, e, 'tick_transfer_history')
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/tick_transfer_history', 'TRADE',f'Error in tick_transfer_history - {e}', details=trace)
-
-            time.sleep(30)
-            pass
 
     async def tick_position_history(self, bot, leader):
         try:
@@ -357,17 +320,8 @@ class Scrap:
             return position_history_response
         
         except Exception as e:
-            if e.startswith('HTTPSConnectionPool'):
-                self.cleanup()
-                self.start()
-                
-            trace = traceback.format_exc()
-            print(trace)
+            await self.handle_exception(bot, e, 'tick_position_history')
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/tick_position_history', 'TRADE',f'Error in tick_position_history - {e}', details=trace)
-
-            time.sleep(30)
-            pass
 
     async def tick_positions(self, bot, leader):
         try:
@@ -457,24 +411,30 @@ class Scrap:
             return fetch_data_response
         
         except Exception as e:
-            if e.startswith('HTTPSConnectionPool'):
+            await self.handle_exception(bot, e, 'tick_positions')
+
+    # Lifecycle
+
+    async def handle_exception(self, bot, error, source):
+            if error.startswith('HTTPSConnectionPool'):
                 self.cleanup()
                 self.start()
-                
+
             trace = traceback.format_exc()
             print(trace)
 
-            await self.app.log.create(bot, 'ERROR', 'scrap/tick_positions', 'TRADE',f'Error in tick_positions - {e}', details=trace)
+            await self.app.log.create(bot, 'ERROR', f'scrap/{source}', 'TRADE', f'Error in {source} - {error}', details=trace)
 
             time.sleep(30)
             pass
-    # Lifecycle
-
+    
+    
     def start(self):
         self.gateway = ApiGateway(self.GATEWAY_HOST, regions=["eu-west-1", "eu-west-2"], access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'), access_key_secret=os.environ.get('AWS_SECRET_ACCESS_KEY'))
         self.gateway.start()
         self.session = requests.Session()
         self.session.mount(self.GATEWAY_HOST, self.gateway)
+
 
     def cleanup(self):
         self.gateway.shutdown()
