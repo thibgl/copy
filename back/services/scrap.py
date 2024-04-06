@@ -243,11 +243,11 @@ class Scrap:
                     sort=[('time', -1)]
                 )
 
-            fetch_pages_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
-            print('tick_transfer_history fetch_pages_response')
-            print(fetch_pages_response)
-            if fetch_pages_response["success"]:
-                transfer_history = fetch_pages_response["data"]
+            transfer_history_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
+            print('tick_transfer_history transfer_history_response')
+            print(transfer_history_response)
+            if transfer_history_response["success"]:
+                transfer_history = transfer_history_response["data"]
 
                 for transfer in transfer_history:
                     transfer["leaderId"] = leader["_id"]
@@ -265,7 +265,7 @@ class Scrap:
                 if len(transfer_history) > 0:
                     await self.app.db.transfer_history.insert_many(transfer_history)
 
-            return fetch_pages_response
+            return transfer_history_response
         
         except Exception as e:
             trace = traceback.format_exc()
@@ -282,10 +282,10 @@ class Scrap:
                 {"leaderId": leader["_id"]},
                 sort=[('updateTime', -1)]
             )
-            fetch_pages_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
-            print(fetch_pages_response)
-            if fetch_pages_response["success"]:
-                new_position_history = fetch_pages_response["data"]
+            position_history_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
+            print(position_history_response)
+            if position_history_response["success"]:
+                new_position_history = position_history_response["data"]
                 partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
                 new_positions = []
                 print('partially_closed_positions')
@@ -310,7 +310,7 @@ class Scrap:
                     print(new_positions)
                     await self.app.db.position_history.insert_many(new_positions)
                 
-            return fetch_pages_response
+            return position_history_response
         
         except Exception as e:
             trace = traceback.format_exc()

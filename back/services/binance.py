@@ -14,7 +14,7 @@ class Binance:
 
         self.app = app
         self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY)
-        
+
         # self.servertimeint = None
         # self.hashedsig = None
         # self.request_server_time()
@@ -44,12 +44,18 @@ class Binance:
 
         assets_lookup = ['USDT', 'BNB']
         margin_account_data = self.client.margin_account()
-
+        liveAmounts = {}
+        # print(margin_account_data)
         for asset in margin_account_data["userAssets"]:
             symbol = asset["asset"]
+            amount = float(asset["netAsset"])
+            
             if symbol in assets_lookup:
-                user["account"][symbol] = float(asset["netAsset"])
+                user["account"][symbol] = amount
+            if symbol != 'USDT' and amount != 0:
+                liveAmounts[symbol] = amount
 
+        print(liveAmounts)
         user["account"]["valueBTC"] = float(margin_account_data["totalNetAssetOfBtc"])
         user["account"]["valueUSDT"] = float(margin_account_data["totalCollateralValueInUSDT"])
 
