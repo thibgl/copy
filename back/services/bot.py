@@ -22,8 +22,9 @@ class Bot:
 
                 async for user in users:
                     current_user_mix = {}
+                    leaders_total_weight = sum(user["followedLeaders"].values())
 
-                    for leaderId in user["followedLeaders"].keys():
+                    for leaderId, weight in user["followedLeaders"].items():
                         if leaderId not in pool.keys() and leaderId not in dropped_leaders:
                             leader = await self.app.db.leaders.find_one({"_id": ObjectId(leaderId)})
                             
@@ -32,15 +33,16 @@ class Bot:
                             if leader["positionShow"] == True and leader["status"] == "ACTIVE" and leader["initInvestAsset"] == "USDT":
                                 await self.app.scrap.tick_positions(bot, leader)
                                 pool[leaderId] = leader
+                                leader_weight_share = weight / leaders_total_weight
                         
                                 for symbol, amount in leader["amounts"].items():
                                     if symbol not in current_user_mix: 
                                         current_user_mix[symbol] = 0
 
-                                    current_user_mix[symbol] += amount
+                                    current_user_mix[symbol] += amount * leader_weight_share
                                 
-                                else:
-                                    dropped_leaders.append(leaderId)
+                            else:
+                                dropped_leaders.append(leaderId)
 
                     for leaderId in dropped_leaders:
                         if leaderId in user["followedLeaders"].keys():
@@ -70,7 +72,7 @@ class Bot:
                                             if user["amounts"][symbol] < 0:
                                                 amount = -amount
 
-                                            await self.open_position(user, symbol, amount, precision, symbol_price)
+                                            await self.open_position(user, symbol, amount, precision, price)
                                             n_orders += 1
 
                                         await self.close_position(user, symbol)
@@ -79,77 +81,58 @@ class Bot:
                                     except Exception as e:
                                         current_user_mix[symbol] = mix_amount
                                         
-                                        self.handle_exception(user, e, 'close_position', symbol)
+                                        await self.handle_exception(user, e, 'close_position', symbol)
 
                                         continue
 
                         # if they are mixes in the current difference, positions have been changed or opened
                         if len(current_mix_difference) > 0:
-                            leaders_total_weight = sum(user["followedLeaders"].values())
                             self.app.binance.account_snapshot(user)
-       
-                        print('current_mix_difference')
-                        print(current_mix_difference)
+                            symbol_prices = {}
+
                         for symbol, mix_amount in current_mix_difference:
-                            if abs(user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol] > 0.1:
+                            if symbol not in user["liveAmounts"].keys() or abs(user["liveAmounts"][symbol] - mix_amount) / user["liveAmounts"][symbol] > 0.1:
                                 if mix_amount != 0:
                                     # we need to precision to calculate the formatted amounts to place the orders
                                     if symbol not in bot["precisions"].keys():
-                                        print('NO PRECISION, FETCHING')
                                         bot["precisions"][symbol] = self.app.binance.get_asset_precision(symbol)
                                     
                                     precision = bot["precisions"][symbol]
-
-                                    user_share = 0
-                                    leader_index = 0
+                                    user_shares = 0
 
                                     for leaderId, weight in user["followedLeaders"].items():
-                                        print('weight')
-                                        print(weight)
                                         if "account" not in pool[leaderId].keys():
                                             # get the current balance and live ratio
                                             pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(bot, leader)
 
                                         pool_leader = pool[leaderId]
 
-                                        leader_live_ratio = pool_leader["account"]["liveRatio"]
-                                        leader_weight_share = weight / leaders_total_weight
-                                        leverage_ratio = pool_leader["leverages"][symbol] / user["leverage"]
-
-                                        print('leader_weight_share, leader_live_ratio')
-                                        print(leader_weight_share, leader_live_ratio)
                                         # if the leader has the symbol in his amounts... calculate all the necessary stats to reproduce the shares
                                         if symbol in pool_leader["amounts"].keys():
+                                            leader_weight_share = weight / leaders_total_weight
+                                            user_share = leader_weight_share * pool_leader["account"]["liveRatio"] * pool_leader["leverages"][symbol] / user["leverage"] * pool_leader["shares"][symbol] * user["leverage"]
+
                                             if pool_leader["amounts"][symbol] > 0:
-                                                user_share += leader_weight_share * leader_live_ratio * leverage_ratio * pool_leader["shares"][symbol] * user["leverage"]
+                                                user_shares += user_share
                                             else:
-                                                user_share -= leader_weight_share * leader_live_ratio * leverage_ratio * pool_leader["shares"][symbol] * user["leverage"]
+                                                user_shares -= user_share
                                             # calculate the symbol price only once
-                                            if leader_index == 0:
-                                                symbol_price = abs(pool_leader["notionalValues"][symbol] / pool_leader["amounts"][symbol])
+                                            if symbol not in symbol_prices.keys():
+                                                symbol_prices[symbol] = abs(pool_leader["notionalValues"][symbol] / pool_leader["amounts"][symbol])
 
-                                            leader_index += 1
-
-                                    new_user_amount = (user["valueUSDT"] * user_share) / symbol_price
-
-                                    # if mix_amount < 0:
-                                    #     new_user_amount = -new_user_amount
-                                    print('new_user_amount, symbol_price')
-                                    print(new_user_amount, symbol_price)
+                                    new_user_amount = (user["valueUSDT"] * user_shares) / symbol_prices[symbol]
                                 
                                     # if the symbol is in the last mix, the position has changed
                                     if symbol in user["mix"]:
                                         try:
                                             # * CHANGE
-                                            print('CHANGE')
-                                            print(symbol_price)
-                                            await self.change_position(user, symbol, new_user_amount, precision, symbol_price)
+                                            await self.change_position(user, symbol, new_user_amount, precision, symbol_prices[symbol])
                                             n_orders += 1
 
                                         except Exception as e:
                                             current_user_mix[symbol] = user["amounts"][symbol]
 
-                                            self.handle_exception(user, e, 'change_position', symbol)
+                                            await self.handle_exception(user, e, 'change_position', symbol)
 
                                             continue
 
@@ -157,7 +140,7 @@ class Bot:
                                     else:
                                         try:
                                             # * OPEN
-                                            await self.open_position(user, symbol, new_user_amount, precision, symbol_price)
+                                            await self.open_position(user, symbol, new_user_amount, precision, symbol_prices[symbol])
                                             n_orders += 1
                                         # TESTING
                                         # await self.change_position(user, symbol, amount * -1, precision, symbol_price, current_user["amounts"])
@@ -169,7 +152,7 @@ class Bot:
                                         except Exception as e:
                                             current_user_mix.pop(symbol)
 
-                                            self.handle_exception(user, e, 'open_position', symbol)
+                                            await self.handle_exception(user, e, 'open_position', symbol)
 
                                             continue
                             else:
@@ -195,7 +178,7 @@ class Bot:
                 trace = traceback.format_exc()
                 print(trace)
 
-                await self.app.log.create(user, 'ERROR', 'bot/tick_positions', 'TRADE',f'Error in tick_position - {e}', details=traceback)
+                await self.app.log.create(bot, 'ERROR', 'bot/tick_positions', 'TRADE',f'Error in tick_position - {e}', details=traceback)
 
                 time.sleep(30)
 
@@ -204,8 +187,6 @@ class Bot:
             final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
             open_response = self.app.binance.open_position(symbol, final_amount)
             current_time = utils.current_time()
-
-            print(final_amount, final_value)
 
             await self.app.db.live.insert_one({
                 "userId": user["_id"], 
@@ -230,22 +211,14 @@ class Bot:
     async def change_position(self, user, symbol, amount, precision, symbol_price):
         last_amount = user["amounts"][symbol]
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
-        print('amount, last_amount')
-        print(amount, last_amount)
-        print(live_position)
+
         if amount > last_amount:
             to_open = amount - last_amount
-            print('to_open')
-            print(to_open)
             final_amount, final_value = self.truncate_amount(to_open, precision, symbol_price)
-            print(final_value)
             binance_reponse = self.app.binance.open_position(symbol, final_amount)
         else:
             to_close = last_amount - amount
-            print('to_close')
-            print(to_close)
             final_amount, final_value = self.truncate_amount(to_close, precision, symbol_price)
-            print(final_value)
             binance_reponse = self.app.binance.close_position(symbol, final_amount)
 
         await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": {
@@ -256,8 +229,6 @@ class Bot:
         }})
             
         target_amount, target_value = self.truncate_amount(amount, precision, symbol_price)
-        print('target_amount')
-        print(target_amount)
         user["amounts"][symbol] = target_amount
         user["values"][symbol] = target_value
         user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
@@ -293,8 +264,6 @@ class Bot:
 
 
     def truncate_amount(self, amount, precision, price):
-        print('truncate_amount')
-        print(amount, precision, price)
         asset_precision = precision["stepSize"].split('1')[0].count('0')
 
         positive = True
@@ -312,12 +281,8 @@ class Bot:
         amount = round(amount, asset_precision)
 
         if positive:
-            print('amount, amount * price')
-            print(amount, amount * price)
             return amount, amount * price
         
-        print('-amount, -amount * price')
-        print(-amount, -amount * price)
         return -amount, -amount * price
     
 
@@ -325,7 +290,7 @@ class Bot:
         trace = traceback.format_exc()
         print(trace)
 
-        await self.app.log.create(user, 'ERROR', f'bot/{source}', 'TRADE',f'Error Closing Position: {symbol} - {user["amounts"][symbol]} - {error}', details=trace)
+        await self.app.log.create(user, 'ERROR', f'bot/{source}', 'TRADE', f'Error Closing Position: {symbol} - {user["amounts"][symbol]} - {error}', details=trace)
 
   
 

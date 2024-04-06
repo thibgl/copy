@@ -129,8 +129,9 @@ class Scrap:
 
  
     # DB Injections
-    async def create_leader(self, bot, leaderId):
+    async def create_leader(self, leaderId):
         try:   
+            bot = await self.app.db.bot.find_one()
             detail_reponse = self.fetch_data(leaderId, "detail").json()
 
             if detail_reponse["success"]:
@@ -256,8 +257,7 @@ class Scrap:
                 )
 
             transfer_history_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
-            print('tick_transfer_history transfer_history_response')
-            print(transfer_history_response)
+
             if transfer_history_response["success"]:
                 transfer_history = transfer_history_response["data"]
 
@@ -290,21 +290,17 @@ class Scrap:
                 sort=[('updateTime', -1)]
             )
             position_history_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
-            print(position_history_response)
+
             if position_history_response["success"]:
                 new_position_history = position_history_response["data"]
                 partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
                 new_positions = []
-                print('partially_closed_positions')
-                print(partially_closed_positions)
+
                 for position in new_position_history:
                     position["leaderId"] = leader["_id"]
-                    print('position["id"], position["id"] in partially_closed_positions')
-                    print(position["id"], position["id"] in partially_closed_positions)
+
                     if position["id"] in partially_closed_positions:
                         partially_closed_position = await self.app.db.position_history.find_one({"leaderId": leader["_id"], "id": position["id"]})
-                        print('partially_closed_position')
-                        print(partially_closed_position)
                         leader['historicPNL'] -= float(partially_closed_position["closingPnl"])
 
                         await self.app.db.position_history.replace_one({"leaderId": leader["_id"], "id": position["id"]}, position)
@@ -313,8 +309,6 @@ class Scrap:
                         new_positions.append(position)
 
                 if len(new_positions) > 0:
-                    print('new_positions')
-                    print(new_positions)
                     await self.app.db.position_history.insert_many(new_positions)
                 
             return position_history_response
