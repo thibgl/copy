@@ -255,8 +255,9 @@ class Bot:
             "orders": live_position["orders"] + [binance_reponse],
             "updatedAt": utils.current_time(),
         }})
-            
-        target_amount, target_value = self.truncate_amount(amount, precision, symbol_price)
+        
+        target_amount = last_amount + final_amount
+        target_value = target_amount * symbol_price 
         user["amounts"][symbol] = target_amount
         user["values"][symbol] = target_value
         user["notionalValues"][symbol] = abs(target_value) / user["leverage"]

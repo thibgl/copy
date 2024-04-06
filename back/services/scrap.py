@@ -257,7 +257,7 @@ class Scrap:
                 )
 
             transfer_history_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
-            print(transfer_history_response)
+            # print(transfer_history_response)
             if transfer_history_response["success"]:
                 transfer_history = transfer_history_response["data"]
 
