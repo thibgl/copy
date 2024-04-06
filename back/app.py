@@ -1,5 +1,5 @@
 
-# todo: fix les shares du user, gérer changement de params leader, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# todo: sortir leader du mix temporariement si pas de position pendant un certain moment, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body

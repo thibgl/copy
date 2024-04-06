@@ -28,10 +28,9 @@ class Bot:
                         if leaderId not in pool.keys() and leaderId not in dropped_leaders:
                             leader = await self.app.db.leaders.find_one({"_id": ObjectId(leaderId)})
                             
-                            await self.app.scrap.tick_leader(bot, leader)
+                            await self.app.scrap.tick_positions(bot, leader)
 
-                            if leader["positionShow"] == True and leader["status"] == "ACTIVE" and leader["initInvestAsset"] == "USDT":
-                                await self.app.scrap.tick_positions(bot, leader)
+                            if len(leader["amounts"].keys()) > 0:
                                 pool[leaderId] = leader
                                 leader_weight_share = weight / leaders_total_weight
                         
@@ -40,15 +39,16 @@ class Bot:
                                         current_user_mix[symbol] = 0
 
                                     current_user_mix[symbol] += amount * leader_weight_share
-                                
+                            
                             else:
-                                dropped_leaders.append(leaderId)
+                                await self.app.scrap.tick_leader(bot, leader)
+                                if leader["positionShow"] != True or leader["status"] != "ACTIVE" or leader["initInvestAsset"] != "USDT":
+                                    dropped_leaders.append(leaderId)
 
                     for leaderId in dropped_leaders:
                         if leaderId in user["followedLeaders"].keys():
                             user["followedLeaders"].pop(leaderId)
 
-                    # print(pool)
                     # if the mix are different, one leader has changed its positions
                     if current_user_mix != user["mix"]:
                         n_orders = 0
@@ -110,7 +110,9 @@ class Bot:
                                         # if the leader has the symbol in his amounts... calculate all the necessary stats to reproduce the shares
                                         if symbol in pool_leader["amounts"].keys():
                                             leader_weight_share = weight / leaders_total_weight
-                                            user_share = leader_weight_share * pool_leader["account"]["liveRatio"] * pool_leader["leverages"][symbol] / user["leverage"] * pool_leader["shares"][symbol] * user["leverage"]
+                                            position_leverage_ratio = pool_leader["leverages"][symbol] / user["leverage"]
+
+                                            user_share = leader_weight_share * pool_leader["account"]["liveRatio"] * pool_leader["shares"][symbol] * position_leverage_ratio * user["leverage"]
 
                                             if pool_leader["amounts"][symbol] > 0:
                                                 user_shares += user_share
