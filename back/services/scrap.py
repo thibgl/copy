@@ -93,7 +93,10 @@ class Scrap:
 
         return response
 
-    def fetch_pages(self, leaderId, endpointType, params={}, page_number=1, result=[], latest_item=None, reference=None):
+    def fetch_pages(self, leaderId, endpointType, params={}, page_number=1, result=None, latest_item=None, reference=None):
+        if result is None:
+            result = []
+
         response = self.fetch_data(leaderId, endpointType, {"pageNumber": page_number} | params).json()
 
         if response["success"]:
@@ -258,11 +261,13 @@ class Scrap:
 
             transfer_history_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
             # print(transfer_history_response)
+            # transfers = []
+
             if transfer_history_response["success"]:
                 transfer_history = transfer_history_response["data"]
 
                 for transfer in transfer_history:
-                    if "transType" in transfer.keys():
+                    # if "transType" in transfer.keys():
                         transfer["leaderId"] = leader["_id"]
                         transfer_type = transfer["transType"]
 
@@ -274,6 +279,8 @@ class Scrap:
 
                         else:
                             print(f"WARNING! UNKNOWN TRANFER TYPE: {transfer_type}")
+
+                        # transfers.append(transfer)
 
                 if len(transfer_history) > 0:
                     await self.app.db.transfer_history.insert_many(transfer_history)
@@ -296,7 +303,7 @@ class Scrap:
                 new_position_history = position_history_response["data"]
                 partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
                 new_positions = []
-
+                # print(partially_closed_positions)
                 for position in new_position_history:
                     position["leaderId"] = leader["_id"]
 
@@ -309,8 +316,8 @@ class Scrap:
                         leader['historicPNL'] += float(position["closingPnl"])
                         new_positions.append(position)
 
-                if len(new_positions) > 0:
-                    await self.app.db.position_history.insert_many(new_positions)
+                # if len(new_positions) > 0:
+                #     await self.app.db.position_history.insert_many(new_positions)
                 
             return position_history_response
         

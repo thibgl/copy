@@ -1,5 +1,5 @@
 
-# todo: calculer correctement BALANCE ACTUELLE, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# todo: close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
