@@ -93,7 +93,9 @@ class Scrap:
 
         return response
 
-    def fetch_pages(self, leaderId, endpointType, params={}, page_number=1, result=None, latest_item=None, reference=None):
+    def fetch_pages(self, leaderId, endpointType, params={}, page_number=None, result=None, latest_item=None, reference=None):
+        if page_number is None:
+            page_number = 1
         if result is None:
             result = []
 
@@ -316,8 +318,8 @@ class Scrap:
                         leader['historicPNL'] += float(position["closingPnl"])
                         new_positions.append(position)
 
-                # if len(new_positions) > 0:
-                #     await self.app.db.position_history.insert_many(new_positions)
+                if len(new_positions) > 0:
+                    await self.app.db.position_history.insert_many(new_positions)
                 
             return position_history_response
         
