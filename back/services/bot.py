@@ -106,8 +106,8 @@ class Bot:
                             symbol_prices = {}
 
                         for symbol, mix_amount in current_mix_difference:
-                            print(user["liveAmounts"][symbol], mix_amount)
-                            print(abs(user["liveAmounts"][symbol] - mix_amount) / abs(user["liveAmounts"][symbol]))
+                            # print(user["liveAmounts"][symbol], mix_amount)
+                            # print(abs(user["liveAmounts"][symbol] - mix_amount) / abs(user["liveAmounts"][symbol]))
                             
                             # if symbol not in user["liveAmounts"].keys() or abs(user["liveAmounts"][symbol] - mix_amount) / abs(user["liveAmounts"][symbol]) > 0.05:
                             if mix_amount != 0:
@@ -234,29 +234,24 @@ class Bot:
     async def change_position(self, user, symbol, amount, precision, symbol_price):
         last_amount = user["liveAmounts"][symbol]
         print(f'{symbol} CHANGE POSITION')
-        print('last_amount, symbol_price')
-        print(last_amount, symbol_price)
+        print('amount, last_amount, symbol_price')
+        print(amount, last_amount, symbol_price)
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
 
+        amount_diff = amount - last_amount
+        final_amount, final_value = self.truncate_amount(amount_diff, precision, symbol_price)
+        
         if amount > last_amount:
             if user["collateralMarginLevel"] > 2:
-                to_open = amount - last_amount
-                print('to_open')
-                print(to_open)
-                final_amount, final_value = self.truncate_amount(to_open, precision, symbol_price)
-                binance_reponse = self.app.binance.open_position(symbol, final_amount)
-
+                binance_reponse = self.app.binance.open_position(symbol, abs(final_amount))
             else:
                 await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
 
                 time.sleep(5)
                 return
         else:
-            to_close = last_amount - amount
-            print('to_close')
-            print(to_close)
-            final_amount, final_value = self.truncate_amount(to_close, precision, symbol_price)
-            binance_reponse = self.app.binance.close_position(symbol, final_amount)
+            binance_reponse = self.app.binance.close_position(symbol, abs(final_amount))
+
 
         target_amount = last_amount + final_amount
         target_value = target_amount * symbol_price 
