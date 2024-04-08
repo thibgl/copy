@@ -248,7 +248,7 @@ class Bot:
         if diff_value > precision["minNotional"]:
             if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
                 if new_amount > 0:
-                    if amount_diff < 0:
+                    if amount_diff > 0:
                         print(f'Opening {amount_diff}')
                         open_response = await self.app.binance.open_position(user, symbol, amount_diff)
                         responses.append(open_response)
@@ -257,7 +257,7 @@ class Bot:
                         close_response = self.app.binance.close_position(symbol, amount_diff)
                         responses.append(close_response)
                 else:
-                    if amount_diff < 0:
+                    if amount_diff > 0:
                         print(f'Closing {amount_diff}')
                         close_response = self.app.binance.close_position(symbol, amount_diff)
                         responses.append(close_response)
