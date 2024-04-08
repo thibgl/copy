@@ -228,154 +228,149 @@ class Bot:
 
 
     async def open_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix, full=False):
-        notional_pass = True
+        try:
+            notional_pass = True
 
-        if full and symbol in user["liveAmounts"].keys():
-            last_amount = user["liveAmounts"][symbol]
-            amount_diff = new_amount - last_amount
-            diff_value = abs(amount_diff) * symbol_price 
-        
-            if diff_value < precision["minNotional"]:
-                notional_pass = False
+            if full and symbol in user["liveAmounts"].keys():
+                last_amount = user["liveAmounts"][symbol]
+                amount_diff = new_amount - last_amount
+                diff_value = abs(amount_diff) * symbol_price 
+            
+                if diff_value < precision["minNotional"]:
+                    notional_pass = False
 
-        if notional_pass:
-            try:
-                if user["collateralMarginLevel"] > 1.25:
-                    final_amount, final_value  = self.truncate_amount(new_amount, precision, symbol_price)
+            if notional_pass:
+                    if user["collateralMarginLevel"] > 1.25:
+                        final_amount, final_value  = self.truncate_amount(new_amount, precision, symbol_price)
+                        current_time = utils.current_time()
+                        notional_value = abs(final_value) / user["leverage"]
+
+                        position = {
+                            "userId": user["_id"], 
+                            "symbol": symbol,
+                            "amount": new_amount,
+                            "value": final_value,
+                            "updatedAt": current_time,
+                            "closedAt": None,
+                            "PNL": 0
+                        }
+
+                        open_response = await self.app.binance.open_position(user, symbol, final_amount)
+
+                        if open_response:
+                            if full:
+                                position.update({"createdAt": current_time, "orders": [open_response]})
+                                await self.app.db.live.insert_one(position)
+                            else:
+                                live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
+                                position.update({"orders": live_position["orders"] + [open_response]})
+                                await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": position})
+
+                            user["amounts"][symbol] = final_amount
+                            user["values"][symbol] = final_value
+                            user["notionalValues"][symbol] = notional_value
+
+                            await self.app.db.users.update_one({"_id": user["_id"]}, {"$set": {
+                                "updatedAt": current_time,
+                                "amounts": user["amounts"],
+                                "values": user["values"],
+                                "notionalValues": user["notionalValues"]
+                            }})
+
+                            log.update({
+                                "type": "OPEN",
+                                "full": full,
+                                "amount": new_amount,
+                                "final_amount": final_amount,
+                                "final_value": final_value,
+                                "response": open_response
+                            })
+                
+                            if full:
+                                await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {final_amount}', details=log)
+                            else:
+                                await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/PARTIAL',f'Partially Opened Position: {symbol} - {final_amount}', details=log, notify=False)
+
+                    else:
+                        await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
+                            
+            else:
+                current_user_mix[symbol] = user["mix"][symbol]
+                # await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
+        except Exception as e:
+            current_user_mix[symbol] = user["mix"][symbol]
+            await self.handle_exception(user, e, 'open_position', symbol, log, current_user_mix)
+
+
+    async def close_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix, full=False):
+        try:
+            notional_pass = True
+
+            if full and user["liveAmounts"].keys():
+                last_amount = user["liveAmounts"][symbol]
+                amount_diff = new_amount - last_amount
+                diff_value = abs(amount_diff) * symbol_price 
+            
+                if diff_value < precision["minNotional"]:
+                    notional_pass = False
+
+                if notional_pass:
+                    final_amount, final_value = self.truncate_amount(new_amount, precision, symbol_price)
+                    live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
                     current_time = utils.current_time()
-                    notional_value = abs(final_value) / user["leverage"]
 
-                    position = {
-                        "userId": user["_id"], 
-                        "symbol": symbol,
-                        "amount": new_amount,
-                        "value": final_value,
+                    live_position.update({
+                        "amount": 0,
+                        "value": 0,
                         "updatedAt": current_time,
-                        "closedAt": None,
-                        "PNL": 0
-                    }
+                    })
 
-                    open_response = await self.app.binance.open_position(user, symbol, final_amount)
+                    close_response = await self.app.binance.close_position(user, symbol, final_amount)
 
-                    if open_response:
+                    if close_response:
+                        live_position.update({"orders": live_position["orders"] + [close_response]})
+
                         if full:
-                            position.update({"createdAt": current_time, "orders": [open_response]})
-                            await self.app.db.live.insert_one(position)
-                        else:
-                            live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
-                            position.update({"orders": live_position["orders"] + [open_response]})
-                            await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": position})
+                            live_position.update({"closedAt": current_time})
+                            await self.app.db.history.insert_one(live_position)
+                            await self.app.db.live.delete_one({"userId": user["_id"], "symbol": symbol})
 
-                        user["amounts"][symbol] = final_amount
-                        user["values"][symbol] = final_value
-                        user["notionalValues"][symbol] = notional_value
+                            user["amounts"].pop(symbol)
+                            user["shares"].pop(symbol)
+                            user["values"].pop(symbol)
+                            user["notionalValues"].pop(symbol)
+                        else:
+                            await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": live_position})
 
                         await self.app.db.users.update_one({"_id": user["_id"]}, {"$set": {
                             "updatedAt": current_time,
                             "amounts": user["amounts"],
+                            "liveAmounts": user["liveAmounts"],
                             "values": user["values"],
+                            "shares": user["shares"],
                             "notionalValues": user["notionalValues"]
                         }})
-
+                        
                         log.update({
-                            "type": "OPEN",
+                            "type": "CLOSE",
                             "full": full,
                             "amount": new_amount,
                             "final_amount": final_amount,
                             "final_value": final_value,
-                            "response": open_response
+                            "response": close_response
                         })
-            
-                        if full:
-                            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {final_amount}', details=log)
-                        else:
-                            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/PARTIAL',f'Partially Opened Position: {symbol} - {final_amount}', details=log, notify=False)
-
-                else:
-                    await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
-                
-            except Exception as e:
-                await self.handle_exception(user, e, 'open_position', symbol, log, current_user_mix)
-
-                pass
-            
-        else:
-            # await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
-
-            current_user_mix.pop(symbol)
-
-
-    async def close_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix, full=False):
-        notional_pass = True
-
-        if full and user["liveAmounts"].keys():
-            last_amount = user["liveAmounts"][symbol]
-            amount_diff = new_amount - last_amount
-            diff_value = abs(amount_diff) * symbol_price 
-        
-            if diff_value < precision["minNotional"]:
-                notional_pass = False
-
-        if notional_pass:
-            try:
-                final_amount, final_value = self.truncate_amount(new_amount, precision, symbol_price)
-                live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
-                current_time = utils.current_time()
-
-                live_position.update({
-                    "amount": 0,
-                    "value": 0,
-                    "updatedAt": current_time,
-                })
-
-                close_response = await self.app.binance.close_position(user, symbol, final_amount)
-
-                if close_response:
-                    live_position.update({"orders": live_position["orders"] + [close_response]})
-
-                    if full:
-                        live_position.update({"closedAt": current_time})
-                        await self.app.db.history.insert_one(live_position)
-                        await self.app.db.live.delete_one({"userId": user["_id"], "symbol": symbol})
-
-                        user["amounts"].pop(symbol)
-                        user["shares"].pop(symbol)
-                        user["values"].pop(symbol)
-                        user["notionalValues"].pop(symbol)
-                    else:
-                        await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": live_position})
-
-                    await self.app.db.users.update_one({"_id": user["_id"]}, {"$set": {
-                        "updatedAt": current_time,
-                        "amounts": user["amounts"],
-                        "liveAmounts": user["liveAmounts"],
-                        "values": user["values"],
-                        "shares": user["shares"],
-                        "notionalValues": user["notionalValues"]
-                    }})
                     
-                    log.update({
-                        "type": "CLOSE",
-                        "full": full,
-                        "amount": new_amount,
-                        "final_amount": final_amount,
-                        "final_value": final_value,
-                        "response": close_response
-                    })
-                
-                    if full:
-                        await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {new_amount}', details=log)
-                    else:
-                        await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/PARTIAL',f'Partially Closed Position: {symbol} - {new_amount}', details=log, notify=False)
-
-            except Exception as e:
-                await self.handle_exception(user, e, 'close_position', symbol, log, current_user_mix)
-
-                pass
-        else:
-            # await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
-
-            current_user_mix.pop(symbol)
+                        if full:
+                            await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {new_amount}', details=log)
+                        else:
+                            await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/PARTIAL',f'Partially Closed Position: {symbol} - {new_amount}', details=log, notify=False)
+            else:
+                current_user_mix[symbol] = user["mix"][symbol]
+                # await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
+        except Exception as e:
+            current_user_mix[symbol] = user["mix"][symbol]
+            await self.handle_exception(user, e, 'close_position', symbol, log, current_user_mix)
+     
 
 
     async def change_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
@@ -412,15 +407,11 @@ class Bot:
                 await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/AJUST',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}')
 
             else:
+                current_user_mix[symbol] = user["mix"][symbol]
                 # await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/REJECT',f'Did Not Ajust Position: {symbol} - Notional Difference: {diff_value}',notify=False, insert=False)
-
-                current_user_mix.pop(symbol)
-
         except Exception as e:
+            current_user_mix[symbol] = user["mix"][symbol]
             await self.handle_exception(user, e, 'change_position', symbol, log, current_user_mix)
-
-            pass
-
 
 
     def truncate_amount(self, amount, precision, price):
@@ -450,11 +441,9 @@ class Bot:
     
 
     async def handle_exception(self, user, error, source, symbol, log, current_user_mix):
-        current_user_mix.pop(symbol)
-
         trace = traceback.format_exc()
 
         await self.app.log.create(user, 'ERROR', f'bot/{source}', 'TRADE', f'Error Setting Position: {symbol} - {error}', details={"trace": trace, "log": log})
 
-  
+    
 
