@@ -262,7 +262,8 @@ class Bot:
                             position.update({"createdAt": current_time, "orders": [open_response]})
                             await self.app.db.live.insert_one(position)
                         else:
-                            position.update({"orders": position["orders"] + [open_response]})
+                            live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
+                            position.update({"orders": live_position["orders"] + [open_response]})
                             await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": position})
 
                         user["amounts"][symbol] = final_amount
