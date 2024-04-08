@@ -5,6 +5,7 @@ import traceback
 import time
 
 NOTIONAL_SAFETY_RATIO = 1.25
+USER_BOOST = 2
 
 class Bot:
     def __init__(self, app):
@@ -128,13 +129,13 @@ class Bot:
                                         # if the leader has the symbol in his amounts... calculate all the necessary stats to reproduce the shares
                                         if symbol in pool_leader["amounts"].keys():
                                             leader_weight_share = leader_weight / leaders_total_weight
-                                            leader_position_leverage = pool_leader["leverages"][symbol]
+                                            # leader_position_leverage = pool_leader["leverages"][symbol]
                                             leader_live_ratio = pool_leader["account"]["liveRatio"]
                                             leader_share = pool_leader["shares"][symbol]
                                             user_leverage = user["leverage"]
 
-                                            position_leverage_ratio = leader_position_leverage / user_leverage
-                                            user_share = leader_weight_share * leader_live_ratio * leader_share * position_leverage_ratio * user_leverage
+                                            # position_leverage_ratio = leader_position_leverage / user_leverage
+                                            user_share = leader_weight_share * leader_live_ratio * leader_share * user_leverage * USER_BOOST #* position_leverage_ratio
 
                                             if pool_leader["amounts"][symbol] > 0:
                                                 user_shares += user_share
@@ -153,8 +154,8 @@ class Bot:
                                                 "__leader_weight_share": leader_weight_share,
                                                 "____leaders_total_weight": leaders_total_weight,
                                                 "____leader_weight": leader_weight,
-                                                "_position_leverage_ratio": position_leverage_ratio,
-                                                "____leader_position_leverage": leader_position_leverage,
+                                                # "_position_leverage_ratio": position_leverage_ratio,
+                                                # "____leader_position_leverage": leader_position_leverage,
                                                 "__leader_live_ratio": leader_live_ratio,
                                                 "__leader_share": leader_share,
                                             }
@@ -229,7 +230,7 @@ class Bot:
     async def open_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix, full=False):
         notional_pass = True
 
-        if full == True and symbol in user["liveAmounts"].keys():
+        if symbol in user["liveAmounts"].keys():
             last_amount = user["liveAmounts"][symbol]
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
@@ -298,13 +299,13 @@ class Bot:
                 pass
             
         else:
-            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Could Not Open Position: {symbol} - Notional Difference: {amount_diff}', details={"collateralMarginLevel": user["collateralMarginLevel"]}, notify=False)
+            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', details={"collateralMarginLevel": user["collateralMarginLevel"]}, notify=False)
 
 
     async def close_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix, full=False):
         notional_pass = True
 
-        if full == True and symbol in user["liveAmounts"].keys():
+        if user["liveAmounts"].keys():
             last_amount = user["liveAmounts"][symbol]
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
@@ -369,7 +370,7 @@ class Bot:
 
                 pass
         else:
-            await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Could Not Close Position: {symbol} - Notional Difference: {amount_diff}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
+            await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
 
 
     async def change_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
@@ -404,6 +405,9 @@ class Bot:
                 # user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
 
                 await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/AJUST',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}')
+
+            else:
+                await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/REJECT',f'Did Not Ajust Position: {symbol} - Notional Difference: {diff_value}', details={"collateralMarginLevel": user["collateralMarginLevel"]}, notify=False)
 
         except Exception as e:
             await self.handle_exception(user, e, 'change_position', symbol, log, current_user_mix)
