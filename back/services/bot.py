@@ -295,10 +295,10 @@ class Bot:
                         await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
                             
             else:
-                current_user_mix[symbol] = user["mix"][symbol]
+                current_user_mix[symbol] = user["liveAmounts"][symbol]
                 # await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
         except Exception as e:
-            current_user_mix[symbol] = user["mix"][symbol]
+            current_user_mix[symbol] = user["liveAmounts"][symbol]
             await self.handle_exception(user, e, 'open_position', symbol, log, current_user_mix)
 
 
@@ -365,10 +365,10 @@ class Bot:
                         else:
                             await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/PARTIAL',f'Partially Closed Position: {symbol} - {new_amount}', details=log, notify=False)
             else:
-                current_user_mix[symbol] = user["mix"][symbol]
+                current_user_mix[symbol] = user["liveAmounts"][symbol]
                 # await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
         except Exception as e:
-            current_user_mix[symbol] = user["mix"][symbol]
+            current_user_mix[symbol] = user["liveAmounts"][symbol]
             await self.handle_exception(user, e, 'close_position', symbol, log, current_user_mix)
      
 
@@ -407,10 +407,10 @@ class Bot:
                 await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/AJUST',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}')
 
             else:
-                current_user_mix[symbol] = user["mix"][symbol]
+                current_user_mix[symbol] = user["liveAmounts"][symbol]
                 # await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/REJECT',f'Did Not Ajust Position: {symbol} - Notional Difference: {diff_value}',notify=False, insert=False)
         except Exception as e:
-            current_user_mix[symbol] = user["mix"][symbol]
+            current_user_mix[symbol] = user["liveAmounts"][symbol]
             await self.handle_exception(user, e, 'change_position', symbol, log, current_user_mix)
 
 
@@ -444,6 +444,4 @@ class Bot:
         trace = traceback.format_exc()
 
         await self.app.log.create(user, 'ERROR', f'bot/{source}', 'TRADE', f'Error Setting Position: {symbol} - {error}', details={"trace": trace, "log": log})
-
     
-
