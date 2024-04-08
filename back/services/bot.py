@@ -237,14 +237,15 @@ class Bot:
         print(last_amount, new_amount)
         last_final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
         new_final_amount, _ = self.truncate_amount(new_amount, precision, symbol_price)
-        amount_diff, amount_diff_value = self.truncate_amount(last_amount - new_amount, precision, symbol_price)
+        amount_diff, _ = self.truncate_amount(last_amount - new_amount, precision, symbol_price)
+        diff_value = abs(last_amount - new_amount) * symbol_price 
         target_value = amount_diff * symbol_price 
         responses = []
         print('symbol, last_final_amount, new_final_amount, amount_diff')
         print(symbol, last_final_amount, new_final_amount, amount_diff)
         print('abs(amount_diff) / last_final_amount')
         print(abs(amount_diff) / last_final_amount)
-        if abs(amount_diff_value) > precision["minNotional"]:
+        if diff_value > precision["minNotional"]:
             if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
                 if new_amount > 0:
                     if amount_diff < 0:
