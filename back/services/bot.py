@@ -4,7 +4,7 @@ from bson.objectid import ObjectId
 import traceback
 import time
 
-NOTIONAL_SAFETY_RATIO = 1.25
+NOTIONAL_SAFETY_RATIO = 1.05
 USER_BOOST = 2
 
 class Bot:
@@ -92,7 +92,7 @@ class Bot:
                                         "symbol_price": symbol_price,
                                     }
 
-                                    if abs(user["amounts"][symbol]) * symbol_price < precision["minNotional"]:
+                                    if abs(user["amounts"][symbol]) * symbol_price < precision["minNotional"] * NOTIONAL_SAFETY_RATIO:
                                         new_amount = precision["minQty"]
                                     
                                         if user["amounts"][symbol] < 0:
@@ -240,7 +240,7 @@ class Bot:
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
             
-            if diff_value < precision["minNotional"]:
+            if diff_value < precision["minNotional"] * NOTIONAL_SAFETY_RATIO:
                 notional_pass = False
 
             if notional_pass:
@@ -326,7 +326,7 @@ class Bot:
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
             
-            if diff_value < precision["minNotional"]:
+            if diff_value < precision["minNotional"] * NOTIONAL_SAFETY_RATIO:
                 notional_pass = False
 
             if notional_pass:
@@ -401,33 +401,35 @@ class Bot:
             last_amount = user["liveAmounts"][symbol]
             new_final_amount, _ = self.truncate_amount(new_amount, precision, symbol_price)
             last_final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
+            amount_diff = new_amount - last_amount
+            target_value = amount_diff * symbol_price 
             success = False
-                # target_value = amount_diff * symbol_price 
-                
-            if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
-                amount_diff = new_amount - last_amount
-                if new_amount > 0:
-                    if amount_diff > 0:
-                        await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+            
+            if target_value > precision["minNotional"] * NOTIONAL_SAFETY_RATIO:
+                if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
+                    if new_amount > 0:
+                        if amount_diff > 0:
+                            await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+                        else:
+                            await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
                     else:
-                        await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+                        if amount_diff > 0:
+                            await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+                        else:
+                            await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+                    success = True
+
                 else:
-                    if amount_diff > 0:
-                        await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
-                    else:
-                        await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
-                success = True
-            else:
-                close_position = await self.close_position(user, symbol, -last_final_amount, precision, symbol_price, log, current_user_mix)
-                if close_position:
-                    open_position = await self.open_position(user, symbol, new_final_amount, precision, symbol_price, log, current_user_mix)
-                    if open_position:
-                        success = True
-                # user["amounts"][symbol] = new_final_amount
-                # user["values"][symbol] = target_value
-                # user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
-            if success:
-                await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/AJUST',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}')
+                    close_position = await self.close_position(user, symbol, -last_final_amount, precision, symbol_price, log, current_user_mix)
+                    if close_position:
+                        open_position = await self.open_position(user, symbol, new_final_amount, precision, symbol_price, log, current_user_mix)
+                        if open_position:
+                            success = True
+                    # user["amounts"][symbol] = new_final_amount
+                    # user["values"][symbol] = target_value
+                    # user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
+                if success:
+                    await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/AJUST',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}')
         
         except Exception as e:
             current_user_mix[symbol] = user["mix"][symbol]
@@ -449,8 +451,8 @@ class Bot:
         if amount < precision["minQty"]:
             amount = precision["minQty"]
 
-        if amount * price < precision["minNotional"]:
-            amount = precision["minNotional"] / price
+        if amount * price < precision["minNotional"] * NOTIONAL_SAFETY_RATIO:
+            amount = precision["minNotional"] * NOTIONAL_SAFETY_RATIO / price
 
         amount = round(amount, asset_precision)
 
