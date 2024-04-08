@@ -169,7 +169,7 @@ class Scrap:
                             "status": detail_data["status"],
                             "initInvestAsset": detail_data["initInvestAsset"],
                             "positionShow": detail_data["positionShow"],
-                            "updateTime": utils.current_time(),
+                            "updatedAt": utils.current_time(),
                             "historicPNL": 0,
                             "transferBalance": 0,
                             "totalBalance": 0,
@@ -217,7 +217,7 @@ class Scrap:
                     "status": detail_data["status"],
                     "initInvestAsset": detail_data["initInvestAsset"],
                     "positionShow": detail_data["positionShow"],
-                    "updateTime": utils.current_time(),
+                    "updatedAt": utils.current_time(),
                 })
 
 
@@ -242,7 +242,7 @@ class Scrap:
             update = {
                 "totalBalance": total_balance,
                 "liveRatio": leader["positionsValue"] / total_balance,
-                "updateTime": utils.current_time()
+                "updatedAt": utils.current_time()
             }
 
             leader.update(update)
@@ -333,6 +333,7 @@ class Scrap:
             fetch_data_response = self.fetch_data(binanceId, "positions").json()
 
             if fetch_data_response["success"]:
+                positions_data = fetch_data_response["data"]
                 latest_amounts = leader["amounts"]
                 positions_notional_value = 0
                 positions_value = 0
@@ -342,17 +343,33 @@ class Scrap:
                 notional_values = {}
                 shares = {}
                 leverages = {}
+                # unknown_symbols = []
 
-                for position in fetch_data_response["data"]:
+                # for position in positions_data:
+                #     if position["symbol"] not in bot["symbols"].keys():
+                #         unknown_symbols.append(symbol)
+
+                # if len(unknown_symbols) > 0:
+                #     self.app.binance.exchange_data(bot, unknown_symbols)
+
+                for position in positions_data:
                     position_amount = float(position["positionAmount"])
 
-                    if  position_amount != 0:
+                    if  position_amount != 0: #and bot["symbols"][position["symbol"]] == True:
+                        symbol = position["symbol"]
+                        thousand = False
                         position["leaderId"] = leader["_id"]
                         leverage = position["leverage"]
                         notional_value = float(position["notionalValue"])
                         position_value = abs(notional_value / leverage)
-                        # print(notional_value, position_value)
-                        symbol = position["symbol"]
+
+                        if symbol.startswith('1000'):
+                            symbol = symbol[4:]
+                            thousand = True
+
+                        if symbol not in bot["precisions"].keys():
+                            bot["precisions"][symbol] = self.app.binance.get_asset_precision(symbol, thousand)
+                            await self.app.db.bot.update_one({}, {"$set": {"precisions": bot["precisions"], "updatedAt": utils.current_time()}})
 
                         if symbol not in amounts: 
                             amounts[symbol] = 0
@@ -406,12 +423,15 @@ class Scrap:
                     "shares": shares,
                     "values": values,
                     "leverages": leverages,
-                    "updateTime": utils.current_time(),
+                    "updatedAt": utils.current_time(),
                     }
                 # print(update)
                 leader.update(update)
 
                 await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
+
+                # if len(unknown_symbols) > 0:
+                #     self.app.db.bot.update_one({}, {"$set": {"symbols": bot["symbols"]}})
 
             return fetch_data_response
         

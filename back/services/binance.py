@@ -6,6 +6,7 @@ import json
 from urllib.parse import urlencode
 import hmac
 import hashlib
+import traceback
 
 class Binance:
     def __init__(self, app):
@@ -38,6 +39,19 @@ class Binance:
     #         }
     #     )
     #     print(userdata)
+    def exchange_information(self, bot, symbols):
+        weigth = 20
+        
+        exchange_data = self.client.exchange_info(symbols=symbols)
+
+        symbols = {}
+
+        for symbol in exchange_data["symbols"]:
+            symbols[symbol["symbol"]] = symbol["isMarginTradingAllowed"]
+
+        print(symbols)
+        bot["symbols"].update(symbols)
+
 
     def account_snapshot(self, user):
         weigth = 10
@@ -68,24 +82,23 @@ class Binance:
     async def open_position(self, user, symbol:str, amount:float):
         weight = 6
 
-        if user["collateralMarginLevel"] > 2:
-            side = 'BUY'
-            if amount < 0:
-                side = 'SELL'
+        # try:
+        side = 'BUY'
+        if amount < 0:
+            side = 'SELL'
 
-            response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='MARGIN_BUY')
-
-            return response
+        response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='MARGIN_BUY')
         
-        else:
-            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
+        return response
 
-            time.sleep(5)
-            return
+        # except Exception as e:
+        #     await self.handle_exception(user, e, 'open_position', symbol)
+            
 
-    def close_position(self, symbol:str, amount:float):
+    async def close_position(self, user, symbol:str, amount:float):
         weight = 6
 
+        # try:
         side = 'BUY'
         if amount < 0:
             side = 'SELL'
@@ -93,8 +106,12 @@ class Binance:
         response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
 
         return response
-    
-    def get_asset_precision(self, symbol:str):
+        
+        # except Exception as e:
+        #     await self.handle_exception(user, e, 'close_position', symbol)
+        
+
+    def get_asset_precision(self, symbol:str, thousand=False):
         weight = 20
 
         response = self.client.exchange_info(symbol=symbol)
@@ -107,8 +124,9 @@ class Binance:
             if symbol_filter["filterType"] == "NOTIONAL":
                 min_notional = float(symbol_filter['minNotional'])
             
-        return {"stepSize": step_size, "minQty": min_quantity, "minNotional": min_notional}
+        return {"stepSize": step_size, "minQty": min_quantity, "minNotional": min_notional, "thousand": thousand}
     
+
     async def close_all_positions(self, user):
         user_amounts, user_mix = user["amounts"], user["mix"] 
 
@@ -131,3 +149,10 @@ class Binance:
         await self.app.db.users.update_one({"username": "root"}, {"$set": {"mix": user_mix, "amounts": user_amounts}})
 
         # await self.app.log.create(user, source='Binance Service', category='Positions', message='Closed all positions')
+
+    async def handle_exception(self, user, error, source, symbol):
+        trace = traceback.format_exc()
+
+        await self.app.log.create(user, 'ERROR', f'client/{source}', 'TRADE', f'Error in Binance API: {symbol} - {error}', details=trace)
+
+        return None

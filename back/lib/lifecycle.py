@@ -36,7 +36,9 @@ async def db_startup(db):
             "notionalValue": 0,
             "positionsValue": 0,
             "collateralMarginLevel": 0,
-            "collateralValueUSDT": 0
+            "collateralValueUSDT": 0,
+            "updatedAt": 0,
+            "reset": False
         }
 
         await db.users.insert_one(root_user_data)
@@ -105,7 +107,7 @@ async def db_startup(db):
 
     bot_data = {
         "active": True,
-        "updateTime": int(time.time() * 1000),
+        "updatedAt": int(time.time() * 1000),
         "tickInterval": 30,
         "shutdownTime": 0,
         "ticks": 0,
@@ -113,7 +115,9 @@ async def db_startup(db):
         "precisions": {},
         "totalWeight": 0,
         "chatId": 1031182213,
-        "logLevel": "INFO"
+        "logLevel": "INFO",
+        "_id": 'BOT',
+        "symbols": {}
     }
 
     await db.bot.insert_one(bot_data)

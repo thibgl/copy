@@ -30,7 +30,7 @@ class Log:
 
         self.app.db.log.insert_one(log)
 
-        content = f'[{utils.current_readable_time()}] {level} <{source}> {category}: {message}'
+        content = f'[{utils.current_readable_time()}]: {level} <{source}> {category}: {message}'
 
         print(content)
 

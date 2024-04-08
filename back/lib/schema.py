@@ -47,7 +47,7 @@ class PositionHistory(MongoModel):
     isolated: str
     side: str
     status: str
-    updateTime: int
+    updatedAt: int
     leaderId: ObjectIdType = Field(None)
 
 class Position(MongoModel):
@@ -87,7 +87,7 @@ class Leader(MongoModel):
     status: str
     initInvestAsset: str
     positionShow: bool
-    updateTime: int
+    updatedAt: int
     historicPNL: float
     totalBalance: float
     liveRatio: float
@@ -125,7 +125,7 @@ class AllLeaders(APIResponse):
 #     value: Optional[int] = None
 #     positionShared: bool
 #     twitterUrl: Optional[str] = None
-#     updateTime: int
+#     updatedAt: int
 #     followerCount: int
 #     leaderboardUrl: str
 

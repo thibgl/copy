@@ -1,5 +1,5 @@
 
-# todo: close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# todo: opti portoflio en fonction de la perf, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -38,7 +38,6 @@ app.scrap = Scrap(app)
 app.bot = Bot(app)
 app.log = Log(app)
 
-asyncio.create_task(app.bot.tick_positions())
 
 @app.post('/scrap/{portfolioId}/{dataType}')
 async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
@@ -56,7 +55,7 @@ async def create_leader(leaderId: str):
 
 @app.get('/api/tick_positions')
 async def tick_positions():
-    await app.bot.tick_positions(API=True)
+    await app.bot.tick(API=True)
 
 @app.get('/user/follow/{binanceId}')
 async def follow(binanceId: str):
@@ -70,7 +69,7 @@ async def follow(binanceId: str):
             {"username": "root"}, 
             {
                 "$set": {
-                    "updateTime": int(time.time() * 1000),
+                    "updatedAt": int(time.time() * 1000),
                     "followedLeaders": user["followedLeaders"],
                 }
             }
@@ -84,7 +83,7 @@ async def toogle_bot():
     await app.db.bot.update_one({}, {"$set": {"active": not bot["active"]}})
 
     if active:
-        asyncio.create_task(app.bot.tick_positions())
+        asyncio.create_task(app.bot.tick())
 
     print(f'[{utils.current_readable_time()}]: Bot is now Active: {not bot["active"]}')
 
@@ -205,28 +204,39 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 @app.on_event("startup")
 async def startup():
     # await db_startup(app.db)
-    # leaders = [{'3876446298872838657': 2}, {'3907342150781504256': 1}, {'3842534998056366337': 1}]
+    # bot = await app.db.bot.find_one()
+    # # app.binance.exchange_information(bot, ['BTCUSDT', 'ETHUSDT', 'FTMUSDT', 'PEPEUSDT'])
+    # user = await app.db.users.find_one()
+    # leaders = {
+    #     "3810983022188954113": 2, #"type":"trumpet"
+    #     '3876446298872838657': 2, #"type":"trumpet"
+    #     '3907342150781504256': 1, #"type": "flat"
+    #     '3842534998056366337': 1, #"type": "flat"
+    #     '3716273180201331968': 1, #"type": "agro"
+    #     '3695768829010696193': 1, #"type": "agro"
+    #     '3843810303408715009': 1 #"type": "agro"
+    # }
     # followed_leaders = {}
-    # for leaderId, ratio in leaders.items():
+    # for leaderId, ratio in leaders.items():   
+    #     print(leaderId, ratio)
     #     await app.scrap.create_leader(leaderId)
-    #     user = await app.db.users.find_one()
     #     leader = await app.db.leaders.find_one({"binanceId": leaderId})
     #     if leader["_id"] not in user["followedLeaders"].keys():
     #         followed_leaders[str(leader["_id"])] = ratio
-
+    # print(followed_leaders)
     # await app.db.users.update_one(
-    #     {"username": "root"}, 
+    #     {}, 
     #     {
     #         "$set": {
-    #             "updateTime": int(time.time() * 1000),
-    #             "followedLeaders": user["followedLeaders"],
+    #             "updatedAt": int(time.time() * 1000),
+    #             "followedLeaders": followed_leaders
     #         }
     #     }
     # )
 
+    asyncio.create_task(app.bot.tick())
+
     # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
-    
-    pass
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
