@@ -230,7 +230,7 @@ class Bot:
     async def open_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix, full=False):
         notional_pass = True
 
-        if symbol in user["liveAmounts"].keys():
+        if full and symbol in user["liveAmounts"].keys():
             last_amount = user["liveAmounts"][symbol]
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
@@ -302,11 +302,13 @@ class Bot:
         else:
             await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', details={"collateralMarginLevel": user["collateralMarginLevel"]}, notify=False)
 
+            current_user_mix.pop(symbol)
+
 
     async def close_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix, full=False):
         notional_pass = True
 
-        if user["liveAmounts"].keys():
+        if full and user["liveAmounts"].keys():
             last_amount = user["liveAmounts"][symbol]
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
@@ -373,6 +375,8 @@ class Bot:
         else:
             await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
 
+            current_user_mix.pop(symbol)
+
 
     async def change_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
         try:
@@ -409,6 +413,8 @@ class Bot:
 
             else:
                 await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/REJECT',f'Did Not Ajust Position: {symbol} - Notional Difference: {diff_value}', details={"collateralMarginLevel": user["collateralMarginLevel"]}, notify=False)
+
+                current_user_mix.pop(symbol)
 
         except Exception as e:
             await self.handle_exception(user, e, 'change_position', symbol, log, current_user_mix)
