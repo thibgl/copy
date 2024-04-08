@@ -86,9 +86,9 @@ class Binance:
     def close_position(self, symbol:str, amount:float):
         weight = 6
 
-        side = 'SELL'
+        side = 'BUY'
         if amount < 0:
-            side = 'BUY'
+            side = 'SELL'
 
         response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
 

@@ -237,8 +237,8 @@ class Bot:
         print(last_amount, new_amount)
         last_final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
         new_final_amount, _ = self.truncate_amount(new_amount, precision, symbol_price)
-        amount_diff, _ = self.truncate_amount(last_amount - new_amount, precision, symbol_price)
-        diff_value = abs(last_amount - new_amount) * symbol_price 
+        amount_diff, _ = self.truncate_amount(new_amount - last_amount, precision, symbol_price)
+        diff_value = abs(new_amount - last_amount) * symbol_price 
         target_value = amount_diff * symbol_price 
         responses = []
         print('symbol, last_final_amount, new_final_amount, amount_diff')
@@ -293,7 +293,7 @@ class Bot:
         last_amount = user["liveAmounts"][symbol]
         final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
 
-        close_response = self.app.binance.close_position(symbol, final_amount)
+        close_response = self.app.binance.close_position(symbol, -final_amount)
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
         current_time = utils.current_time()
 
