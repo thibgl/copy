@@ -13,7 +13,7 @@ class Log:
         self.bot = Bot(token=TOKEN)
         self.token_url = f'https://api.telegram.org/bot{TOKEN}/getUpdates'
 
-    async def create(self, user, level, source, category, message, details='', notify=True, collection=None, itemId=None):
+    async def create(self, user, level, source, category, message, details='', notify=True, insert=True, collection=None, itemId=None):
         log = {
             "userId": user["_id"],
             "createdAt": utils.current_time(),
@@ -28,7 +28,8 @@ class Log:
         if collection and itemId:
             log = log | {"collection": collection, "itemId": itemId}
 
-        self.app.db.log.insert_one(log)
+        if insert:
+            self.app.db.log.insert_one(log)
 
         content = f'[{utils.current_readable_time()}]: {level} <{source}> {category}: {message}'
 
