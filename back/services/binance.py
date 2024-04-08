@@ -56,7 +56,7 @@ class Binance:
     def account_snapshot(self, user):
         weigth = 10
 
-        assets_lookup = ['USDT', 'BNB']
+        # assets_lookup = ['USDT', 'BNB']
         margin_account_data = self.client.margin_account()
         liveAmounts = {}
         # print(margin_account_data)
@@ -77,7 +77,13 @@ class Binance:
         user["collateralValueUSDT"] = float(margin_account_data["totalCollateralValueInUSDT"])
         user["collateralMarginLevel"] = float(margin_account_data["collateralMarginLevel"])
 
-        # self.app.db.users.update_one({"username": "root"}, {"$set": {"account": user["account"]}})
+        self.app.db.users.update_one({"_id": user["_id"]}, {"$set": {
+            "liveAmounts": user["liveAmounts"],
+            "valueBTC": user["valueBTC"],
+            "valueUSDT": user["valueUSDT"],
+            "collateralValueUSDT": user["collateralValueUSDT"],
+            "collateralMarginLevel": user["collateralMarginLevel"]
+        }})
     
     async def open_position(self, user, symbol:str, amount:float):
         weight = 6

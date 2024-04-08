@@ -67,14 +67,15 @@ class Bot:
                                 current_user_mix[symbol] += amount
 
                     if user["reset"] == True:
-                        user["mix"] = {}
+                        for symbol, value in user["mix"].items():
+                            user["mix"][symbol] = value + 0.0000000001
                     # if the mix are different, one leader has changed its positions
                     if current_user_mix != user["mix"]:
                         n_orders = 0
                         
                         current_mix_set, latest_mix_set = set(current_user_mix.items()), set(user["mix"].items())
                         current_mix_difference, last_mix_difference = current_mix_set.difference(latest_mix_set), latest_mix_set.difference(current_mix_set)
-
+                        print(current_mix_difference, last_mix_difference)
                         for symbol, mix_amount in last_mix_difference:
                             if mix_amount != 0:
                                 # if the symbol is not in the current user mix, then it has been closed
@@ -297,7 +298,7 @@ class Bot:
                 pass
             
         else:
-            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Could Not Open Position: {symbol} - Notional Difference: {amount_diff}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
+            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Could Not Open Position: {symbol} - Notional Difference: {amount_diff}', details={"collateralMarginLevel": user["collateralMarginLevel"]}, notify=False)
 
 
     async def close_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix, full=False):
@@ -343,6 +344,7 @@ class Bot:
                     await self.app.db.users.update_one({"_id": user["_id"]}, {"$set": {
                         "updatedAt": current_time,
                         "amounts": user["amounts"],
+                        "liveAmounts": user["liveAmounts"],
                         "values": user["values"],
                         "shares": user["shares"],
                         "notionalValues": user["notionalValues"]
@@ -415,7 +417,7 @@ class Bot:
         
         if precision["thousand"]:
             price = price / 1000
-            
+
         positive = True
         if amount < 0:
             positive = False
