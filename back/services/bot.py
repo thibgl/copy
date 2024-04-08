@@ -297,13 +297,20 @@ class Bot:
 
                     else:
                         await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
-                            
+                    
+                    return True 
+                  
             else:
                 current_user_mix[symbol] = user["mix"][symbol]
                 # await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
+                
+                return False
+            
         except Exception as e:
             current_user_mix[symbol] = user["mix"][symbol]
             await self.handle_exception(user, e, 'open_position', symbol, log, current_user_mix)
+            
+            return False
 
 
     async def close_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
@@ -372,51 +379,56 @@ class Bot:
                         await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {new_amount}', details=log)
                     else:
                         await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/PARTIAL',f'Partially Closed Position: {symbol} - {new_amount}', details=log, notify=False)
+            
+                    return True 
+
             else:
                 current_user_mix[symbol] = user["mix"][symbol]
                 # await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
+                
+                return False
+            
         except Exception as e:
             current_user_mix[symbol] = user["mix"][symbol]
             await self.handle_exception(user, e, 'close_position', symbol, log, current_user_mix)
+            
+            return False
      
 
 
     async def change_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
         try:
             last_amount = user["liveAmounts"][symbol]
-            amount_diff = new_amount - last_amount
-            diff_value = abs(amount_diff) * symbol_price 
-
-            if diff_value > precision["minNotional"]:
-                new_final_amount, _ = self.truncate_amount(new_amount, precision, symbol_price)
-                last_final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
+            new_final_amount, _ = self.truncate_amount(new_amount, precision, symbol_price)
+            last_final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
+            success = False
                 # target_value = amount_diff * symbol_price 
                 
-                if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
-                    if new_amount > 0:
-                        if amount_diff > 0:
-                            await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
-                        else:
-                            await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+            if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
+                amount_diff = new_amount - last_amount
+                if new_amount > 0:
+                    if amount_diff > 0:
+                        await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
                     else:
-                        if amount_diff > 0:
-                            await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
-                        else:
-                            await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+                        await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
                 else:
-                    await self.close_position(user, symbol, -last_final_amount, precision, symbol_price, log, current_user_mix)
-
-                    await self.open_position(user, symbol, new_final_amount, precision, symbol_price, log, current_user_mix)
-                
+                    if amount_diff > 0:
+                        await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+                    else:
+                        await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
+                success = True
+            else:
+                close_position = await self.close_position(user, symbol, -last_final_amount, precision, symbol_price, log, current_user_mix)
+                if close_position:
+                    open_position = await self.open_position(user, symbol, new_final_amount, precision, symbol_price, log, current_user_mix)
+                    if open_position:
+                        success = True
                 # user["amounts"][symbol] = new_final_amount
                 # user["values"][symbol] = target_value
                 # user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
-
+            if success:
                 await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/AJUST',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}')
-
-            else:
-                current_user_mix[symbol] = user["mix"][symbol]
-                # await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/REJECT',f'Did Not Ajust Position: {symbol} - Notional Difference: {diff_value}',notify=False, insert=False)
+        
         except Exception as e:
             current_user_mix[symbol] = user["mix"][symbol]
             await self.handle_exception(user, e, 'change_position', symbol, log, current_user_mix)
