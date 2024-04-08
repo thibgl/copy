@@ -208,7 +208,7 @@ class Bot:
     async def open_position(self, user, symbol, amount, precision, symbol_price):
             if user["collateralMarginLevel"] > 2:
                 final_amount, final_value  = self.truncate_amount(amount, precision, symbol_price)
-                open_response = self.app.binance.open_position(symbol, final_amount)
+                open_response = await self.app.binance.open_position(user, symbol, final_amount)
                 current_time = utils.current_time()
 
                 await self.app.db.live.insert_one({
@@ -231,49 +231,66 @@ class Bot:
             else:
                 await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
 
-    async def change_position(self, user, symbol, amount, precision, symbol_price):
+    async def change_position(self, user, symbol, new_amount, precision, symbol_price):
         last_amount = user["liveAmounts"][symbol]
-        print(f'{symbol} CHANGE POSITION')
-        print('amount, last_amount, symbol_price')
-        print(amount, last_amount, symbol_price)
-        live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
-
-        amount_diff = amount - last_amount
-        final_amount, final_value = self.truncate_amount(amount_diff, precision, symbol_price)
-        
-        if amount > last_amount:
-            if user["collateralMarginLevel"] > 2:
-                binance_reponse = self.app.binance.open_position(symbol, abs(final_amount))
+        print('last_amount, new_amount')
+        print(last_amount, new_amount)
+        last_final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
+        new_final_amount, _ = self.truncate_amount(new_amount, precision, symbol_price)
+        amount_diff, amount_diff_value = self.truncate_amount(last_amount - new_amount, precision, symbol_price)
+        target_value = amount_diff * symbol_price 
+        responses = []
+        print('symbol, last_final_amount, new_final_amount, amount_diff')
+        print(symbol, last_final_amount, new_final_amount, amount_diff)
+        print('abs(amount_diff) / last_final_amount')
+        print(abs(amount_diff) / last_final_amount)
+        if abs(amount_diff_value) > precision["minNotional"]:
+            if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
+                if new_amount > 0:
+                    if amount_diff < 0:
+                        print(f'Opening {amount_diff}')
+                        open_response = await self.app.binance.open_position(user, symbol, amount_diff)
+                        responses.append(open_response)
+                    else:
+                        print(f'Closing {amount_diff}')
+                        close_response = self.app.binance.close_position(symbol, amount_diff)
+                        responses.append(close_response)
+                else:
+                    if amount_diff < 0:
+                        print(f'Closing {amount_diff}')
+                        close_response = self.app.binance.close_position(symbol, amount_diff)
+                        responses.append(close_response)
+                    else:
+                        print(f'Opening {amount_diff}')
+                        open_response = await self.app.binance.open_position(user, symbol, amount_diff)
+                        responses.append(open_response)
             else:
-                await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
+                print('SWITCH AMOUNT')
+                print(f'Closing {last_final_amount}')
+                close_response = self.app.binance.close_position(symbol, last_final_amount)
+                responses.append(close_response)
+                print(f'Opening {new_final_amount}')
+                open_response = await self.app.binance.open_position(user, symbol, new_final_amount)
+                responses.append(open_response)
 
-                time.sleep(5)
-                return
-        else:
-            binance_reponse = self.app.binance.close_position(symbol, abs(final_amount))
+            live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
+            await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": {
+                "amount": new_final_amount,
+                "value": target_value,
+                "orders": live_position["orders"] + responses,
+                "updatedAt": utils.current_time(),
+            }})
+            
+            user["amounts"][symbol] = new_final_amount
+            user["values"][symbol] = target_value
+            user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
 
-
-        target_amount = last_amount + final_amount
-        target_value = target_amount * symbol_price 
-        print('target_amount, target_value')
-        print(target_amount, target_value)
-        await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": {
-            "amount": target_amount,
-            "value": target_value,
-            "orders": live_position["orders"] + [binance_reponse],
-            "updatedAt": utils.current_time(),
-        }})
-        
-        user["amounts"][symbol] = target_amount
-        user["values"][symbol] = target_value
-        user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
-
-        await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE',f'Ajusted Position: {symbol} - {last_amount} to {target_amount}', details=binance_reponse)
+            await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}', details=responses)
 
 
     async def close_position(self, user, symbol, precision, symbol_price):
         last_amount = user["liveAmounts"][symbol]
-        final_amount, final_valuet = self.truncate_amount(last_amount, precision, symbol_price)
+        final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
 
         close_response = self.app.binance.close_position(symbol, final_amount)
         live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})

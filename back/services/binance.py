@@ -65,16 +65,23 @@ class Binance:
 
         # self.app.db.users.update_one({"username": "root"}, {"$set": {"account": user["account"]}})
     
-    def open_position(self, symbol:str, amount:float):
+    async def open_position(self, user, symbol:str, amount:float):
         weight = 6
 
-        side = 'BUY'
-        if amount < 0:
-            side = 'SELL'
+        if user["collateralMarginLevel"] > 2:
+            side = 'BUY'
+            if amount < 0:
+                side = 'SELL'
 
-        response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='MARGIN_BUY')
+            response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='MARGIN_BUY')
 
-        return response
+            return response
+        
+        else:
+            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
+
+            time.sleep(5)
+            return
 
     def close_position(self, symbol:str, amount:float):
         weight = 6
