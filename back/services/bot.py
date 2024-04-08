@@ -300,7 +300,7 @@ class Bot:
                 pass
             
         else:
-            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
+            # await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
 
             current_user_mix.pop(symbol)
 
@@ -373,7 +373,7 @@ class Bot:
 
                 pass
         else:
-            await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
+            # await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
 
             current_user_mix.pop(symbol)
 
@@ -412,7 +412,7 @@ class Bot:
                 await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/AJUST',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}')
 
             else:
-                await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/REJECT',f'Did Not Ajust Position: {symbol} - Notional Difference: {diff_value}',notify=False, insert=False)
+                # await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/REJECT',f'Did Not Ajust Position: {symbol} - Notional Difference: {diff_value}',notify=False, insert=False)
 
                 current_user_mix.pop(symbol)
 
