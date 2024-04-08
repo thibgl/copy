@@ -76,7 +76,7 @@ class Bot:
                         
                         current_mix_set, latest_mix_set = set(current_user_mix.items()), set(user["mix"].items())
                         current_mix_difference, last_mix_difference = current_mix_set.difference(latest_mix_set), latest_mix_set.difference(current_mix_set)
-                        print(current_mix_difference, last_mix_difference)
+                        # print(current_mix_difference, last_mix_difference)
                         for symbol, mix_amount in last_mix_difference:
                             if mix_amount != 0:
                                 # if the symbol is not in the current user mix, then it has been closed
