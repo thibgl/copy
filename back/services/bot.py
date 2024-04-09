@@ -402,7 +402,6 @@ class Bot:
             last_amount = user["liveAmounts"][symbol]
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
-            success = False
 
             if diff_value > precision["minNotional"] * NOTIONAL_SAFETY_RATIO:
                 if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
@@ -416,20 +415,13 @@ class Bot:
                             await self.close_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
                         else:
                             await self.open_position(user, symbol, amount_diff, precision, symbol_price, log, current_user_mix)
-                    success = True
 
                 else:
-                    close_position = await self.close_position(user, symbol, -last_amount, precision, symbol_price, log, current_user_mix)
-                    if close_position:
-                        open_position = await self.open_position(user, symbol, new_amount, precision, symbol_price, log, current_user_mix)
-                        if open_position:
-                            success = True
+                    await self.close_position(user, symbol, -last_amount, precision, symbol_price, log, current_user_mix)
+                    await self.open_position(user, symbol, new_amount, precision, symbol_price, log, current_user_mix)
                     # user["amounts"][symbol] = new_final_amount
                     # user["values"][symbol] = target_value
                     # user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
-                if success:
-                    await self.app.log.create(user, 'INFO', 'bot/change_position', 'TRADE/AJUST',f'Ajusted Position: {symbol} - {last_final_amount} to {new_final_amount}')
-        
         except Exception as e:
             current_user_mix[symbol] = user["mix"][symbol]
             await self.handle_exception(user, e, 'change_position', symbol, log, current_user_mix)
