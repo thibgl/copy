@@ -441,16 +441,15 @@ class Scrap:
     # Lifecycle
 
     async def handle_exception(self, bot, error, source):
-            if str(error).startswith('HTTPSConnectionPool'):
-                self.cleanup()
-                self.start()
+            self.cleanup()
+            self.start()
 
             trace = traceback.format_exc()
             print(trace)
 
             await self.app.log.create(bot, 'ERROR', f'scrap/{source}', 'TRADE', f'Error in {source} - {error}', details=trace)
 
-            time.sleep(30)
+            time.sleep(3)
             pass
     
     
