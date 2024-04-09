@@ -400,13 +400,11 @@ class Bot:
     async def change_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
         try:
             last_amount = user["liveAmounts"][symbol]
-            new_final_amount, _ = self.truncate_amount(new_amount, precision, symbol_price)
-            last_final_amount, _ = self.truncate_amount(last_amount, precision, symbol_price)
             amount_diff = new_amount - last_amount
-            target_value = amount_diff * symbol_price 
+            diff_value = abs(amount_diff) * symbol_price 
             success = False
-            
-            if target_value > precision["minNotional"] * NOTIONAL_SAFETY_RATIO:
+
+            if diff_value > precision["minNotional"] * NOTIONAL_SAFETY_RATIO:
                 if (new_amount > 0 and last_amount > 0) or (new_amount < 0 and last_amount < 0):
                     if new_amount > 0:
                         if amount_diff > 0:
@@ -421,9 +419,9 @@ class Bot:
                     success = True
 
                 else:
-                    close_position = await self.close_position(user, symbol, -last_final_amount, precision, symbol_price, log, current_user_mix)
+                    close_position = await self.close_position(user, symbol, -last_amount, precision, symbol_price, log, current_user_mix)
                     if close_position:
-                        open_position = await self.open_position(user, symbol, new_final_amount, precision, symbol_price, log, current_user_mix)
+                        open_position = await self.open_position(user, symbol, new_amount, precision, symbol_price, log, current_user_mix)
                         if open_position:
                             success = True
                     # user["amounts"][symbol] = new_final_amount
