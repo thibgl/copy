@@ -80,7 +80,7 @@ class Bot:
                         for symbol, mix_amount in last_mix_difference:
                             if mix_amount != 0:
                                 # if the symbol is not in the current user mix, then it has been closed
-                                if symbol not in current_user_mix:
+                                if symbol not in current_user_mix.keys():
                                     # * CLOSE
                                     # Find the current symbol price
                                     symbol_price = float(self.app.binance.client.ticker_price(symbol)["price"])
@@ -154,6 +154,7 @@ class Bot:
                                                 "__leader_weight_share": leader_weight_share,
                                                 "____leaders_total_weight": leaders_total_weight,
                                                 "____leader_weight": leader_weight,
+                                                "__USER_BOOST": USER_BOOST,
                                                 # "_position_leverage_ratio": position_leverage_ratio,
                                                 # "____leader_position_leverage": leader_position_leverage,
                                                 "__leader_live_ratio": leader_live_ratio,
@@ -171,7 +172,7 @@ class Bot:
                                 }
 
                                 # if the symbol is in the last mix, the position has changed
-                                if symbol in user["mix"]:
+                                if symbol in user["mix"].keys() and symbol in user["liveAmounts"].keys():
                                     # * CHANGE
                                     await self.change_position(user, symbol, new_user_amount, precision, symbol_prices[symbol], log, current_user_mix)
                                     n_orders += 1
