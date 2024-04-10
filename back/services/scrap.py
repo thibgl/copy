@@ -120,10 +120,6 @@ class Scrap:
                             result.append(item)
                             item_index += 1
 
-                            # if endpointType == "position_history":
-                            #     print('ITEM')
-                            #     print(latest_item[reference], item[reference], item[reference] > latest_item[reference])
-                            #     print(item)
                             if item_index == 10:
                                 next_page = page_number + 1
                                 return await self.fetch_pages(bot, leaderId, endpointType, params, next_page, result, latest_item, reference)
@@ -316,16 +312,13 @@ class Scrap:
 
     async def tick_position_history(self, bot, leader):
         try:
-            print('')
-            print(leader)
             latest_position = await self.app.db.position_history.find_one(
                 {"leaderId": leader["_id"]},
                 sort=[('updateTime', -1)]
             )
             
-            print(latest_position)
             position_history_response = await self.fetch_pages(bot, leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
-            print(position_history_response)
+
             if position_history_response["success"]:
                 new_position_history = position_history_response["data"]
                 partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})

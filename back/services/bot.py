@@ -68,8 +68,6 @@ class Bot:
 
                                 current_user_mix[symbol] += amount * weight / leaders_total_weight
 
-                    print(n_leaders)
-
                     if user["reset"] == True:
                         for symbol, value in user["mix"].items():
                             user["mix"][symbol] = value + 0.0000000001
@@ -79,7 +77,7 @@ class Bot:
                         
                         current_mix_set, latest_mix_set = set(current_user_mix.items()), set(user["mix"].items())
                         current_mix_difference, last_mix_difference = current_mix_set.difference(latest_mix_set), latest_mix_set.difference(current_mix_set)
-                        print(current_mix_difference, last_mix_difference)
+
                         for symbol, mix_amount in last_mix_difference:
                             if mix_amount != 0:
                                 # if the symbol is not in the current user mix, then it has been closed
@@ -138,8 +136,6 @@ class Bot:
                                             user_leverage = user["leverage"]
 
                                             # position_leverage_ratio = leader_position_leverage / user_leverage
-                                            print('leader_weight_share, leader_live_ratio, leader_share, user_leverage, USER_BOOST')
-                                            print(leader_weight_share, leader_live_ratio, leader_share, user_leverage, USER_BOOST)
                                             user_share = leader_weight_share * leader_live_ratio * leader_share * user_leverage * USER_BOOST #* position_leverage_ratio
 
                                             if pool_leader["amounts"][symbol] > 0:
