@@ -65,79 +65,100 @@ class Scrap:
         return headers
     # Requests
     
-    def fetch_data(self, leaderId, endpointType, params={}):
-        endpoint = endpoints[endpointType]
-        # Filter out the empty params
-        filtered_params = {}
-        for default_key, default_value in endpoint['params'].items():
-            if default_key in params.keys() and params[default_key] is not None:
-                filtered_params[default_key] = params[default_key]
-            else:
-                filtered_params[default_key] = default_value
-
-        if endpoint["type"] == 'simple':
-            # Interpolate strings
-            path = endpoint["path"] % (leaderId, *filtered_params.values())
-            url = '/'.join([self.API_PATH, path])
-
-            response = self.session.get(url, headers=self.gen_headers())
-
-        if endpoint["type"] == 'paginated':
-            url = '/'.join([self.API_PATH, endpoint["path"]])
-
-            response = self.session.post(
-                url,
-                json={"portfolioId": leaderId} | filtered_params,
-                headers=self.gen_headers()
-                )
-
-        return response
-
-    def fetch_pages(self, leaderId, endpointType, params={}, page_number=None, result=None, latest_item=None, reference=None):
-        if page_number is None:
-            page_number = 1
-        if result is None:
-            result = []
-
-        response = self.fetch_data(leaderId, endpointType, {"pageNumber": page_number} | params).json()
-
-        if response["success"]:
-            response_data = response["data"]
-            response_list = response_data["list"]
-
-            if latest_item and reference:
-                response_list = sorted(response_list, key=lambda x: x[reference], reverse=True)
-
-                for item in response_list:
-                    if item[reference] > latest_item[reference]:
-                        result.append(item)
-                    else:
-                        # print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
-                        return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
-            else:
-                result = result + response_list
-                pages_length = response_data["total"] // 10
-                # If remainder, add another page
-                if response_data["total"] % 10:
-                    pages_length += 1
-
-                if page_number <= pages_length:
-                    next_page = page_number + 1
-                    # self.cooldown()
-                    return self.fetch_pages(leaderId, endpointType, params, next_page, result)
-
+    async def fetch_data(self, bot, leaderId, endpointType, params={}):
+        try:
+            endpoint = endpoints[endpointType]
+            # Filter out the empty params
+            filtered_params = {}
+            for default_key, default_value in endpoint['params'].items():
+                if default_key in params.keys() and params[default_key] is not None:
+                    filtered_params[default_key] = params[default_key]
                 else:
-                    return { "success": True, "reason": "full", "message": f"Fetched all pages of {endpointType}", "data": result }
+                    filtered_params[default_key] = default_value
+
+            if endpoint["type"] == 'simple':
+                # Interpolate strings
+                path = endpoint["path"] % (leaderId, *filtered_params.values())
+                url = '/'.join([self.API_PATH, path])
+
+                response = self.session.get(url, headers=self.gen_headers())
+
+            if endpoint["type"] == 'paginated':
+                url = '/'.join([self.API_PATH, endpoint["path"]])
+
+                response = self.session.post(
+                    url,
+                    json={"portfolioId": leaderId} | filtered_params,
+                    headers=self.gen_headers()
+                    )
+
+            return response.json()
         
-        else:
-            return { "success": False, "message": f"Could not fetch page {page_number}/{pages_length} of {endpointType}" }
+        except Exception as e:
+            await self.handle_exception(bot, e, 'fetch_data')
+
+    async def fetch_pages(self, bot, leaderId, endpointType, params={}, page_number=None, result=None, latest_item=None, reference=None):
+        try:
+            if page_number is None:
+                page_number = 1
+            if result is None:
+                result = []
+
+            response = await self.fetch_data(bot, leaderId, endpointType, {"pageNumber": page_number} | params)
+
+   
+            if response["success"]:
+                response_data = response["data"]
+                response_list = response_data["list"]
+                
+                if latest_item and reference:
+                    response_list = sorted(response_list, key=lambda x: x[reference], reverse=True)
+                    item_index = 0
+
+                    for item in response_list:
+                        if item[reference] > latest_item[reference]:
+                            result.append(item)
+                            item_index += 1
+
+                            # if endpointType == "position_history":
+                            #     print('ITEM')
+                            #     print(latest_item[reference], item[reference], item[reference] > latest_item[reference])
+                            #     print(item)
+                            if item_index == 10:
+                                next_page = page_number + 1
+                                return await self.fetch_pages(bot, leaderId, endpointType, params, next_page, result, latest_item, reference)
+                        else:
+                            # print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
+                            return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
+                else:
+                    print('LASR ITEM OR REF MISSING')
+                    result = result + response_list
+                    pages_length = response_data["total"] // 10
+                    # If remainder, add another page
+                    if response_data["total"] % 10:
+                        pages_length += 1
+
+                    if page_number <= pages_length:
+                        next_page = page_number + 1
+                        # self.cooldown()
+                        print('RECURSIVE CALL')
+                        return await self.fetch_pages(bot, leaderId, endpointType, params, next_page, result)
+
+                    else:
+                        return { "success": True, "reason": "full", "message": f"Fetched all pages of {endpointType}", "data": result }
+            
+            else:
+                return { "success": False, "message": f"Could not fetch page {page_number}/{pages_length} of {endpointType}" }
+            
+        except Exception as e:
+            await self.handle_exception(bot, e, 'fetch_pages')
 
  
     # DB Injections
     async def create_leader(self, leaderId):
         try:   
             bot = await self.app.db.bot.find_one()
-            detail_reponse = self.fetch_data(leaderId, "detail").json()
+            detail_reponse = await self.fetch_data(bot, leaderId, "detail")
 
             if detail_reponse["success"]:
                 detail_data = detail_reponse["data"]
@@ -208,7 +229,7 @@ class Scrap:
 
     async def tick_leader(self, bot, leader):
         try:   
-            detail_reponse = self.fetch_data(leader["binanceId"], "detail").json()
+            detail_reponse = await self.fetch_data(bot, leader["binanceId"], "detail")
 
             if detail_reponse["success"]:
                 detail_data = detail_reponse["data"]
@@ -261,7 +282,7 @@ class Scrap:
                     sort=[('time', -1)]
                 )
 
-            transfer_history_response = self.fetch_pages(leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
+            transfer_history_response = await self.fetch_pages(bot, leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
             # print(transfer_history_response)
             # transfers = []
 
@@ -295,12 +316,16 @@ class Scrap:
 
     async def tick_position_history(self, bot, leader):
         try:
+            print('')
+            print(leader)
             latest_position = await self.app.db.position_history.find_one(
                 {"leaderId": leader["_id"]},
                 sort=[('updateTime', -1)]
             )
-            position_history_response = self.fetch_pages(leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
-
+            
+            print(latest_position)
+            position_history_response = await self.fetch_pages(bot, leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
+            print(position_history_response)
             if position_history_response["success"]:
                 new_position_history = position_history_response["data"]
                 partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
@@ -330,7 +355,7 @@ class Scrap:
     async def tick_positions(self, bot, leader):
         try:
             binanceId = leader["binanceId"]
-            fetch_data_response = self.fetch_data(binanceId, "positions").json()
+            fetch_data_response = await self.fetch_data(bot, binanceId, "positions")
 
             if fetch_data_response["success"]:
                 positions_data = fetch_data_response["data"]
@@ -441,16 +466,14 @@ class Scrap:
     # Lifecycle
 
     async def handle_exception(self, bot, error, source):
-            self.cleanup()
-            self.start()
+        trace = traceback.format_exc()
 
-            trace = traceback.format_exc()
-            print(trace)
+        await self.app.log.create(bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details=trace)
 
-            await self.app.log.create(bot, 'ERROR', f'scrap/{source}', 'TRADE', f'Error in {source} - {error}', details=trace)
+        self.cleanup()
+        self.start()
 
-            time.sleep(3)
-            pass
+        time.sleep(30)
     
     
     def start(self):

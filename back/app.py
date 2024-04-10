@@ -1,5 +1,5 @@
 
-# todo: opti portoflio en fonction de la perf, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# todo: telegram, sleeping leaders delay not working, history in open and close neither, opti portoflio en fonction de la perf, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.hash import bcrypt
 from starlette.middleware.cors import CORSMiddleware
 from datetime import timedelta
-from services import Binance, Auth, Scrap, Bot, Log
+from services import Binance, Auth, Scrap, Bot, Log #, Telegram
 from lib import *
 import uvicorn
 import time
@@ -207,6 +207,7 @@ async def startup():
     # bot = await app.db.bot.find_one()
     # # app.binance.exchange_information(bot, ['BTCUSDT', 'ETHUSDT', 'FTMUSDT', 'PEPEUSDT'])
     # user = await app.db.users.find_one()
+    # await app.log.bot.send_message(chat_id=user["chatId"], text='HEYB')
     # leaders = {
     #     "3810983022188954113": 2, #"type":"trumpet"
     #     '3876446298872838657': 2, #"type":"trumpet"
@@ -245,5 +246,7 @@ async def shutdown_db_client():
 
 
 if __name__ == '__main__':
+    # app.telegram = Telegram(app)
+
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
 

@@ -46,7 +46,7 @@ class Bot:
                                             {"leaderId": leader["_id"]},
                                             sort=[('updateTime', -1)]
                                     )
-
+                                    # print(latest_position)
                                     if latest_position != None and utils.current_time() - latest_position["updateTime"] < 1800000:
                                         pool[leaderId] = leader
                                         leaders_total_weight += weight
@@ -79,7 +79,7 @@ class Bot:
                         
                         current_mix_set, latest_mix_set = set(current_user_mix.items()), set(user["mix"].items())
                         current_mix_difference, last_mix_difference = current_mix_set.difference(latest_mix_set), latest_mix_set.difference(current_mix_set)
-                        # print(current_mix_difference, last_mix_difference)
+                        print(current_mix_difference, last_mix_difference)
                         for symbol, mix_amount in last_mix_difference:
                             if mix_amount != 0:
                                 # if the symbol is not in the current user mix, then it has been closed
@@ -125,7 +125,7 @@ class Bot:
                                     if leaderId not in dropped_leaders:
                                         if "account" not in pool[leaderId].keys():
                                             # get the current balance and live ratio
-                                            pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(bot, leader)
+                                            pool[leaderId]["account"] = await self.app.scrap.update_leader_stats(bot, pool[leaderId])
 
                                         pool_leader = pool[leaderId]
 
@@ -138,6 +138,8 @@ class Bot:
                                             user_leverage = user["leverage"]
 
                                             # position_leverage_ratio = leader_position_leverage / user_leverage
+                                            print('leader_weight_share, leader_live_ratio, leader_share, user_leverage, USER_BOOST')
+                                            print(leader_weight_share, leader_live_ratio, leader_share, user_leverage, USER_BOOST)
                                             user_share = leader_weight_share * leader_live_ratio * leader_share * user_leverage * USER_BOOST #* position_leverage_ratio
 
                                             if pool_leader["amounts"][symbol] > 0:
@@ -165,6 +167,7 @@ class Bot:
                                             }
                                             leaders_log.append(leader_log)
 
+                                print('user["valueUSDT"], user_shares, symbol_price')
                                 symbol_price = symbol_prices[symbol]
                                 new_user_amount = (user["valueUSDT"] * user_shares) / symbol_price
                                 log = {
@@ -297,7 +300,7 @@ class Bot:
                         if new:
                             await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {final_amount}', details=log)
                         else:
-                            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/PARTIAL',f'Partially Opened Position: {symbol} - {last_amount} -> {last_amount + final_amount}', details=log, notify=False)
+                            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/PARTIAL',f'Partially Opened Position: {symbol} - {last_amount} -> {last_amount + final_amount}', details=log)
 
                     else:
                         await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Could Not Open Position: {symbol} - Margin Level: {user["collateralMarginLevel"]}', details={"collateralMarginLevel": user["collateralMarginLevel"]})
@@ -382,7 +385,7 @@ class Bot:
                     if new:
                         await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {final_amount}', details=log)
                     else:
-                        await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/PARTIAL',f'Partially Closed Position: {symbol} - {last_amount} -> {last_amount + final_amount}', details=log, notify=False)
+                        await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/PARTIAL',f'Partially Closed Position: {symbol} - {last_amount} -> {last_amount + final_amount}', details=log)
             
                     return True 
 
