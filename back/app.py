@@ -1,5 +1,6 @@
 
-# todo: telegram, sleeping leaders delay not working, history in open and close neither, opti portoflio en fonction de la perf, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# todo: telegram, sleeping leaders delay not working, opti portoflio en fonction de la perf, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
+# todo: inclure le type dans le mix que si il a engagé un minimum de son capital
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -205,7 +206,10 @@ async def read_user(current_user: User = Depends(app.auth.get_current_user)):
 async def startup():
     # await db_startup(app.db)
     # bot = await app.db.bot.find_one()
-    # # app.binance.exchange_information(bot, ['BTCUSDT', 'ETHUSDT', 'FTMUSDT', 'PEPEUSDT'])
+    # app.binance.exchange_information(bot, ['BIGTIMEUSDT'])
+    # symbol = '1000SHIBUSDT'
+    # await app.binance.get_asset_precision(bot, symbol)
+    # print(symbol)
     # user = await app.db.users.find_one()
     # await app.log.bot.send_message(chat_id=user["chatId"], text='HEYB')
     # leaders = {
@@ -235,9 +239,10 @@ async def startup():
     #     }
     # )
 
-    asyncio.create_task(app.bot.tick())
+    # asyncio.create_task(app.bot.tick())
 
     # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
+    pass
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 import hmac
 import hashlib
 import traceback
+from lib import utils
 
 class Binance:
     def __init__(self, app):
@@ -117,21 +118,43 @@ class Binance:
         #     await self.handle_exception(user, e, 'close_position', symbol)
         
 
-    def get_asset_precision(self, symbol:str, thousand=False):
+    async def get_asset_precision(self, bot, symbol:str):
         weight = 20
+        thousand = False
+        invalid_symbol = False
 
-        response = self.client.exchange_info(symbol=symbol)
-        details = response['symbols'][0]
-        # print(details)
-        for symbol_filter in details["filters"]:
-            if symbol_filter["filterType"] == "LOT_SIZE":
-                step_size = symbol_filter["stepSize"]
-                min_quantity = float(symbol_filter["minQty"])
-            if symbol_filter["filterType"] == "NOTIONAL":
-                min_notional = float(symbol_filter['minNotional'])
-            
-        return {"stepSize": step_size, "minQty": min_quantity, "minNotional": min_notional, "thousand": thousand}
-    
+        if symbol.startswith('1000'):
+            symbol = symbol[4:]
+            thousand = True
+
+        if symbol not in bot["precisions"].keys():
+            try:
+                response = self.client.exchange_info(symbol=symbol)
+
+                details = response['symbols'][0]
+                # print(details)
+                for symbol_filter in details["filters"]:
+                    if symbol_filter["filterType"] == "LOT_SIZE":
+                        step_size = symbol_filter["stepSize"]
+                        min_quantity = float(symbol_filter["minQty"])
+                    if symbol_filter["filterType"] == "NOTIONAL":
+                        min_notional = float(symbol_filter['minNotional'])
+
+                precision = {"stepSize": step_size, "minQty": min_quantity, "minNotional": min_notional, "thousand": thousand}
+            except Exception as e:
+                if e.args[2] == 'Invalid symbol.':
+                    precision = {"stepSize": None, "minQty": None, "minNotional": None, "thousand": None}
+                    invalid_symbol = True
+
+            bot["precisions"][symbol] = precision
+            await self.app.db.bot.update_one({"_id": bot["_id"]}, {"$set": {"precisions": bot["precisions"], "updatedAt": utils.current_time()}})
+        else:
+            precision = bot["precisions"][symbol]
+
+        if invalid_symbol:
+            return None, precision
+        
+        return symbol, precision
 
     async def close_all_positions(self, user):
         user_amounts, user_mix = user["amounts"], user["mix"] 

@@ -355,6 +355,9 @@ class Bot:
                         user["shares"].pop(symbol)
                         user["values"].pop(symbol)
                         user["notionalValues"].pop(symbol)
+
+                        if symbol in user["liveAmounts"].keys():
+                            user["liveAmounts"][symbol] = 0
                     else:
                         await self.app.db.live.update_one({"userId": user["_id"], "symbol": symbol}, {"$set": live_position})
 

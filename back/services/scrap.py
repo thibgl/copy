@@ -5,6 +5,7 @@ from fake_useragent import UserAgent
 from lib import utils
 import traceback
 import time
+from tqdm import tqdm
 
 endpoints = {
     "positions" : {
@@ -97,7 +98,8 @@ class Scrap:
         except Exception as e:
             await self.handle_exception(bot, e, 'fetch_data', response)
 
-    async def fetch_pages(self, bot, leaderId, endpointType, params={}, page_number=None, result=None, latest_item=None, reference=None):
+
+    async def fetch_pages(self, bot, leaderId, endpointType, params={}, page_number=None, result=None, latest_item=None, reference=None, progress_bar=None):
         try:
             if page_number is None:
                 page_number = 1
@@ -105,12 +107,11 @@ class Scrap:
                 result = []
 
             response = await self.fetch_data(bot, leaderId, endpointType, {"pageNumber": page_number} | params)
-
    
             if response["success"]:
                 response_data = response["data"]
                 response_list = response_data["list"]
-                
+
                 if latest_item and reference:
                     response_list = sorted(response_list, key=lambda x: x[reference], reverse=True)
                     item_index = 0
@@ -127,19 +128,23 @@ class Scrap:
                             # print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
                             return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
                 else:
-                    print('LASR ITEM OR REF MISSING')
-                    result = result + response_list
-                    pages_length = response_data["total"] // 10
+                    result += response_list
+                    total_n_results = response_data["total"]
+                    pages_length = total_n_results // 10
+
+                    if progress_bar is None:
+                        await self.app.log.create(bot, 'INFO', 'scrap/fetch_pages', 'SCRAP/CREATE',f'Scraping {endpointType} for {leaderId}')
+                        progress_bar = tqdm(total=total_n_results)
+
+                    progress_bar.update(len(response_list))
                     # If remainder, add another page
-                    if response_data["total"] % 10:
+                    if total_n_results % 10:
                         pages_length += 1
 
                     if page_number <= pages_length:
                         next_page = page_number + 1
-                        # self.cooldown()
-                        print('RECURSIVE CALL')
-                        return await self.fetch_pages(bot, leaderId, endpointType, params, next_page, result)
 
+                        return await self.fetch_pages(bot, leaderId, endpointType, params, next_page, result, progress_bar=progress_bar)
                     else:
                         return { "success": True, "reason": "full", "message": f"Fetched all pages of {endpointType}", "data": result }
             
@@ -356,38 +361,17 @@ class Scrap:
                 positions_notional_value = 0
                 positions_value = 0
                 positions = []
-                amounts = {}
-                values = {}
-                notional_values = {}
-                shares = {}
-                leverages = {}
-                # unknown_symbols = []
-
-                # for position in positions_data:
-                #     if position["symbol"] not in bot["symbols"].keys():
-                #         unknown_symbols.append(symbol)
-
-                # if len(unknown_symbols) > 0:
-                #     self.app.binance.exchange_data(bot, unknown_symbols)
+                amounts, values, notional_values, shares, leverages = {}, {}, {}, {}, {}
 
                 for position in positions_data:
                     position_amount = float(position["positionAmount"])
+                    symbol, _ = await self.app.binance.get_asset_precision(bot, position["symbol"])
 
-                    if  position_amount != 0: #and bot["symbols"][position["symbol"]] == True:
-                        symbol = position["symbol"]
-                        thousand = False
+                    if symbol and position_amount != 0:
                         position["leaderId"] = leader["_id"]
                         leverage = position["leverage"]
                         notional_value = float(position["notionalValue"])
                         position_value = abs(notional_value / leverage)
-
-                        if symbol.startswith('1000'):
-                            symbol = symbol[4:]
-                            thousand = True
-
-                        if symbol not in bot["precisions"].keys():
-                            bot["precisions"][symbol] = self.app.binance.get_asset_precision(symbol, thousand)
-                            await self.app.db.bot.update_one({}, {"$set": {"precisions": bot["precisions"], "updatedAt": utils.current_time()}})
 
                         if symbol not in amounts: 
                             amounts[symbol] = 0
