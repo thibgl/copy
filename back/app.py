@@ -1,6 +1,7 @@
 
 # todo: telegram, sleeping leaders delay not working, opti portoflio en fonction de la perf, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 # todo: inclure le type dans le mix que si il a engagé un minimum de son capital
+# todo: V3 ==> PANDAS / NUMPY
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body

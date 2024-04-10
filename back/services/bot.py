@@ -16,6 +16,7 @@ class Bot:
 
         while bot["active"]:
             try:
+                start_time = utils.current_time()
                 bot = await self.app.db.bot.find_one()
                 print(f'[{utils.current_readable_time()}]: Fetching Positions')
 
@@ -218,7 +219,8 @@ class Bot:
                 await self.app.db.bot.update_one({}, {"$inc": {"ticks": 1}, "$set": {"updatedAt": utils.current_time()}})
 
                 if not API:
-                    await asyncio.sleep(bot["tickInterval"])
+                    end_time = (utils.current_time() - start_time) / 1000
+                    await asyncio.sleep(bot["tickInterval"] - end_time)
 
             except Exception as e:
                 trace = traceback.format_exc()
@@ -334,7 +336,7 @@ class Bot:
                 final_amount, final_value = self.truncate_amount(new_amount, precision, symbol_price)
                 live_position = await self.app.db.live.find_one({"userId": user["_id"], "symbol": symbol})
                 current_time = utils.current_time()
-
+            
                 live_position.update({
                     "amount": 0,
                     "value": 0,
@@ -345,7 +347,7 @@ class Bot:
 
                 if close_response:
                     live_position.update({"orders": live_position["orders"] + [close_response]})
-                    fully_closed = last_amount + final_amount == 0
+                    fully_closed = symbol not in current_user_mix.keys()
 
                     if fully_closed:
                         live_position.update({"closedAt": current_time})
@@ -427,7 +429,7 @@ class Bot:
                     if closed:
                         opened = await self.open_position(user, symbol, new_amount, precision, symbol_price, log, current_user_mix)
                     if not closed or not opened:
-                        await self.app.log.create(user, 'WARNING', 'bot/change_position', 'TRADE/INCOMPLETE',f'Did Not Switch Position: {symbol} - Closed {}: {-last_amount} {closed} -> Opened: {new_amount} {opened}', notify=False, insert=True)
+                        await self.app.log.create(user, 'WARNING', 'bot/change_position', 'TRADE/INCOMPLETE',f'Did Not Switch Position: {symbol} - Closed: {-last_amount} {closed} -> Opened: {new_amount} {opened}', notify=False, insert=True)
                     # user["amounts"][symbol] = new_final_amount
                     # user["values"][symbol] = target_value
                     # user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
