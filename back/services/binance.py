@@ -121,7 +121,6 @@ class Binance:
     async def get_asset_precision(self, bot, symbol:str):
         weight = 20
         thousand = False
-        invalid_symbol = False
 
         if symbol.startswith('1000'):
             symbol = symbol[4:]
@@ -144,14 +143,13 @@ class Binance:
             except Exception as e:
                 if e.args[2] == 'Invalid symbol.':
                     precision = {"stepSize": None, "minQty": None, "minNotional": None, "thousand": None}
-                    invalid_symbol = True
 
             bot["precisions"][symbol] = precision
             await self.app.db.bot.update_one({"_id": bot["_id"]}, {"$set": {"precisions": bot["precisions"], "updatedAt": utils.current_time()}})
         else:
             precision = bot["precisions"][symbol]
 
-        if invalid_symbol:
+        if precision["stepSize"] == None:
             return None, precision
         
         return symbol, precision

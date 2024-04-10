@@ -226,7 +226,7 @@ class Bot:
 
                 await self.app.log.create(bot, 'ERROR', 'bot/tick_positions', 'TRADE',f'Error in tick_position - {e}', details=traceback)
 
-                time.sleep(30)
+                time.sleep(bot["tickInterval"])
 
 
     async def open_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
@@ -303,7 +303,8 @@ class Bot:
                     return True 
                   
             else:
-                current_user_mix[symbol] = user["mix"][symbol]
+                if symbol in user["mix"].keys():
+                    current_user_mix[symbol] = user["mix"][symbol]
                 # await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/REJECT',f'Did Not Open Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
                 
                 return False
@@ -387,7 +388,8 @@ class Bot:
                     return True 
 
             else:
-                current_user_mix[symbol] = user["mix"][symbol]
+                if symbol in user["mix"].keys():
+                    current_user_mix[symbol] = user["mix"][symbol]
                 # await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/REJECT',f'Did Not Close Position: {symbol} - Notional Difference: {diff_value}', notify=False, insert=False)
                 
                 return False
@@ -425,12 +427,13 @@ class Bot:
                     if closed:
                         opened = await self.open_position(user, symbol, new_amount, precision, symbol_price, log, current_user_mix)
                     if not closed or not opened:
-                        await self.app.log.create(user, 'WARNING', 'bot/change_position', 'TRADE/INCOMPLETE',f'Did Not Switch Position: {symbol} - Closed: {closed} -> Opened: {opened}', notify=False, insert=True)
+                        await self.app.log.create(user, 'WARNING', 'bot/change_position', 'TRADE/INCOMPLETE',f'Did Not Switch Position: {symbol} - Closed {}: {-last_amount} {closed} -> Opened: {new_amount} {opened}', notify=False, insert=True)
                     # user["amounts"][symbol] = new_final_amount
                     # user["values"][symbol] = target_value
                     # user["notionalValues"][symbol] = abs(target_value) / user["leverage"]
         except Exception as e:
-            current_user_mix[symbol] = user["mix"][symbol]
+            if symbol in user["mix"].keys():
+                current_user_mix[symbol] = user["mix"][symbol]
             await self.handle_exception(user, e, 'change_position', symbol, log, current_user_mix)
 
 
