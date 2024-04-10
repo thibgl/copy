@@ -95,7 +95,7 @@ class Scrap:
             return response.json()
         
         except Exception as e:
-            await self.handle_exception(bot, e, 'fetch_data')
+            await self.handle_exception(bot, e, 'fetch_data', response)
 
     async def fetch_pages(self, bot, leaderId, endpointType, params={}, page_number=None, result=None, latest_item=None, reference=None):
         try:
@@ -147,7 +147,7 @@ class Scrap:
                 return { "success": False, "message": f"Could not fetch page {page_number}/{pages_length} of {endpointType}" }
             
         except Exception as e:
-            await self.handle_exception(bot, e, 'fetch_pages')
+            await self.handle_exception(bot, e, 'fetch_pages', response)
 
  
     # DB Injections
@@ -220,7 +220,7 @@ class Scrap:
                 return { "success": False, "message": "Leader is not sharing Positions" }
 
         except Exception as e:
-            await self.handle_exception(bot, e, 'create_leader')
+            await self.handle_exception(bot, e, 'create_leader', detail_reponse)
 
 
     async def tick_leader(self, bot, leader):
@@ -244,7 +244,7 @@ class Scrap:
                 )
             
         except Exception as e:
-            await self.handle_exception(bot, e, 'tick_leader')
+            await self.handle_exception(bot, e, 'tick_leader', detail_reponse)
 
 
     async def update_leader_stats(self, bot, leader):
@@ -268,7 +268,7 @@ class Scrap:
 
             return update
         except Exception as e:
-            await self.handle_exception(bot, e, 'update_leader_stats')
+            await self.handle_exception(bot, e, 'update_leader_stats', leader)
 
     
     async def tick_transfer_history(self, bot, leader):
@@ -307,7 +307,7 @@ class Scrap:
             return transfer_history_response
         
         except Exception as e:
-            await self.handle_exception(bot, e, 'tick_transfer_history')
+            await self.handle_exception(bot, e, 'tick_transfer_history', transfer_history_response)
 
 
     async def tick_position_history(self, bot, leader):
@@ -342,7 +342,7 @@ class Scrap:
             return position_history_response
         
         except Exception as e:
-            await self.handle_exception(bot, e, 'tick_position_history')
+            await self.handle_exception(bot, e, 'tick_position_history', position_history_response)
 
 
     async def tick_positions(self, bot, leader):
@@ -454,14 +454,14 @@ class Scrap:
             return fetch_data_response
         
         except Exception as e:
-            await self.handle_exception(bot, e, 'tick_positions')
+            await self.handle_exception(bot, e, 'tick_positions', fetch_data_response)
 
     # Lifecycle
 
-    async def handle_exception(self, bot, error, source):
+    async def handle_exception(self, bot, error, source, details):
         trace = traceback.format_exc()
 
-        await self.app.log.create(bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details=trace)
+        await self.app.log.create(bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details={"trace": trace, "log": details})
 
         self.cleanup()
         self.start()

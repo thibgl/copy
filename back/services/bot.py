@@ -163,7 +163,6 @@ class Bot:
                                             }
                                             leaders_log.append(leader_log)
 
-                                print('user["valueUSDT"], user_shares, symbol_price')
                                 symbol_price = symbol_prices[symbol]
                                 new_user_amount = (user["valueUSDT"] * user_shares) / symbol_price
                                 log = {
@@ -233,12 +232,10 @@ class Bot:
     async def open_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
         try:
             last_amount = 0
-            new = True
             notional_pass = True
 
             if symbol in user["liveAmounts"].keys():
                 last_amount = user["liveAmounts"][symbol]
-                new = False
 
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
@@ -265,7 +262,9 @@ class Bot:
                     open_response = await self.app.binance.open_position(user, symbol, final_amount)
 
                     if open_response:
-                        if new:
+                        fully_opened = last_amount == 0
+
+                        if fully_opened:
                             position.update({"createdAt": current_time, "orders": [open_response]})
                             await self.app.db.live.insert_one(position)
                         else:
@@ -286,14 +285,14 @@ class Bot:
 
                         log.update({
                             "type": "OPEN",
-                            "new": new,
+                            "full": fully_opened,
                             "amount": new_amount,
                             "final_amount": final_amount,
                             "final_value": final_value,
                             "response": open_response
                         })
             
-                        if new:
+                        if fully_opened:
                             await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {final_amount}', details=log)
                         else:
                             await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/PARTIAL',f'Partially Opened Position: {symbol} - {last_amount} -> {last_amount + final_amount}', details=log)
@@ -319,12 +318,10 @@ class Bot:
     async def close_position(self, user, symbol, new_amount, precision, symbol_price, log, current_user_mix):
         try:
             last_amount = 0
-            new = True
             notional_pass = True
 
             if symbol in user["liveAmounts"].keys():
                 last_amount = user["liveAmounts"][symbol]
-                new = False
 
             amount_diff = new_amount - last_amount
             diff_value = abs(amount_diff) * symbol_price 
@@ -347,8 +344,9 @@ class Bot:
 
                 if close_response:
                     live_position.update({"orders": live_position["orders"] + [close_response]})
+                    fully_closed = last_amount + final_amount == 0
 
-                    if new:
+                    if fully_closed:
                         live_position.update({"closedAt": current_time})
                         await self.app.db.history.insert_one(live_position)
                         await self.app.db.live.delete_one({"userId": user["_id"], "symbol": symbol})
@@ -371,14 +369,14 @@ class Bot:
                     
                     log.update({
                         "type": "CLOSE",
-                        "new": new,
+                        "full": fully_closed,
                         "amount": new_amount,
                         "final_amount": final_amount,
                         "final_value": final_value,
                         "response": close_response
                     })
                 
-                    if new:
+                    if fully_closed:
                         await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {final_amount}', details=log)
                     else:
                         await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/PARTIAL',f'Partially Closed Position: {symbol} - {last_amount} -> {last_amount + final_amount}', details=log)
