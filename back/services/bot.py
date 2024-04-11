@@ -25,6 +25,8 @@ class Bot:
                 dropped_leaders = []
 
                 async for user in users:
+                    self.app.binance.account_snapshot(user)
+
                     current_user_mix = {}
                     leaders_total_weight = 0
 
@@ -110,7 +112,6 @@ class Bot:
 
                         # if they are mixes in the current difference, positions have been changed or opened
                         if len(current_mix_difference) > 0:
-                            self.app.binance.account_snapshot(user)
                             symbol_prices = {}
 
                         for symbol, mix_amount in current_mix_difference:
