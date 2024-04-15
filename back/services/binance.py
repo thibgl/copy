@@ -40,9 +40,9 @@ class Binance:
         df["leader_WEIGHT_SHARE"] = df["leader_WEIGHT"] / df.index.unique().size
         df["TARGET_SHARE"] = df["leader_WEIGHT_SHARE"] * df["leader_UNLEVERED_RATIO"] * df["leader_LEVERED_POSITION_SHARE"]
         df["TARGET_VALUE"] = valueUSDT * df["TARGET_SHARE"] * user["account"]["data"]["leverage"]
+        df.loc[df["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
         df["ABSOLUTE_TARGET_VALUE"] = df["TARGET_VALUE"].abs()
         df["TARGET_AMOUNT"] = df["TARGET_VALUE"] / df["leader_markPrice_AVERAGE"]
-        df.loc[df["leader_positionAmount_SUM"] < 0, "TARGET_AMOUNT"] *= -1
         df = df[["leader_symbol", "netAsset", "leader_markPrice_AVERAGE", "TARGET_VALUE", "ABSOLUTE_TARGET_VALUE", "TARGET_AMOUNT"]].groupby("leader_symbol").apply(self.aggregate_current_positions, include_groups=False).reset_index()
         # print(df)
         return df
@@ -121,7 +121,7 @@ class Binance:
 
             },
             "positions": positions.set_index("asset").to_dict(),
-            "mix": new_user_mix.to_dict()
+            "mix": new_user_mix
         }
 
         return user_account_update, positions_closed[["symbol", "netAsset"]], positions_opened[["leader_symbol", "TARGET_AMOUNT", "ABSOLUTE_TARGET_VALUE"]], positions_changed[["leader_symbol", "netAsset", "ABSOLUTE_CURRENT_VALUE", "TARGET_AMOUNT", "ABSOLUTE_TARGET_VALUE", "DIFF_AMOUNT", "ABSOLUTE_DIFF_VALUE", "OPEN", "SWITCH_DIRECTION"]]

@@ -108,8 +108,11 @@ class Bot:
                         close_amount = self.truncate_amount(-position["netAsset"], precision)
                         await self.app.binance.close_position(user, symbol, close_amount)
 
-                    if position["ABSOLUTE_TARGET_VALUE"] > precision["minNotional"]:
-                        open_amount = self.truncate_amount(position["TARGET_AMOUNT"], precision)
+                        if position["ABSOLUTE_TARGET_VALUE"] > precision["minNotional"]:
+                            open_amount = self.truncate_amount(position["TARGET_AMOUNT"], precision)
+                            await self.app.binance.open_position(user, symbol, open_amount)
+                    else:
+                        open_amount = self.truncate_amount(position["DIFF_AMOUNT"], precision)
                         await self.app.binance.open_position(user, symbol, open_amount)
 
                 else:
