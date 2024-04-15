@@ -1,5 +1,6 @@
 import time 
 from passlib.hash import bcrypt
+from lib import utils
 
 async def db_startup(db):
         # Ensure collections exist
@@ -16,29 +17,54 @@ async def db_startup(db):
     
     if not root_user:
         # Root user doesn't exist, so let's create one
+        current_time = utils.current_time()
+
         root_user_data = {
-            "username": "root",
-            "email": "root@example.com",
-            "password_hash": bcrypt.hash("root"),  # Replace with a secure password
-            "followedLeaders": {},
-            "active": False,
-            "liveRatio": 0,
-            "leverage": 5,
-            "valueBTC": 0,
-            "valueUSDT": 0,
-            "mix": {},
-            "amounts": {},
-            "notionalValues": {},
-            "values": {},
-            "shares": {},
-            "liveAmounts": {},
-            "chatId": 1031182213,
-            "notionalValue": 0,
-            "positionsValue": 0,
-            "collateralMarginLevel": 0,
-            "collateralValueUSDT": 0,
-            "updatedAt": 0,
-            "reset": False
+            "updated": current_time,
+            "updated_date": utils.current_readable_time(),
+            "auth": {
+                "updated": current_time,
+                "data": {
+                    "username": "root",
+                    "email": "root@example.com",
+                    "password_hash": '',
+                    "binance_api_key": '',
+                    "binance_secret_hash": ''
+                    }
+            },
+            "detail": {
+                "updated": current_time,
+                "data": {
+                    "active": True,
+                    "chat_id": 1031182213
+                    }
+            },
+            "account": {           
+                "updated": current_time,
+                "data": {
+                    "leverage": 5,
+                    "value_USDT": 0,
+                    "value_BTC": 0,
+                    "levered_ratio": 0,
+                    "unlevered_ratio": 0,
+                    "collateral_margin_level": 0,
+                    "collateral_value_USDT": 0
+                }
+            },
+            "leaders": {
+                "updated": current_time,
+                "data": {
+                    "WEIGHT": {} #"3846188874749232129": 1, "3907342150781504256": 1
+                }
+            },
+            "positions":{
+                "updated": current_time,
+                "data": []
+            },
+            "mix": {
+                "updated": current_time,
+                "data": {'symbol': {}, 'BAG': {}}
+            }
         }
 
         await db.users.insert_one(root_user_data)
@@ -58,47 +84,47 @@ async def db_startup(db):
     #     await db.create_collection("performances")
     #     await db.leads_performances.create_index([("portfolioId", 1)], unique=True)
 
-    if "positions" in collections:
-        await db.positions.drop()
+    # if "positions" in collections:
+    #     await db.positions.drop()
     
-    await db.create_collection("positions")
-    await db.positions.create_index([("leaderId", 1), ("id", -1)], unique=True)
+    # await db.create_collection("positions")
+    # await db.positions.create_index([("leaderId", 1), ("id", -1)], unique=True)
     # await db.positions.create_index([("leaderId", 1), ("symbol", -1)])
 
-    if "position_history" in collections:
-        await db.position_history.drop()
+    # if "position_history" in collections:
+    #     await db.position_history.drop()
     
-    await db.create_collection("position_history")
-    await db.position_history.create_index([("leaderId", 1), ("id", -1)], unique=True)
+    # await db.create_collection("position_history")
+    # await db.position_history.create_index([("leaderId", 1), ("id", -1)], unique=True)
     # await db.positions.create_index([("leaderId", 1)])
     
     # if "details" not in collections:
     #     await db.create_collection("details")
     #     await db.leads_performances.create_index([("portfolioId", 1)], unique=True)
 
-    if "transfer_history" in collections:
-        await db.transfer_history.drop()
+    # if "transfer_history" in collections:
+    #     await db.transfer_history.drop()
     
-    await db.create_collection("transfer_history")
-    await db.transfer_history.create_index([("leaderId", 1), ("time", -1)], unique=True)
+    # await db.create_collection("transfer_history")
+    # await db.transfer_history.create_index([("leaderId", 1), ("time", -1)], unique=True)
 
-    if "history" in collections:
-        await db.history.drop()
+    # if "history" in collections:
+    #     await db.history.drop()
     
-    await db.create_collection("history")
-    await db.history.create_index([("userId", 1), ("symbol", -1)])
+    # await db.create_collection("history")
+    # await db.history.create_index([("userId", 1), ("symbol", -1)])
 
-    if "live" in collections:
-        await db.live.drop()
+    # if "live" in collections:
+    #     await db.live.drop()
     
-    await db.create_collection("live")
-    await db.live.create_index([("userId", 1), ("symbol", -1)], unique=True)
+    # await db.create_collection("live")
+    # await db.live.create_index([("userId", 1), ("symbol", -1)], unique=True)
 
-    if "log" in collections:
-        await db.log.drop()
+    # if "log" in collections:
+    #     await db.log.drop()
 
-    await db.create_collection("log")
-    await db.log.create_index([("userId", 1)])
+    # await db.create_collection("log")
+    # await db.log.create_index([("userId", 1)])
 
     if "bot" in collections:
         await db.bot.drop()
@@ -112,13 +138,17 @@ async def db_startup(db):
         "shutdownTime": 0,
         "ticks": 0,
         "orders": 0,
-        "precisions": {},
+        "precisions": {"updated": 0, "data": {
+            'stepSize': {},
+            'minQty': {},
+            'minNotional': {},
+            'thousand': {}}
+        },
         "totalWeight": 0,
         "chatId": 1031182213,
         "logLevel": "INFO",
         "_id": 'BOT',
-        "symbols": {}
     }
 
     await db.bot.insert_one(bot_data)
-    await db.bot.create_index([("logId", 1)], unique=True)
+    # await db.bot.create_index([("logId", 1)], unique=True)
