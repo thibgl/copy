@@ -184,6 +184,7 @@ class Binance:
             return symbol, symbol_precisions.loc[symbol]
         
         else:
+            print(symbol)
             precision_response = self.client.exchange_info(symbol=symbol)
 
             details = precision_response['symbols'][0]

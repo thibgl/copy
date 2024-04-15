@@ -34,6 +34,7 @@ class Bot:
 
                     for leader_id, leader_weight in user_leaders.iterrows():
                         if leader_id not in roster.index.unique():
+                            print(leader_id)
                             leader, leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
 
                             if leader:
@@ -128,7 +129,7 @@ class Bot:
         asset_precision = precision["stepSize"].split('1')[0].count('0')
         
         if precision["thousand"]:
-            price = price / 1000
+            amount = amount / 1000
 
         positive = True
         if amount < 0:
