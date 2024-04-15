@@ -42,14 +42,18 @@ class Bot:
                                 leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
                                 leader_mixes = pd.concat([leader_mixes, leader_mix]) if leader_mixes.size > 0 else leader_mix
                     
-                    user_mix = pd.DataFrame(user["mix"]["data"])
-                    user_mix_new = leader_mixes.groupby('symbol').agg('sum').reset_index()
-                    print("user_mix.to_dict(), user_mix_new.to_dict()")
-                    print(user_mix.to_dict(), user_mix_new.to_dict())
+                    user_mix = pd.DataFrame(user["mix"]["data"]).to_dict()
+                    user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict()
+                    # print("user_mix.to_dict(), user_mix_new.to_dict()")
+                    # print(user_mix, user_mix_new)
                     # print("roster")
                     # print(roster)
-                    if user_mix.to_dict() != user_mix_new.to_dict():
-                        user_positions_new = roster[roster.index.isin(user_leaders.index)]
+                    if user_mix != user_mix_new:
+                        user_mix_diff = set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))
+                        # print("user_mix_diff")
+                        # print([bag[0] for bag in user_mix_diff])
+                        user_roster = roster[roster.index.isin(user_leaders.index)]
+                        user_positions_new = user_roster[user_roster["symbol"].isin([bag[0] for bag in user_mix_diff])]
                         user_account, positions_closed, positions_opened, positions_changed = self.app.binance.user_account_update(user, user_positions_new, user_leaders, user_mix_new)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
@@ -76,8 +80,8 @@ class Bot:
                 absolute_value = abs(amount) * symbol_price
                 # print("absolute_value")
                 # print(absolute_value)
-                # if absolute_value > precision["minNotional"]:
-                #     await self.app.binance.close_position(user, symbol, -amount)
+                if absolute_value > precision["minNotional"]:
+                    await self.app.binance.close_position(user, symbol, -amount)
 
 
     async def open_positions(self, bot, user, opened_positions):
@@ -89,7 +93,7 @@ class Bot:
             if precision["stepSize"] and position["ABSOLUTE_TARGET_VALUE"] > precision["minNotional"]:
                 amount = self.truncate_amount(position["TARGET_AMOUNT"], precision)
 
-                # await self.app.binance.open_position(user, symbol, amount)
+                await self.app.binance.open_position(user, symbol, amount)
 
     
     async def change_positions(self, bot, user, changed_positions):
@@ -99,22 +103,22 @@ class Bot:
             symbol, precision = await self.app.binance.get_symbol_precision(bot, symbol)
 
             if precision["stepSize"] and position["ABSOLUTE_DIFF_VALUE"] > precision["minNotional"]:
-                if position["SWITCH"]:
+                if position["SWITCH_DIRECTION"]:
                     if position["ABSOLUTE_CURRENT_VALUE"] > precision["minNotional"]:
-                        close_amount = self.truncate_amount(symbol, -position["netAsset"])
-                        # await self.app.binance.close_position(user, symbol, close_amount)
+                        close_amount = self.truncate_amount(-position["netAsset"], precision)
+                        await self.app.binance.close_position(user, symbol, close_amount)
 
                     if position["ABSOLUTE_TARGET_VALUE"] > precision["minNotional"]:
-                        open_amount = self.truncate_amount(symbol, position["TARGET_AMOUNT"])
-                        # await self.app.binance.open_position(user, symbol, open_amount)
+                        open_amount = self.truncate_amount(position["TARGET_AMOUNT"], precision)
+                        await self.app.binance.open_position(user, symbol, open_amount)
 
                 else:
-                    diff_amount = self.truncate_amount(symbol, position["DIFF_AMOUNT"])
+                    diff_amount = self.truncate_amount(position["DIFF_AMOUNT"], precision)
 
-                    # if position["OPEN"]:
-                    #     await self.app.binance.open_position(user, symbol, diff_amount)
-                    # else:
-                    #     await self.app.binance.close_position(user, symbol, diff_amount)
+                    if position["OPEN"]:
+                        await self.app.binance.open_position(user, symbol, diff_amount)
+                    else:
+                        await self.app.binance.close_position(user, symbol, diff_amount)
 
 
     def truncate_amount(self, amount, precision):

@@ -30,7 +30,13 @@ class Binance:
         return pd.Series(result)
 
     def handle_current_positions(self, user, df, leaders, valueUSDT):
-        df = df.merge(leaders.add_prefix("leader_"), left_index=True, right_index=True, how='inner')
+        # print("DF")
+        # print(df)
+        # print("")
+        # print("LEADERS")
+        # print(leaders)
+        # print("")
+        df = df.merge(leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='inner')
         df["leader_WEIGHT_SHARE"] = df["leader_WEIGHT"] / df.index.unique().size
         df["TARGET_SHARE"] = df["leader_WEIGHT_SHARE"] * df["leader_UNLEVERED_RATIO"] * df["leader_LEVERED_POSITION_SHARE"]
         df["TARGET_VALUE"] = valueUSDT * df["TARGET_SHARE"] * user["account"]["data"]["leverage"]
@@ -43,12 +49,12 @@ class Binance:
 
     def user_account_update(self, user, new_positions, user_leaders, new_user_mix): #self, user
         weigth = 10
-        print("NEW_POSITIONS")
-        print(new_positions)
-        print("")
-        print("USER_LEADERS")
-        print(user_leaders)
-        print("")
+        # print("NEW_POSITIONS")
+        # print(new_positions)
+        # print("")
+        # print("USER_LEADERS")
+        # print(user_leaders)
+        # print("")
         margin_account_data = self.client.margin_account()
 
         positions = []
@@ -60,18 +66,30 @@ class Binance:
         positions = pd.DataFrame(positions)
         positions = positions.apply(lambda column: column.astype(float) if column.name != 'asset' else column)
         positions["symbol"] = positions["asset"] + 'USDT'
-
+        # print("POSITIONS")
+        # print(positions)
+        # print("")
         assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
         valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
 
         pool = positions[['symbol', 'netAsset']]
-        pool = pool.merge(new_positions.add_prefix("leader_"), left_index=True, right_index=True, how='outer')
-
+        pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_symbol", how='outer')
+        # print("POOL")
+        # print(pool)
+        # print("")
         positions_closed = pool[pool["leader_symbol"].isna()]
+
+        # print("POSITIONS_CLOSED")
+        # print(positions_closed)
+        # print("")
 
         positions_opened = pool[(pool["symbol"].isna()) & (~pool["leader_symbol"].isna())]
         positions_opened = self.handle_current_positions(user, positions_opened, user_leaders, valueUSDT)
  
+        # print("POSITIONS_OPENED")
+        # print(positions_opened)
+        # print("")
+
         positions_changed = pool[(~pool["symbol"].isna()) & (~pool["leader_symbol"].isna())]
         positions_changed = self.handle_current_positions(user, positions_changed, user_leaders, valueUSDT)
         positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
@@ -81,6 +99,10 @@ class Binance:
         positions_changed["OPEN"] = (positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["netAsset"] > 0) | (positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["netAsset"] < 0) | False
         positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
 
+        # print("POSITIONS_CHANGED")
+        # print(positions_changed)
+        # print("")
+    
         # pool["UNLEVERED_VALUE"] = pool["LEVERED_VALUE"] / user["account"]["data"]["leverage"]
         # pool["ABSOLUTE_LEVERED_VALUE"] = abs(pool["LEVERED_VALUE"])
         # pool["ABSOLUTE_UNLEVERED_VALUE"] = abs(pool["UNLEVERED_VALUE"])
@@ -99,7 +121,7 @@ class Binance:
 
             },
             "positions": positions.set_index("asset").to_dict(),
-            "mix": new_user_mix.set_index("symbol").to_dict()
+            "mix": new_user_mix.to_dict()
         }
 
         return user_account_update, positions_closed[["symbol", "netAsset"]], positions_opened[["leader_symbol", "TARGET_AMOUNT", "ABSOLUTE_TARGET_VALUE"]], positions_changed[["leader_symbol", "netAsset", "ABSOLUTE_CURRENT_VALUE", "TARGET_AMOUNT", "ABSOLUTE_TARGET_VALUE", "DIFF_AMOUNT", "ABSOLUTE_DIFF_VALUE", "OPEN", "SWITCH_DIRECTION"]]
