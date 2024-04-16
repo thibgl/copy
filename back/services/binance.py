@@ -23,7 +23,7 @@ class Binance:
     def aggregate_current_positions(self, group: pd.DataFrame) -> pd.Series:
         result = {}
         for key in group.columns:
-            if key in ['leader_symbol', 'leader_markPrice_AVERAGE']:
+            if key in ['netAsset', 'symbol', 'leader_symbol', 'leader_markPrice_AVERAGE']:
                 result[key] = group[key].iloc[0]
             else:
                 result[key] = group[key].sum()
