@@ -57,10 +57,10 @@ class Bot:
                         user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_new)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
-                        # if user_account_update_success:
-                        #     await self.close_positions(bot, user, positions_closed)
-                        #     await self.open_positions(bot, user, positions_opened)
-                        #     await self.change_positions(bot, user, positions_changed)
+                        if user_account_update_success:
+                            await self.close_positions(bot, user, positions_closed)
+                            await self.open_positions(bot, user, positions_opened)
+                            await self.change_positions(bot, user, positions_changed)
 
             if not API:
                 end_time = (utils.current_time() - start_time) / 1000
@@ -70,77 +70,40 @@ class Bot:
     async def close_positions(self, bot, user, closed_positions):
         # print(closed_positions)
         # print("closed_positions")
-        for symbol, position in closed_positions.set_index("symbol").iterrows():
-            symbol, precision = await self.app.binance.get_symbol_precision(bot, symbol)
-            # print("symbol, precision")
-            # print(symbol, precision["minNotional"])
-            if precision["stepSize"]:
-                amount = self.truncate_amount(position["netAsset"], precision)
-                symbol_price = float(self.app.binance.client.ticker_price(symbol)["price"])
-                absolute_value = abs(amount) * symbol_price
-                # print("absolute_value")
-                # print(absolute_value)
-                if absolute_value > precision["minNotional"]:
-                    await self.app.binance.close_position(user, symbol, -amount)
+        for symbol, position in closed_positions.iterrows():
+            await self.app.binance.close_position(user, symbol, -position["netAsset_TRUNCATED"])
+            await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {position["netAsset_TRUNCATED"]}', details=position.to_dict())
 
 
     async def open_positions(self, bot, user, opened_positions):
         # print("opened_positions")
         # print(opened_positions)
-        for symbol, position in opened_positions.set_index("leader_symbol").iterrows():
-            symbol, precision = await self.app.binance.get_symbol_precision(bot, symbol)
-
-            if precision["stepSize"] and position["ABSOLUTE_TARGET_VALUE"] > precision["minNotional"]:
-                amount = self.truncate_amount(position["TARGET_AMOUNT"], precision)
-
-                await self.app.binance.open_position(user, symbol, amount)
+        for symbol, position in opened_positions.iterrows():
+            await self.app.binance.open_position(user, position["final_symbol"], position["TARGET_AMOUNT_TRUNCATED"])
+            await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {position["TARGET_AMOUNT_TRUNCATED"]}', details=position.to_dict())
 
     
     async def change_positions(self, bot, user, changed_positions):
         # print("changed_positions")
         # print(changed_positions)
-        for symbol, position in changed_positions.set_index("leader_symbol").iterrows():
-            symbol, precision = await self.app.binance.get_symbol_precision(bot, symbol)
+        for symbol, position in changed_positions.iterrows():
+            if position["SWITCH_DIRECTION"]:
+                if position["netAsset_PASS"] and position["TARGET_AMOUNT_PASS"]:
+                    await self.app.binance.close_position(user, symbol, -position["netAsset_TRUNCATED"])
+                    await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {position["netAsset_TRUNCATED"]}', details=position.to_dict())
+                    await self.app.binance.open_position(user, symbol, position["TARGET_AMOUNT_TRUNCATED"])
+                    await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {position["TARGET_AMOUNT_TRUNCATED"]}', details=position.to_dict())
 
-            if precision["stepSize"] and position["ABSOLUTE_DIFF_VALUE"] > precision["minNotional"]:
-                if position["SWITCH_DIRECTION"]:
-                    if position["ABSOLUTE_CURRENT_VALUE"] > precision["minNotional"]:
-                        close_amount = self.truncate_amount(-position["netAsset"], precision)
-                        await self.app.binance.close_position(user, symbol, close_amount)
-
-                        if position["ABSOLUTE_TARGET_VALUE"] > precision["minNotional"]:
-                            open_amount = self.truncate_amount(position["TARGET_AMOUNT"], precision)
-                            await self.app.binance.open_position(user, symbol, open_amount)
-                    else:
-                        open_amount = self.truncate_amount(position["DIFF_AMOUNT"], precision)
-                        await self.app.binance.open_position(user, symbol, open_amount)
-
+                elif position["DIFF_AMOUNT_PASS"]:
+                    await self.app.binance.open_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
+                    await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
+            else:
+                if position["OPEN"]:
+                    # await self.app.binance.open_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
+                    await self.app.log.create(user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
                 else:
-                    diff_amount = self.truncate_amount(position["DIFF_AMOUNT"], precision)
-
-                    if position["OPEN"]:
-                        await self.app.binance.open_position(user, symbol, diff_amount)
-                    else:
-                        await self.app.binance.close_position(user, symbol, diff_amount)
-
-
-    def truncate_amount(self, amount, precision):
-        asset_precision = precision["stepSize"].split('1')[0].count('0')
-        
-        if precision["thousand"]:
-            amount = amount / 1000
-
-        positive = True
-        if amount < 0:
-            positive = False
-
-        amount = abs(amount)
-        amount = round(amount, asset_precision)
-
-        if positive:
-            return amount
-
-        return -amount
+                    # await self.app.binance.close_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
+                    await self.app.log.create(user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
     
 
     async def handle_exception(self, user, error, source, symbol, log, current_user_mix):

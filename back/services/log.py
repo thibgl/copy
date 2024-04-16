@@ -35,8 +35,8 @@ class Log:
 
         print(content)
 
-        if notify and user["chatId"]:
+        if notify and user["detail"]["data"]["chat_id"]:
             await self.notify(user, content)
     
     async def notify(self, user, content):
-        await self.bot.send_message(chat_id=user["chatId"], text=content)
+        await self.bot.send_message(chat_id=user["detail"]["data"]["chat_id"], text=content)

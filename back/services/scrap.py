@@ -209,7 +209,7 @@ class Scrap:
         result = {}
         
         for key in self.sum_columns: result[key] = group[key].sum() if key in group.keys() else None
-        for key in self.average_columns: result[key] = np.average(group[key], weights=group["positionAmount"]) if key in group.keys() else None
+        for key in self.average_columns: result[key] = np.average(group[key], weights=group["ABSOLUTE_LEVERED_VALUE"]) if key in group.keys() else None
 
         if handle_position_direction:
             if len(group) > 1: result["positionSide"] = "BOTH"
@@ -231,13 +231,14 @@ class Scrap:
         filtered_positions = filtered_positions.drop(columns=self.drop_columns)
         filtered_positions["ABSOLUTE_LEVERED_VALUE"] = abs(filtered_positions["notionalValue"])
         filtered_positions["ABSOLUTE_UNLEVERED_VALUE"] = filtered_positions["ABSOLUTE_LEVERED_VALUE"] / filtered_positions["leverage"]
-
+        print("FILTERED_POSITIONS")
+        print(filtered_positions)
+        print("")
         grouped_positions = filtered_positions.groupby("symbol").apply(self.aggregate_leader_positions, handle_position_direction=True, include_groups=False).reset_index()
         grouped_positions["ID"] = str(leader["_id"])
         grouped_positions = grouped_positions.rename(columns={key: key + "_SUM" for key in self.sum_columns} | {key: key + "_AVERAGE" for key in self.average_columns}).set_index("ID")
         grouped_positions["LEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum()
         grouped_positions["UNLEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum()
-
         # total_balance = leader["account"]["data"]["total_balance"]
         total_balance = float(leader["detail"]["data"]["marginBalance"])
         levered_ratio = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum() / total_balance
@@ -245,7 +246,9 @@ class Scrap:
 
         grouped_positions["LEVERED_RATIO"] = levered_ratio
         grouped_positions["UNLEVERED_RATIO"] = unlevered_ratio
-        
+        print("GROUPED_POSITIONS")
+        print(grouped_positions)
+        print("")
         positions_update = {
             "account": {
             "levered_ratio": levered_ratio,
