@@ -34,7 +34,6 @@ class Bot:
 
                     for leader_id, leader_weight in user_leaders.iterrows():
                         if leader_id not in roster.index.unique():
-                            print(leader_id)
                             leader, leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
 
                             if leader:
@@ -55,13 +54,13 @@ class Bot:
                         # print([bag[0] for bag in user_mix_diff])
                         user_roster = roster[roster.index.isin(user_leaders.index)]
                         user_positions_new = user_roster[user_roster["symbol"].isin([bag[0] for bag in user_mix_diff])]
-                        user_account, positions_closed, positions_opened, positions_changed = self.app.binance.user_account_update(user, user_positions_new, user_leaders, user_mix_new)
+                        user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_new)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
-                        if user_account_update_success:
-                            await self.close_positions(bot, user, positions_closed)
-                            await self.open_positions(bot, user, positions_opened)
-                            await self.change_positions(bot, user, positions_changed)
+                        # if user_account_update_success:
+                        #     await self.close_positions(bot, user, positions_closed)
+                        #     await self.open_positions(bot, user, positions_opened)
+                        #     await self.change_positions(bot, user, positions_changed)
 
             if not API:
                 end_time = (utils.current_time() - start_time) / 1000
