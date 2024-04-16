@@ -30,8 +30,9 @@ class Binance:
         return pd.Series(result)
 
     def handle_current_positions(self, user, dataframe, valueUSDT):
-        dataframe["TARGET_SHARE"] = dataframe["leader_WEIGHT_SHARE"] * dataframe["leader_UNLEVERED_RATIO"] * dataframe["leader_LEVERED_POSITION_SHARE"]
-        dataframe["TARGET_VALUE"] = valueUSDT * dataframe["TARGET_SHARE"] * user["account"]["data"]["leverage"]
+        dataframe.loc[dataframe["leader_LEVERED_RATIO"] > user["account"]["data"]["leverage"], "leader_LEVERED_RATIO"] = user["account"]["data"]["leverage"]
+        dataframe["TARGET_SHARE"] = dataframe["leader_WEIGHT_SHARE"] * (dataframe["leader_LEVERED_RATIO"] / dataframe["leader_UNLEVERED_RATIO"] / user["account"]["data"]["leverage"]) * dataframe["leader_LEVERED_POSITION_SHARE"]
+        dataframe["TARGET_VALUE"] = valueUSDT * dataframe["TARGET_SHARE"] #* user["account"]["data"]["leverage"]
         dataframe.loc[dataframe["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
         dataframe["TARGET_AMOUNT"] = dataframe["TARGET_VALUE"] / dataframe["leader_markPrice_AVERAGE"]
         dataframe = dataframe.groupby("final_symbol").apply(self.aggregate_current_positions, include_groups=False).reset_index()
@@ -45,7 +46,7 @@ class Binance:
 
         return dataframe
     
-    async def user_account_update(self, bot, user, new_positions, user_leaders, new_user_mix): #self, user
+    async def user_account_update(self, bot, user, new_positions, user_leaders, new_user_mix, n_leaders): #self, user
         weigth = 10
         # print("NEW_POSITIONS")
         # print(new_positions)
@@ -65,20 +66,28 @@ class Binance:
         positions = positions.apply(lambda column: column.astype(float) if column.name != 'asset' else column)
         positions["symbol"] = positions["asset"] + 'USDT'
         # positions.loc[positions.size] = ['SOL',  0.000707,     0.0,   0.00000,  0.000000e+00,  7.073200e-04,  'SOLUSDT']
-        # print("POSITIONS")
-        # print(positions)
-        # print("")
+        print("POSITIONS")
+        print(positions)
+        print("")
         assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
         valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
 
-
+        new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') else [row["symbol"], False]), axis=1)
+        new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
+        print("NEW_POSITIONS")
+        print(new_positions)
+        print("")
         pool = positions[['symbol', 'netAsset']]
-        pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_symbol", how='outer')
-        pool[["final_symbol", "thousand"]] = pool.apply(lambda row: pd.Series([row["leader_symbol"][4:], True] if isinstance(row["leader_symbol"], str) and row["leader_symbol"].startswith('1000') else ([row["leader_symbol"], False] if isinstance(row["leader_symbol"], str) else [row["symbol"], False])), axis=1)
-        pool.loc[pool["thousand"], "leader_markPrice_AVERAGE"] /= 1000
-        pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='inner')
-        pool["leader_WEIGHT_SHARE"] = pool["leader_WEIGHT"] / pool["leader_ID"].dropna().unique().size
-  
+        pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
+        print("POOL")
+        print(pool)
+        print("")
+        pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
+        pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
+        pool["leader_WEIGHT_SHARE"] = pool["leader_WEIGHT"] / n_leaders
+        print("POOL")
+        print(pool)
+        print("")
         precisions = pd.DataFrame(columns=["stepSize", "minQty", "minNotional"])
         for symbol in pool["final_symbol"].unique():
             symbol, precision = await self.get_symbol_precision(bot, symbol)
@@ -86,9 +95,7 @@ class Binance:
         # print("PRECISIONS")
         # print(precisions)
         # print("")
-        # print("POOL")
-        # print(pool)
-        # print("")
+
         pool = pool.merge(precisions, left_on="final_symbol", right_index=True, how='left')
         # print("POOL")
         # print(pool)
@@ -112,6 +119,7 @@ class Binance:
         print("POSITIONS_OPENED")
         print(positions_opened)
         print("")
+        # print(positions_opened["TARGET_VALUE"].abs().sum())
  
         positions_changed = pool[(~pool["symbol"].isna()) & (~pool["leader_symbol"].isna())].copy()
         if positions_changed.size > 0:
@@ -124,7 +132,7 @@ class Binance:
             positions_changed = self.validate_amounts(positions_changed, "TARGET_AMOUNT", "TARGET_VALUE")
             positions_changed["OPEN"] = (positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["netAsset"] > 0) | (positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["netAsset"] < 0) | False
             positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
-            positions_changed = positions_changed[(positions_changed["netAsset_PASS"]) | (positions_changed["DIFF_AMOUNT_PASS"]) | (positions_changed["TARGET_AMOUNT_PASS"])].set_index("final_symbol")
+            positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
         print("POSITIONS_CHANGED")
         print(positions_changed)
         print("")
@@ -147,11 +155,22 @@ class Binance:
 
             },
             "positions": positions.set_index("asset").to_dict(),
+            # "mix": new_user_mix
+        }
+
+        return user_account_update, positions_closed, positions_opened, positions_changed, new_user_mix
+
+    
+    def user_account_close(self, user, new_user_mix):
+        user_account_update = {
+            # "account": {
+                # "levered_ratio": levered_ratio,
+                # "unlevered_ratio": unlevered_ratio,
+            # },
             "mix": new_user_mix
         }
 
-        return user_account_update, positions_closed, positions_opened, positions_changed
-
+        return user_account_update
     
     async def open_position(self, user, symbol:str, amount:float):
         weight = 6

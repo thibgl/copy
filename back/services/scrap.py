@@ -258,7 +258,7 @@ class Scrap:
             "grouped_positions": grouped_positions.to_dict()
         }
 
-        return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "UNLEVERED_RATIO"]]
+        return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "UNLEVERED_RATIO"]]
     
 
     async def get_leader(self, bot, leader_id=None, binance_id:str=None):
