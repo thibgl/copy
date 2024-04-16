@@ -64,7 +64,7 @@ class Binance:
         positions = pd.DataFrame(positions)
         positions = positions.apply(lambda column: column.astype(float) if column.name != 'asset' else column)
         positions["symbol"] = positions["asset"] + 'USDT'
-        positions.loc[positions.size] = ['SOL',  0.000707,     0.0,   0.00000,  0.000000e+00,  7.073200e-04,  'SOLUSDT']
+        # positions.loc[positions.size] = ['SOL',  0.000707,     0.0,   0.00000,  0.000000e+00,  7.073200e-04,  'SOLUSDT']
         # print("POSITIONS")
         # print(positions)
         # print("")
