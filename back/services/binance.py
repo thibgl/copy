@@ -46,131 +46,140 @@ class Binance:
 
         return dataframe
     
-    async def user_account_update(self, bot, user, new_positions, user_leaders, new_user_mix, n_leaders): #self, user
+    async def user_account_update(self, bot, user, new_positions, user_leaders): #self, user
         weigth = 10
-        # print("NEW_POSITIONS")
-        # print(new_positions)
-        # print("")
-        # print("USER_LEADERS")
-        # print(user_leaders)
-        # print("")
-        margin_account_data = self.client.margin_account()
+        try:
 
-        positions = []
-        for asset in margin_account_data["userAssets"]:
-            amount = float(asset["netAsset"])
-            if amount != 0 and asset["asset"] != 'USDT':
-                positions.append(asset)
+            # print("NEW_POSITIONS")
+            # print(new_positions)
+            # print("")
+            # print("USER_LEADERS")
+            # print(user_leaders)
+            # print("")
+            margin_account_data = self.client.margin_account()
 
-        positions = pd.DataFrame(positions)
-        positions = positions.apply(lambda column: column.astype(float) if column.name != 'asset' else column)
-        positions["symbol"] = positions["asset"] + 'USDT'
-        # positions.loc[positions.size] = ['SOL',  0.000707,     0.0,   0.00000,  0.000000e+00,  7.073200e-04,  'SOLUSDT']
-        print("POSITIONS")
-        print(positions)
-        print("")
-        assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
-        valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
+            positions = []
+            for asset in margin_account_data["userAssets"]:
+                amount = float(asset["netAsset"])
+                if amount != 0 and asset["asset"] != 'USDT':
+                    positions.append(asset)
 
-        new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') else [row["symbol"], False]), axis=1)
-        new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
-        print("NEW_POSITIONS")
-        print(new_positions)
-        print("")
-        pool = positions[['symbol', 'netAsset']]
-        pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
-        print("POOL")
-        print(pool)
-        print("")
-        pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
-        pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
-        pool["leader_WEIGHT_SHARE"] = pool["leader_WEIGHT"] / n_leaders
-        print("POOL")
-        print(pool)
-        print("")
-        precisions = pd.DataFrame(columns=["stepSize", "minQty", "minNotional"])
-        for symbol in pool["final_symbol"].unique():
-            symbol, precision = await self.get_symbol_precision(bot, symbol)
-            precisions.loc[symbol] = precision
-        # print("PRECISIONS")
-        # print(precisions)
-        # print("")
+            positions = pd.DataFrame(positions)
+            positions = positions.apply(lambda column: column.astype(float) if column.name != 'asset' else column)
+            positions["symbol"] = positions["asset"] + 'USDT'
+            # positions.loc[positions.size] = ['SOL',  0.000707,     0.0,   0.00000,  0.000000e+00,  7.073200e-04,  'SOLUSDT']
+            print("POSITIONS")
+            print(positions)
+            print("")
+            assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
+            valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
 
-        pool = pool.merge(precisions, left_on="final_symbol", right_index=True, how='left')
-        # print("POOL")
-        # print(pool)
-        # print("")
+            new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') else [row["symbol"], False]), axis=1)
+            new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
+            print("NEW_POSITIONS")
+            print(new_positions)
+            print("")
+            pool = positions[['symbol', 'netAsset']]
+            pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
+            print("POOL")
+            print(pool)
+            print("")
+            pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
+            pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
+            pool["leader_WEIGHT_SHARE"] = pool["leader_WEIGHT"] / pool["leader_ID"].dropna().unique().size
+            print("POOL")
+            print(pool)
+            print("")
+            precisions = pd.DataFrame(columns=["stepSize", "minQty", "minNotional"])
+            for symbol in pool["final_symbol"].unique():
+                symbol, precision = await self.get_symbol_precision(bot, symbol)
+                precisions.loc[symbol] = precision
+            # print("PRECISIONS")
+            # print(precisions)
+            # print("")
 
-        positions_closed = pool[pool["leader_symbol"].isna()].copy()
-        if positions_closed.size > 0:
-            positions_closed["SYMBOL_PRICE"] = positions_closed["symbol"].apply(lambda symbol: float(self.app.binance.client.ticker_price(symbol)["price"]))
-            positions_closed["CURRENT_VALUE"] = positions_closed["netAsset"] * positions_closed["SYMBOL_PRICE"]
-            positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
-            positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("final_symbol")
-        print("POSITIONS_CLOSED")
-        print(positions_closed)
-        print("")
+            pool = pool.merge(precisions, left_on="final_symbol", right_index=True, how='left')
+            # print("POOL")
+            # print(pool)
+            # print("")
 
-        positions_opened = pool[(pool["symbol"].isna()) & (~pool["leader_symbol"].isna())].copy()
-        if positions_opened.size > 0:
-            positions_opened = self.handle_current_positions(user, positions_opened, valueUSDT)
-            positions_opened = self.validate_amounts(positions_opened, "TARGET_AMOUNT", "TARGET_VALUE")
-            positions_opened = positions_opened[positions_opened["TARGET_AMOUNT_PASS"]].set_index("final_symbol")
-        print("POSITIONS_OPENED")
-        print(positions_opened)
-        print("")
-        # print(positions_opened["TARGET_VALUE"].abs().sum())
- 
-        positions_changed = pool[(~pool["symbol"].isna()) & (~pool["leader_symbol"].isna())].copy()
-        if positions_changed.size > 0:
-            positions_changed = self.handle_current_positions(user, positions_changed, valueUSDT)
-            positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice_AVERAGE"]
-            positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
-            positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
-            positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE")
-            positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE")
-            positions_changed = self.validate_amounts(positions_changed, "TARGET_AMOUNT", "TARGET_VALUE")
-            positions_changed["OPEN"] = (positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["netAsset"] > 0) | (positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["netAsset"] < 0) | False
-            positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
-            positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
-        print("POSITIONS_CHANGED")
-        print(positions_changed)
-        print("")
+            positions_closed = pool[pool["leader_symbol"].isna()].copy()
+            if positions_closed.size > 0:
+                positions_closed["SYMBOL_PRICE"] = positions_closed["symbol"].apply(lambda symbol: float(self.app.binance.client.ticker_price(symbol)["price"]))
+                positions_closed["CURRENT_VALUE"] = positions_closed["netAsset"] * positions_closed["SYMBOL_PRICE"]
+                positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
+                positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("final_symbol")
+            print("POSITIONS_CLOSED")
+            print(positions_closed)
+            print("")
+
+            positions_opened = pool[(pool["symbol"].isna()) & (~pool["leader_symbol"].isna())].copy()
+            if positions_opened.size > 0:
+                positions_opened = self.handle_current_positions(user, positions_opened, valueUSDT)
+                positions_opened = self.validate_amounts(positions_opened, "TARGET_AMOUNT", "TARGET_VALUE")
+                positions_opened = positions_opened[positions_opened["TARGET_AMOUNT_PASS"]].set_index("final_symbol")
+            print("POSITIONS_OPENED")
+            print(positions_opened)
+            print("")
+            # print(positions_opened["TARGET_VALUE"].abs().sum())
     
-        # pool["UNLEVERED_VALUE"] = pool["LEVERED_VALUE"] / user["account"]["data"]["leverage"]
-        # pool["ABSOLUTE_LEVERED_VALUE"] = abs(pool["LEVERED_VALUE"])
-        # pool["ABSOLUTE_UNLEVERED_VALUE"] = abs(pool["UNLEVERED_VALUE"])
+            positions_changed = pool[(~pool["symbol"].isna()) & (~pool["leader_symbol"].isna())].copy()
+            if positions_changed.size > 0:
+                positions_changed = self.handle_current_positions(user, positions_changed, valueUSDT)
+                positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice_AVERAGE"]
+                positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
+                positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
+                positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE")
+                positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE")
+                positions_changed = self.validate_amounts(positions_changed, "TARGET_AMOUNT", "TARGET_VALUE")
+                positions_changed["OPEN"] = (positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["netAsset"] > 0) | (positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["netAsset"] < 0) | False
+                positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
+                positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
+            print("POSITIONS_CHANGED")
+            print(positions_changed)
+            print("")
+        
+            # pool["UNLEVERED_VALUE"] = pool["LEVERED_VALUE"] / user["account"]["data"]["leverage"]
+            # pool["ABSOLUTE_LEVERED_VALUE"] = abs(pool["LEVERED_VALUE"])
+            # pool["ABSOLUTE_UNLEVERED_VALUE"] = abs(pool["UNLEVERED_VALUE"])
 
-        # levered_ratio = pool["ABSOLUTE_LEVERED_VALUE"].sum() / valueUSDT
-        # unlevered_ratio = pool["ABSOLUTE_UNLEVERED_VALUE"].sum() / valueUSDT
+            # levered_ratio = pool["ABSOLUTE_LEVERED_VALUE"].sum() / valueUSDT
+            # unlevered_ratio = pool["ABSOLUTE_UNLEVERED_VALUE"].sum() / valueUSDT
 
-        user_account_update = {
-            "account": {
-                "value_BTC": assetBTC,
-                "value_USDT": valueUSDT,
-                # "levered_ratio": levered_ratio,
-                # "unlevered_ratio": unlevered_ratio,
-                "collateral_margin_level": float(margin_account_data["totalCollateralValueInUSDT"]),
-                "collateral_value_USDT": float(margin_account_data["collateralMarginLevel"])
+            user_account_update = {
+                "account": {
+                    "value_BTC": assetBTC,
+                    "value_USDT": valueUSDT,
+                    # "levered_ratio": levered_ratio,
+                    # "unlevered_ratio": unlevered_ratio,
+                    "collateral_margin_level": float(margin_account_data["totalCollateralValueInUSDT"]),
+                    "collateral_value_USDT": float(margin_account_data["collateralMarginLevel"])
 
-            },
-            "positions": positions.set_index("asset").to_dict(),
-            # "mix": new_user_mix
-        }
+                },
+                "positions": positions.set_index("asset").to_dict(),
+                # "mix": new_user_mix
+            }
 
-        return user_account_update, positions_closed, positions_opened, positions_changed, new_user_mix
+            return user_account_update, positions_closed, positions_opened, positions_changed
 
-    
-    def user_account_close(self, user, new_user_mix):
-        user_account_update = {
-            # "account": {
-                # "levered_ratio": levered_ratio,
-                # "unlevered_ratio": unlevered_ratio,
-            # },
-            "mix": new_user_mix
-        }
+        except Exception as e:
+            await self.handle_exception(bot, e, 'user_account_update', None)
 
-        return user_account_update
+
+    async def user_account_close(self, user, new_user_mix):
+        try:
+            user_account_update = {
+                # "account": {
+                    # "levered_ratio": levered_ratio,
+                    # "unlevered_ratio": unlevered_ratio,
+                # },
+                "mix": new_user_mix
+            }
+
+            return user_account_update
+        
+        except Exception as e:
+            await self.handle_exception(user, e, 'user_account_close', None)
     
     async def open_position(self, user, symbol:str, amount:float):
         weight = 6
@@ -213,33 +222,38 @@ class Binance:
 
 
     async def get_symbol_precision(self, bot, symbol):
-        symbol_precisions = pd.DataFrame(bot["precisions"]["data"])
-        
-        if symbol in symbol_precisions.index:
-            return symbol, symbol_precisions.loc[symbol]
-        
-        else:
-            precision_response = self.client.exchange_info(symbol=symbol)
+        try:
 
-            details = precision_response['symbols'][0]
-            # print(details)
-            for symbol_filter in details["filters"]:
-                if symbol_filter["filterType"] == "LOT_SIZE":
-                    step_size = symbol_filter["stepSize"]
-                    min_quantity = float(symbol_filter["minQty"])
-                if symbol_filter["filterType"] == "NOTIONAL":
-                    min_notional = float(symbol_filter['minNotional'])
+            symbol_precisions = pd.DataFrame(bot["precisions"]["data"])
+            
+            if symbol in symbol_precisions.index:
+                return symbol, symbol_precisions.loc[symbol]
+            
+            else:
+                precision_response = self.client.exchange_info(symbol=symbol)
 
-            precision = [step_size, min_quantity, min_notional]
+                details = precision_response['symbols'][0]
+                # print(details)
+                for symbol_filter in details["filters"]:
+                    if symbol_filter["filterType"] == "LOT_SIZE":
+                        step_size = symbol_filter["stepSize"]
+                        min_quantity = float(symbol_filter["minQty"])
+                    if symbol_filter["filterType"] == "NOTIONAL":
+                        min_notional = float(symbol_filter['minNotional'])
 
-            symbol_precisions.loc[symbol] = precision
+                precision = [step_size, min_quantity, min_notional]
 
-            precisions_update = {
-                "precisions": symbol_precisions.to_dict()
-            }
-            await self.app.database.update(obj=bot, update=precisions_update, collection='bot')
+                symbol_precisions.loc[symbol] = precision
 
-            return symbol, symbol_precisions.loc[symbol]   
+                precisions_update = {
+                    "precisions": symbol_precisions.to_dict()
+                }
+                await self.app.database.update(obj=bot, update=precisions_update, collection='bot')
+
+                return symbol, symbol_precisions.loc[symbol]   
+
+        except Exception as e:
+            await self.handle_exception(bot, e, 'get_symbol_precision', None)
 
 
     async def handle_exception(self, user, error, source, symbol):
@@ -247,7 +261,7 @@ class Binance:
 
         await self.app.log.create(user, 'ERROR', f'client/{source}', 'TRADE', f'Error in Binance API: {symbol} - {error}', details=trace)
 
-        return None
+        pass
     
 
 

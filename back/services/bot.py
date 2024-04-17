@@ -31,14 +31,12 @@ class Bot:
                 
                 if user_leaders.size > 0:
                     leader_mixes = pd.DataFrame()
-                    n_leaders = 0
 
                     for leader_id, leader_weight in user_leaders.iterrows():
                         if leader_id not in roster.index.unique():
                             leader, leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
 
                             if leader:
-                                if leader_grouped_positions.size > 0: n_leaders += 1
                                 roster = pd.concat([roster, leader_grouped_positions]) if roster.size > 0 else leader_grouped_positions
                                 leader_mix = leader_grouped_positions[["symbol", "positionAmount_SUM"]].rename(columns={"positionAmount_SUM": "BAG"})
                                 leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
@@ -51,13 +49,13 @@ class Bot:
                     # print("roster")
                     # print(roster)
                     if user_mix != user_mix_new:
-                        # user_mix_diff = set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))
                         # print("user_mix_diff")
                         # print([bag[0] for bag in user_mix_diff])
-                        # user_roster = roster[roster.index.isin(user_leaders.index)]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
+                        # user_roster = roster[roster.index.isin(user_leaders.index)]
+                        # user_mix_diff = set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))
                         # user_positions_new = user_roster[user_roster["symbol"].isin([bag[0] for bag in user_mix_diff])]
-                        user_account, positions_closed, positions_opened, positions_changed, user_mix_new = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_new, n_leaders)
+                        user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
                         if user_account_update_success:
@@ -65,7 +63,7 @@ class Bot:
                             await self.change_positions(user, positions_changed, user_mix_new)
                             await self.open_positions(user, positions_opened, user_mix_new)
 
-                        user_account_close = self.app.binance.user_account_close(user, user_mix_new)
+                        user_account_close = await self.app.binance.user_account_close(user, user_mix_new)
                         user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
 
             if not API:
