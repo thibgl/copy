@@ -30,9 +30,9 @@ class Binance:
         return pd.Series(result)
 
     def handle_current_positions(self, user, dataframe, valueUSDT):
-        dataframe.loc[dataframe["leader_LEVERED_RATIO"] > user["account"]["data"]["leverage"], "leader_LEVERED_RATIO"] = user["account"]["data"]["leverage"]
-        dataframe["TARGET_SHARE"] = dataframe["leader_WEIGHT_SHARE"] * (dataframe["leader_LEVERED_RATIO"] / dataframe["leader_UNLEVERED_RATIO"] / user["account"]["data"]["leverage"]) * dataframe["leader_LEVERED_POSITION_SHARE"]
-        dataframe["TARGET_VALUE"] = valueUSDT * dataframe["TARGET_SHARE"] #* user["account"]["data"]["leverage"]
+        dataframe["REFERENCE_RATIO"] = dataframe.apply(lambda row: row["leader_LEVERED_RATIO"] if row["leader_LEVERED_RATIO"] < 0.75 else row["leader_UNLEVERED_RATIO"], axis=1)
+        dataframe["TARGET_SHARE"] = dataframe["leader_WEIGHT_SHARE"] * dataframe["REFERENCE_RATIO"] * dataframe["leader_LEVERED_POSITION_SHARE"]
+        dataframe["TARGET_VALUE"] = valueUSDT * dataframe["TARGET_SHARE"] * user["account"]["data"]["leverage"] #* user["account"]["data"]["leverage"]
         dataframe.loc[dataframe["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
         dataframe["TARGET_AMOUNT"] = dataframe["TARGET_VALUE"] / dataframe["leader_markPrice_AVERAGE"]
         dataframe = dataframe.groupby("final_symbol").apply(self.aggregate_current_positions, include_groups=False).reset_index()
@@ -68,28 +68,28 @@ class Binance:
             positions = positions.apply(lambda column: column.astype(float) if column.name != 'asset' else column)
             positions["symbol"] = positions["asset"] + 'USDT'
             # positions.loc[positions.size] = ['SOL',  0.000707,     0.0,   0.00000,  0.000000e+00,  7.073200e-04,  'SOLUSDT']
-            print("POSITIONS")
-            print(positions)
-            print("")
+            # print("POSITIONS")
+            # print(positions)
+            # print("")
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
             valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
 
             new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') else [row["symbol"], False]), axis=1)
             new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
-            print("NEW_POSITIONS")
-            print(new_positions)
-            print("")
+            # print("NEW_POSITIONS")
+            # print(new_positions)
+            # print("")
             pool = positions[['symbol', 'netAsset']]
             pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
-            print("POOL")
-            print(pool)
-            print("")
+            # print("POOL")
+            # print(pool)
+            # print("")
             pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
             pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
             pool["leader_WEIGHT_SHARE"] = pool["leader_WEIGHT"] / pool["leader_ID"].dropna().unique().size
-            print("POOL")
-            print(pool)
-            print("")
+            # print("POOL")
+            # print(pool)
+            # print("")
             precisions = pd.DataFrame(columns=["stepSize", "minQty", "minNotional"])
             for symbol in pool["final_symbol"].unique():
                 symbol, precision = await self.get_symbol_precision(bot, symbol)
@@ -108,19 +108,20 @@ class Binance:
                 positions_closed["SYMBOL_PRICE"] = positions_closed["symbol"].apply(lambda symbol: float(self.app.binance.client.ticker_price(symbol)["price"]))
                 positions_closed["CURRENT_VALUE"] = positions_closed["netAsset"] * positions_closed["SYMBOL_PRICE"]
                 positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
+                print("POSITIONS_CLOSED")
+                print(positions_closed)
+                print("")
                 positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("final_symbol")
-            print("POSITIONS_CLOSED")
-            print(positions_closed)
-            print("")
 
             positions_opened = pool[(pool["symbol"].isna()) & (~pool["leader_symbol"].isna())].copy()
             if positions_opened.size > 0:
                 positions_opened = self.handle_current_positions(user, positions_opened, valueUSDT)
                 positions_opened = self.validate_amounts(positions_opened, "TARGET_AMOUNT", "TARGET_VALUE")
+                print("POSITIONS_OPENED")
+                print(positions_opened)
+                print("")
                 positions_opened = positions_opened[positions_opened["TARGET_AMOUNT_PASS"]].set_index("final_symbol")
-            print("POSITIONS_OPENED")
-            print(positions_opened)
-            print("")
+
             # print(positions_opened["TARGET_VALUE"].abs().sum())
     
             positions_changed = pool[(~pool["symbol"].isna()) & (~pool["leader_symbol"].isna())].copy()
@@ -133,11 +134,12 @@ class Binance:
                 positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE")
                 positions_changed = self.validate_amounts(positions_changed, "TARGET_AMOUNT", "TARGET_VALUE")
                 positions_changed["OPEN"] = (positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["netAsset"] > 0) | (positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["netAsset"] < 0) | False
+                print("POSITIONS_CHANGED")
+                print(positions_changed)
+                print("")
                 positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
                 positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
-            print("POSITIONS_CHANGED")
-            print(positions_changed)
-            print("")
+
         
             # pool["UNLEVERED_VALUE"] = pool["LEVERED_VALUE"] / user["account"]["data"]["leverage"]
             # pool["ABSOLUTE_LEVERED_VALUE"] = abs(pool["LEVERED_VALUE"])
