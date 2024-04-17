@@ -40,3 +40,4 @@ class Log:
     
     async def notify(self, user, content):
         await self.bot.send_message(chat_id=user["detail"]["data"]["chat_id"], text=content)
+

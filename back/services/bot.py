@@ -16,7 +16,7 @@ class Bot:
     async def tick(self, API=False):
         bot = await self.app.db.bot.find_one()
 
-        while bot["active"]:
+        while bot["account"]["data"]["active"]:
             print(f'[{utils.current_readable_time()}]: Fetching Positions')
             start_time = utils.current_time()
 
@@ -68,7 +68,7 @@ class Bot:
 
             if not API:
                 end_time = (utils.current_time() - start_time) / 1000
-                await asyncio.sleep(bot["tickInterval"] - end_time)
+                await asyncio.sleep(bot["account"]["data"]["tick_interval"] - end_time)
 
 
     async def close_positions(self, user, closed_positions, new_user_mix):

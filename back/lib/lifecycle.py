@@ -132,22 +132,37 @@ async def db_startup(db):
     await db.create_collection("bot")
 
     bot_data = {
-        "active": True,
-        "updatedAt": int(time.time() * 1000),
-        "tickInterval": 30,
-        "shutdownTime": 0,
-        "ticks": 0,
-        "orders": 0,
-        "precisions": {"updated": 0, "data": {
-            'stepSize': {},
-            'minQty': {},
-            'minNotional': {},
-            'thousand': {}}
-        },
-        "totalWeight": 0,
-        "chatId": 1031182213,
-        "logLevel": "INFO",
         "_id": 'BOT',
+        "updated": current_time,
+        "updated_date": utils.current_readable_time(),
+        "updatedAt": int(time.time() * 1000),
+        "account": {
+            "updated": current_time,
+            "data": {
+                "active": True,
+                "tick_interval": 30,
+                "total_weight": 0,
+                "shutdown_time": 0,
+                "ticks": 0,
+                "orders": 0,
+            }
+        },
+        "precisions": {
+            "updated": current_time,
+            "data": {
+                'stepSize': {},
+                'minQty': {},
+                'minNotional': {},
+                'thousand': {}
+            }
+        },
+        "detail": {
+            "updated": current_time,
+            "data": {
+                "chat_id": 1031182213,
+                "log_level": "INFO",
+            }
+        }
     }
 
     await db.bot.insert_one(bot_data)
