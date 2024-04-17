@@ -27,44 +27,54 @@ class Bot:
             leader_mixes = pd.DataFrame()
 
             async for user in users:
-                user_leaders = pd.DataFrame(user["leaders"]["data"])
-                
-                if user_leaders.size > 0:
-                    leader_mixes = pd.DataFrame()
-
-                    for leader_id, leader_weight in user_leaders.iterrows():
-                        if leader_id not in roster.index.unique():
-                            leader, leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
-
-                            if leader:
-                                roster = pd.concat([roster, leader_grouped_positions]) if roster.size > 0 else leader_grouped_positions
-                                leader_mix = leader_grouped_positions[["symbol", "positionAmount_SUM"]].rename(columns={"positionAmount_SUM": "BAG"})
-                                leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
-                                leader_mixes = pd.concat([leader_mixes, leader_mix]) if leader_mixes.size > 0 else leader_mix
+                try:
+                    user_leaders = pd.DataFrame(user["leaders"]["data"])
                     
-                    user_mix = pd.DataFrame(user["mix"]["data"]).to_dict()
-                    user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict()
-                    # print("user_mix.to_dict(), user_mix_new.to_dict()")
-                    # print(user_mix, user_mix_new)
-                    # print("roster")
-                    # print(roster)
-                    if user_mix != user_mix_new:
-                        # print("user_mix_diff")
-                        # print([bag[0] for bag in user_mix_diff])
-                        user_positions_new = roster[roster.index.isin(user_leaders.index)]
-                        # user_roster = roster[roster.index.isin(user_leaders.index)]
-                        # user_mix_diff = set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))
-                        # user_positions_new = user_roster[user_roster["symbol"].isin([bag[0] for bag in user_mix_diff])]
-                        user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders)
-                        user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
+                    if user_leaders.size > 0:
+                        leader_mixes = pd.DataFrame()
 
-                        if user_account_update_success:
-                            await self.close_positions(user, positions_closed, user_mix_new)
-                            await self.change_positions(user, positions_changed, user_mix_new)
-                            await self.open_positions(user, positions_opened, user_mix_new)
+                        for leader_id, leader_weight in user_leaders.iterrows():
+                            if leader_id not in roster.index.unique():
+                                try:
+                                    leader, leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
 
-                        user_account_close = await self.app.binance.user_account_close(user, user_mix_new)
-                        user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
+                                    if leader:
+                                        roster = pd.concat([roster, leader_grouped_positions]) if roster.size > 0 else leader_grouped_positions
+                                        leader_mix = leader_grouped_positions[["symbol", "positionAmount_SUM"]].rename(columns={"positionAmount_SUM": "BAG"})
+                                        leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
+                                        leader_mixes = pd.concat([leader_mixes, leader_mix]) if leader_mixes.size > 0 else leader_mix
+                                
+                                except Exception as e:
+                                    print(e)
+                                    continue
+
+                        user_mix = pd.DataFrame(user["mix"]["data"]).to_dict()
+                        user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict()
+                        # print("user_mix.to_dict(), user_mix_new.to_dict()")
+                        # print(user_mix, user_mix_new)
+                        # print("roster")
+                        # print(roster)
+                        if user_mix != user_mix_new:
+                            # print("user_mix_diff")
+                            # print([bag[0] for bag in user_mix_diff])
+                            user_positions_new = roster[roster.index.isin(user_leaders.index)]
+                            # user_roster = roster[roster.index.isin(user_leaders.index)]
+                            # user_mix_diff = set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))
+                            # user_positions_new = user_roster[user_roster["symbol"].isin([bag[0] for bag in user_mix_diff])]
+                            user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders)
+                            user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
+
+                            if user_account_update_success:
+                                await self.close_positions(user, positions_closed, user_mix_new)
+                                await self.change_positions(user, positions_changed, user_mix_new)
+                                await self.open_positions(user, positions_opened, user_mix_new)
+
+                            user_account_close = await self.app.binance.user_account_close(user, user_mix_new)
+                            user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
+                
+                except Exception as e:
+                    print(e)
+                    continue
 
             if not API:
                 end_time = (utils.current_time() - start_time) / 1000

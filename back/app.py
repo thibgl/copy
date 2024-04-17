@@ -63,18 +63,20 @@ async def tick_positions():
 
 @app.get('/user/follow/{binanceId}')
 async def follow(binanceId: str):
-    user = await app.db.users.find_one()
     bot = await app.db.bot.find_one()
     leader, _ = await app.scrap.get_leader(bot, binance_id=binanceId)
-    followed_leaders = pd.DataFrame(user["leaders"]["data"])
 
-    if str(leader["_id"]) not in followed_leaders.index.values:
-        followed_leaders.loc[str(leader["_id"])] = 1
+    if leader:
+        user = await app.db.users.find_one()
+        followed_leaders = pd.DataFrame(user["leaders"]["data"])
 
-        update = {
-            "leaders": followed_leaders.to_dict()
-        }
-        await app.database.update(user, update, 'users')
+        if str(leader["_id"]) not in followed_leaders.index.values:
+            followed_leaders.loc[str(leader["_id"])] = 1
+
+            update = {
+                "leaders": followed_leaders.to_dict()
+            }
+            await app.database.update(user, update, 'users')
 
 @app.get('/user/toogle_bot')
 async def toogle_bot():

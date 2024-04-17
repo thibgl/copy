@@ -102,7 +102,6 @@ class Scrap:
     async def fetch_data(self, bot, leaderId, endpointType, params={}):
         response = None
         try:
-
             endpoint = endpoints[endpointType]
             # Filter out the empty params
             filtered_params = {}
@@ -137,7 +136,6 @@ class Scrap:
     async def fetch_pages(self, bot, leaderId, endpointType, params={}, page_number=None, result=None, latest_item=None, reference=None, progress_bar=None):
         response = None
         try:
-
             if page_number is None:
                 page_number = 1
             if result is None:
@@ -197,7 +195,6 @@ class Scrap:
 
     async def leader_detail_update(self, bot, leader=None, binance_id:str=None):
         try:
-
             if leader:
                 binance_id = leader["detail"]["data"]["leadPortfolioId"]
 
@@ -236,11 +233,16 @@ class Scrap:
             positions = pd.DataFrame(positions_response["data"])
             positions["ID"] = str(leader["_id"])
             positions = positions.set_index("ID")
-
-            filtered_positions = positions.apply(lambda column: column.astype(float) if column.name in self.sum_columns + self.average_columns else column)
-            filtered_positions = filtered_positions.loc[(filtered_positions["positionAmount"] != 0) | (filtered_positions["collateral"] != "USDT")]
+            positions = positions.apply(lambda column: column.astype(float) if column.name in self.sum_columns + self.average_columns else column)
+            # print("POSITIONS")
+            # print(positions)
+            # print("")
+            # print("POSITIONS")
+            # print(positions.dtypes)
+            # print("")
+            filtered_positions = positions.loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
             filtered_positions = filtered_positions.drop(columns=self.drop_columns)
-            filtered_positions["ABSOLUTE_LEVERED_VALUE"] = abs(filtered_positions["notionalValue"])
+            filtered_positions["ABSOLUTE_LEVERED_VALUE"] = filtered_positions["notionalValue"].abs()
             filtered_positions["ABSOLUTE_UNLEVERED_VALUE"] = filtered_positions["ABSOLUTE_LEVERED_VALUE"] / filtered_positions["leverage"]
             # print("FILTERED_POSITIONS")
             # print(filtered_positions)
@@ -277,7 +279,6 @@ class Scrap:
 
     async def get_leader(self, bot, leader_id=None, binance_id:str=None):
         try:
-
             if leader_id:
                 leader = await self.app.db.leaders.find_one({"_id": ObjectId(leader_id)})
             
