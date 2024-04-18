@@ -35,7 +35,7 @@ class Log:
 
         print(content)
 
-        if notify and user["detail"]["data"]["chat_id"]:
+        if notify and user["detail"]["data"]["chat_id"] and level == "ERROR":
             await self.notify(user, content)
     
     async def notify(self, user, content):
