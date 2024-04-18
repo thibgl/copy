@@ -168,7 +168,7 @@ class Scrap:
                     pages_length = total_n_results // 10
 
                     if progress_bar is None:
-                        await self.app.log.create(bot, 'INFO', 'scrap/fetch_pages', 'SCRAP/CREATE',f'Scraping {endpointType} for {leaderId}')
+                        await self.app.log.create(bot, bot, 'INFO', 'scrap/fetch_pages', 'SCRAP/CREATE',f'Scraping {endpointType} for {leaderId}')
                         progress_bar = tqdm(total=total_n_results)
 
                     progress_bar.update(len(response_list))
@@ -337,7 +337,7 @@ class Scrap:
     async def handle_exception(self, bot, error, source, details):
         trace = traceback.format_exc()
 
-        await self.app.log.create(bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details={"trace": trace, "log": details})
+        await self.app.log.create(bot, bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details={"trace": trace, "log": details})
 
         self.cleanup()
         self.start()

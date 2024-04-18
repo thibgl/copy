@@ -5,6 +5,8 @@ from telegram import Bot
 
 # ! https://sematext.com/blog/logging-levels/
 
+levels = ["INFO", "ERROR"]
+
 class Log:
     def __init__(self, app):
         TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -13,7 +15,7 @@ class Log:
         self.bot = Bot(token=TOKEN)
         self.token_url = f'https://api.telegram.org/bot{TOKEN}/getUpdates'
 
-    async def create(self, user, level, source, category, message, details='', notify=True, insert=True, collection=None, itemId=None):
+    async def create(self, bot, user, level, source, category, message, details='', notify=True, insert=True, collection=None, itemId=None):
         log = {
             "userId": user["_id"],
             "createdAt": utils.current_time(),
@@ -32,10 +34,11 @@ class Log:
             self.app.db.log.insert_one(log)
 
         content = f'[{utils.current_readable_time()}]: {level} <{source}> {category}: {message}'
-
+        
         print(content)
 
-        if notify and user["detail"]["data"]["chat_id"] and level == "ERROR":
+        level_included = bot["detail"]["data"]["log_level"] in levels[levels.index(level):]
+        if notify and user["detail"]["data"]["chat_id"] and level_included:
             await self.notify(user, content)
     
     async def notify(self, user, content):
