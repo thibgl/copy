@@ -64,13 +64,13 @@ class Bot:
                             user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders)
                             user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
-                            if user_account_update_success:
-                                await self.close_positions(bot, user, positions_closed, user_mix_new)
-                                await self.change_positions(bot, user, positions_changed, user_mix_new)
-                                await self.open_positions(bot, user, positions_opened, user_mix_new)
+                            # if user_account_update_success:
+                            #     await self.close_positions(bot, user, positions_closed, user_mix_new)
+                            #     await self.change_positions(bot, user, positions_changed, user_mix_new)
+                            #     await self.open_positions(bot, user, positions_opened, user_mix_new)
 
-                            user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
-                            user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
+                            # user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
+                            # user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
                 
                 except Exception as e:
                     print(e)
