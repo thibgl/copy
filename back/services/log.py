@@ -37,7 +37,7 @@ class Log:
         
         print(content)
 
-        level_included = bot["detail"]["data"]["log_level"] in levels[levels.index(level):]
+        level_included = level in levels[levels.index(bot["detail"]["data"]["log_level"]):]
         if notify and user["detail"]["data"]["chat_id"] and level_included:
             await self.notify(user, content)
     

@@ -214,8 +214,10 @@ class Scrap:
     def aggregate_leader_positions(self, group: pd.DataFrame, handle_position_direction=False) -> pd.Series:
         result = {}
         
-        for key in self.sum_columns: result[key] = group[key].sum() if key in group.keys() else None
-        for key in self.average_columns: result[key] = np.average(group[key], weights=group["ABSOLUTE_LEVERED_VALUE"]) if key in group.keys() else None
+        for key in self.sum_columns: 
+            result[key] = group[key].sum() if key in group.keys() else None
+        for key in self.average_columns:
+            result[key] = np.average(group[key], weights=group["ABSOLUTE_LEVERED_VALUE"].abs()) if key in group.keys() else None
 
         if handle_position_direction:
             if len(group) > 1: result["positionSide"] = "BOTH"
@@ -225,7 +227,7 @@ class Scrap:
         return pd.Series(result)
 
     async def leader_positions_update(self, bot, leader):
-        try:
+        # try:
 
             binance_id = leader["detail"]["data"]["leadPortfolioId"]
 
@@ -248,6 +250,10 @@ class Scrap:
             # print(filtered_positions)
             # print("")
             grouped_positions = filtered_positions.groupby("symbol").apply(self.aggregate_leader_positions, handle_position_direction=True, include_groups=False).reset_index()
+            grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
+            # print("GROUPED_POSITIONS")
+            # print(grouped_positions)
+            # print("")
             grouped_positions["ID"] = str(leader["_id"])
             grouped_positions = grouped_positions.rename(columns={key: key + "_SUM" for key in self.sum_columns} | {key: key + "_AVERAGE" for key in self.average_columns}).set_index("ID")
             grouped_positions["LEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum()
@@ -273,8 +279,8 @@ class Scrap:
 
             return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "UNLEVERED_RATIO"]]
         
-        except Exception as e:
-            await self.handle_exception(bot, e, 'leader_positions_update', None)
+        # except Exception as e:
+        #     await self.handle_exception(bot, e, 'leader_positions_update', None)
     
 
     async def get_leader(self, bot, leader_id=None, binance_id:str=None):
