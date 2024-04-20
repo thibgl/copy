@@ -111,12 +111,10 @@ class Binance:
                 # print("")
                 # print(positions_closed["TARGET_VALUE"].abs().sum())
                 positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("final_symbol")
-
-            positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
+            # print(mix_diff)
+            positions_opened_changed = pool.copy()[pool["leader_symbol"].isin(mix_diff)]
             if positions_opened_changed.size > 0:
                 positions_opened_changed = positions_opened_changed.groupby("final_symbol").apply(self.aggregate_current_positions, include_groups=False).reset_index()
-
-                positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff)]
                 positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_WEIGHT_SHARE"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"]
                 
                 positions_opened_changed["LEVERAGE_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"] / positions_opened_changed["leader_UNLEVERED_RATIO"]
