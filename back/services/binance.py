@@ -44,9 +44,9 @@ class Binance:
 
         return dataframe
     
-    async def user_account_update(self, bot, user, new_positions, user_leaders): #self, user
-        weigth = 10
-        try:
+    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff): #self, user
+        # weigth = 10
+        # try:
 
             # print("NEW_POSITIONS")
             # print(new_positions)
@@ -71,7 +71,7 @@ class Binance:
             # print("")
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
             valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
-
+            # print(valueUSDT)
             new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') else [row["symbol"], False]), axis=1)
             new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
             # print("NEW_POSITIONS")
@@ -115,14 +115,23 @@ class Binance:
             positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
             if positions_opened_changed.size > 0:
                 positions_opened_changed = positions_opened_changed.groupby("final_symbol").apply(self.aggregate_current_positions, include_groups=False).reset_index()
+
+                positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff)]
                 positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_WEIGHT_SHARE"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"]
-                positions_opened_changed["LEVERAGE_AVERAGE_RATIO"] = user["account"]["data"]["leverage"] / (positions_opened_changed["leader_LEVERED_RATIO"] / positions_opened_changed["leader_UNLEVERED_RATIO"])
+                
+                positions_opened_changed["LEVERAGE_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"] / positions_opened_changed["leader_UNLEVERED_RATIO"]
+                positions_opened_changed.loc[positions_opened_changed["LEVERAGE_RATIO"] >= user["account"]["data"]["leverage"], "LEVERAGE_AVERAGE_RATIO"] =  user["account"]["data"]["leverage"] / positions_opened_changed["LEVERAGE_RATIO"]
+                positions_opened_changed.loc[positions_opened_changed["LEVERAGE_RATIO"] < user["account"]["data"]["leverage"], "LEVERAGE_AVERAGE_RATIO"] =  positions_opened_changed["LEVERAGE_RATIO"] / user["account"]["data"]["leverage"]
+                # print("POSITIONS_OPENED_CHANGED")
+                # print(positions_opened_changed)
+                # print("")
+
                 positions_opened_changed["TARGET_VALUE"] = valueUSDT * user["account"]["data"]["leverage"] * positions_opened_changed["TARGET_SHARE"] * positions_opened_changed["LEVERAGE_AVERAGE_RATIO"]
                 positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
                 positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice_AVERAGE"]
                 positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
 
-                # print("positions_opened_changed")
+                # print("POSITIONS_OPENED_CHANGED")
                 # print(positions_opened_changed)
                 # print("")
                 # print(positions_opened_changed["TARGET_SHARE"].abs().sum())
@@ -167,8 +176,8 @@ class Binance:
 
             return user_account_update, positions_closed, positions_opened, positions_changed
 
-        except Exception as e:
-            await self.handle_exception(bot, user, e, 'user_account_update', None)
+        # except Exception as e:
+        #     await self.handle_exception(bot, user, e, 'user_account_update', None)
 
 
     async def user_account_close(self, bot, user, new_user_mix):

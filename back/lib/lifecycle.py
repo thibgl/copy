@@ -141,6 +141,7 @@ async def db_startup(db):
             "data": {
                 "active": True,
                 "tick_interval": 30,
+                "tick_boost": 10,
                 "total_weight": 0,
                 "shutdown_time": 0,
                 "ticks": 0,

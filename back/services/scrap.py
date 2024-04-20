@@ -292,11 +292,12 @@ class Scrap:
                 leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
 
             if leader:
-                detail = await self.leader_detail_update(bot, leader=leader)
-
+                detail = leader["detail"]["data"]
             else:
                 detail = await self.leader_detail_update(bot, binance_id=binance_id)
+                await self.app.database.update(obj=leader, update=detail, collection='leaders')
                 leader = {
+                    "binanceId": detail["leadPortfolioId"],
                     "detail":{
                         "data":{}
                         },
@@ -316,24 +317,21 @@ class Scrap:
                         "data":{}
                         },
                 }
-                leader["binanceId"] = detail["detail"]["leadPortfolioId"]
 
-            await self.app.database.update(obj=leader, update=detail, collection='leaders')
-
-            if leader and detail["detail"]["positionShow"] == True and detail["detail"]["status"] == "ACTIVE" and detail["detail"]["initInvestAsset"] == "USDT":
-                
-                # performance = await leader_performance_update(leader)
-                # await database_update(obj=leader, update=performance, collection='leaders')
-                
-                # account = await leader_account_update(leader)
-                # await database_update(obj=leader, update=account, collection='leaders')
-
+            if detail["positionShow"] and detail["status"] == "ACTIVE" and detail["initInvestAsset"] == "USDT":
                 positions, grouped_positions = await self.leader_positions_update(bot, leader)
-                await self.app.database.update(obj=leader, update=positions, collection='leaders')
 
-                return leader, grouped_positions
+                if grouped_positions.size > 0:
+                    await self.app.database.update(obj=leader, update=positions, collection='leaders')
+                # print(grouped_positions)
+                return grouped_positions
+                
+            elif leader["updated"] - utils.current_time() > 3600000:
+                print("UPDATE LEADER")
+                detail = await self.leader_detail_update(bot, binance_id=binance_id)
+                await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
-            return None, None
+            return None
 
         except Exception as e:
             await self.handle_exception(bot, e, 'get_leader', None)
@@ -347,8 +345,6 @@ class Scrap:
 
         self.cleanup()
         self.start()
-
-        time.sleep(5)
 
         pass
     

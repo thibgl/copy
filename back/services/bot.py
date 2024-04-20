@@ -19,6 +19,7 @@ class Bot:
         while bot["account"]["data"]["active"]:
             print(f'[{utils.current_readable_time()}]: Fetching Positions')
             start_time = utils.current_time()
+            tick_boost = False
 
             bot = await self.app.db.bot.find_one()
             users = self.app.db.users.find()
@@ -36,9 +37,9 @@ class Bot:
                         for leader_id, leader_weight in user_leaders.iterrows():
                             if leader_id not in roster.index.unique():
                                 try:
-                                    leader, leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
+                                    leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
 
-                                    if leader:
+                                    if leader_grouped_positions.size > 0:
                                         roster = pd.concat([roster, leader_grouped_positions]) if roster.size > 0 else leader_grouped_positions
                                         leader_mix = leader_grouped_positions[["symbol", "positionAmount_SUM"]].rename(columns={"positionAmount_SUM": "BAG"})
                                         leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
@@ -59,9 +60,10 @@ class Bot:
                             # print([bag[0] for bag in user_mix_diff])
                             user_positions_new = roster[roster.index.isin(user_leaders.index)]
                             # user_roster = roster[roster.index.isin(user_leaders.index)]
-                            # user_mix_diff = set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))
+                            user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
+                            # print(user_mix_diff)
                             # user_positions_new = user_roster[user_roster["symbol"].isin([bag[0] for bag in user_mix_diff])]
-                            user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders)
+                            user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff)
                             user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
                             if user_account_update_success:
@@ -72,13 +74,16 @@ class Bot:
                             user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
                             user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
                 
+                            tick_boost = any([positions_closed.size > 0, positions_changed.size > 0, positions_opened.size > 0])
+
                 except Exception as e:
                     print(e)
                     continue
 
             if not API:
                 end_time = (utils.current_time() - start_time) / 1000
-                await asyncio.sleep(bot["account"]["data"]["tick_interval"] - end_time)
+                interval = bot["account"]["data"]["tick_boost"] if tick_boost else bot["account"]["data"]["tick_interval"]
+                await asyncio.sleep(interval - end_time)
 
 
     async def close_positions(self, bot, user, closed_positions, new_user_mix):
