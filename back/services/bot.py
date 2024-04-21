@@ -37,7 +37,7 @@ class Bot:
                         for leader_id, leader_weight in user_leaders.iterrows():
                             if leader_id not in roster.index.unique():
                                 try:
-                                    leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
+                                    _, leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
 
                                     if leader_grouped_positions.size > 0:
                                         roster = pd.concat([roster, leader_grouped_positions]) if roster.size > 0 else leader_grouped_positions

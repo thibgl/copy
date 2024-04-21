@@ -11,6 +11,8 @@ from lib import utils
 import pandas as pd
 import numpy as np
 
+thousand_ignore = ["1000SATSUSDT"]
+
 class Binance:
     def __init__(self, app):
         self.BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY")
@@ -72,7 +74,7 @@ class Binance:
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
             valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
             # print(valueUSDT)
-            new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') else [row["symbol"], False]), axis=1)
+            new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') and row["symbol"] not in thousand_ignore else [row["symbol"], False]), axis=1)
             new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
             # print("NEW_POSITIONS")
             # print(new_positions)
@@ -84,7 +86,9 @@ class Binance:
             # print("")
             pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
             pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
-            pool["leader_WEIGHT_SHARE"] = pool["leader_WEIGHT"] / pool["leader_ID"].dropna().unique().size
+            n_leaders = pool["leader_ID"].dropna().unique().size
+            # pool["leader_WEIGHT_SHARE"] = pool["leader_WEIGHT"] / n_leaders
+            pool["leader_WEIGHT_SUM"] = pool["leader_WEIGHT"] / n_leaders
             # print("POOL")
             # print(pool)
             # print("")
@@ -112,10 +116,15 @@ class Binance:
                 # print(positions_closed["TARGET_VALUE"].abs().sum())
                 positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("final_symbol")
             # print(mix_diff)
-            positions_opened_changed = pool.copy()[pool["leader_symbol"].isin(mix_diff)]
+            # positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
+            positions_opened_changed = pool.copy()[pool["leader_symbol"].isin(mix_diff) if n_leaders == user["account"]["data"]["n_leaders"] else ~pool["leader_symbol"].isna()]
             if positions_opened_changed.size > 0:
                 positions_opened_changed = positions_opened_changed.groupby("final_symbol").apply(self.aggregate_current_positions, include_groups=False).reset_index()
-                positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_WEIGHT_SHARE"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"]
+                # print(positions_opened_changed)
+                positions_opened_changed["INVESTED_RATIO"] = positions_opened_changed.apply(lambda row: row["leader_LEVERED_RATIO"] if row["leader_LEVERED_RATIO"] < 0.3 else row["leader_UNLEVERED_RATIO"] if row["leader_UNLEVERED_RATIO"] < 0.3 else 0.3, axis=1)
+
+                # positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_WEIGHT_SHARE"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"] #* positions_opened_changed["INVESTED_RATIO"] * 2
+                positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_WEIGHT_SUM"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["INVESTED_RATIO"] * (2 / 0.3)
                 
                 positions_opened_changed["LEVERAGE_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"] / positions_opened_changed["leader_UNLEVERED_RATIO"]
                 positions_opened_changed.loc[positions_opened_changed["LEVERAGE_RATIO"] >= user["account"]["data"]["leverage"], "LEVERAGE_AVERAGE_RATIO"] =  user["account"]["data"]["leverage"] / positions_opened_changed["LEVERAGE_RATIO"]
@@ -124,6 +133,7 @@ class Binance:
                 # print(positions_opened_changed)
                 # print("")
 
+                # positions_opened_changed["TARGET_VALUE"] = valueUSDT * user["account"]["data"]["leverage"] * positions_opened_changed["TARGET_SHARE"] * positions_opened_changed["LEVERAGE_AVERAGE_RATIO"]
                 positions_opened_changed["TARGET_VALUE"] = valueUSDT * user["account"]["data"]["leverage"] * positions_opened_changed["TARGET_SHARE"] * positions_opened_changed["LEVERAGE_AVERAGE_RATIO"]
                 positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
                 positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice_AVERAGE"]
@@ -132,8 +142,8 @@ class Binance:
                 # print("POSITIONS_OPENED_CHANGED")
                 # print(positions_opened_changed)
                 # print("")
-                # print(positions_opened_changed["TARGET_SHARE"].abs().sum())
-                # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
+                # print(positions_opened_changed["TARGET_SHARE_TEST"].abs().sum())
+                # print(positions_opened_changed["TARGET_VALUE_TEST"].abs().sum())
                 positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
 
 
@@ -165,8 +175,8 @@ class Binance:
                     # "levered_ratio": levered_ratio,
                     # "unlevered_ratio": unlevered_ratio,
                     "collateral_margin_level": float(margin_account_data["totalCollateralValueInUSDT"]),
-                    "collateral_value_USDT": float(margin_account_data["collateralMarginLevel"])
-
+                    "collateral_value_USDT": float(margin_account_data["collateralMarginLevel"]),
+                    "n_leaders": n_leaders
                 },
                 "positions": positions.set_index("asset").to_dict(),
                 # "mix": new_user_mix
@@ -242,6 +252,7 @@ class Binance:
                 return symbol, symbol_precisions.loc[symbol]
             
             else:
+                print(symbol)
                 precision_response = self.client.exchange_info(symbol=symbol)
 
                 details = precision_response['symbols'][0]

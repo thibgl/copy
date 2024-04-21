@@ -284,20 +284,17 @@ class Scrap:
     
 
     async def get_leader(self, bot, leader_id=None, binance_id:str=None):
-        try:
+        # try:
             if leader_id:
                 leader = await self.app.db.leaders.find_one({"_id": ObjectId(leader_id)})
             
             if binance_id:
                 leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
 
-            if leader:
-                detail = leader["detail"]["data"]
-            else:
+            if not leader:
                 detail = await self.leader_detail_update(bot, binance_id=binance_id)
-                await self.app.database.update(obj=leader, update=detail, collection='leaders')
                 leader = {
-                    "binanceId": detail["leadPortfolioId"],
+                    "binanceId": detail["detail"]["leadPortfolioId"],
                     "detail":{
                         "data":{}
                         },
@@ -317,24 +314,25 @@ class Scrap:
                         "data":{}
                         },
                 }
+                await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
-            if detail["positionShow"] and detail["status"] == "ACTIVE" and detail["initInvestAsset"] == "USDT":
+            if leader["detail"]["data"]["positionShow"] and leader["detail"]["data"]["status"] == "ACTIVE" and leader["detail"]["data"]["initInvestAsset"] == "USDT":
                 positions, grouped_positions = await self.leader_positions_update(bot, leader)
 
                 if grouped_positions.size > 0:
                     await self.app.database.update(obj=leader, update=positions, collection='leaders')
                 # print(grouped_positions)
-                return grouped_positions
+                return leader, grouped_positions
                 
             elif leader["updated"] - utils.current_time() > 3600000:
                 print("UPDATE LEADER")
                 detail = await self.leader_detail_update(bot, binance_id=binance_id)
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
-            return None
+            return leader, None
 
-        except Exception as e:
-            await self.handle_exception(bot, e, 'get_leader', None)
+        # except Exception as e:
+        #     await self.handle_exception(bot, e, 'get_leader', None)
     #* LIFECYCLE
 
 
