@@ -139,11 +139,11 @@ class Binance:
                 positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice_AVERAGE"]
                 positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
 
-                # print("POSITIONS_OPENED_CHANGED")
-                # print(positions_opened_changed)
-                # print("")
-                # print(positions_opened_changed["TARGET_SHARE_TEST"].abs().sum())
-                # print(positions_opened_changed["TARGET_VALUE_TEST"].abs().sum())
+                print("POSITIONS_OPENED_CHANGED")
+                print(positions_opened_changed)
+                print("")
+                print(positions_opened_changed["TARGET_SHARE"].abs().sum())
+                print(positions_opened_changed["TARGET_VALUE"].abs().sum())
                 positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
 
 
