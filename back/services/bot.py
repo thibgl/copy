@@ -71,8 +71,8 @@ class Bot:
                                 await self.change_positions(bot, user, positions_changed, user_mix_new)
                                 await self.open_positions(bot, user, positions_opened, user_mix_new)
 
-                            # user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
-                            # user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
+                            user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
+                            user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
                 
                             tick_boost = any([positions_closed.size > 0, positions_changed.size > 0, positions_opened.size > 0])
 

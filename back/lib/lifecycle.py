@@ -35,6 +35,7 @@ async def db_startup(db):
             "detail": {
                 "updated": current_time,
                 "data": {
+                    "TARGET_RATIO": 0.6,
                     "active": True,
                     "chat_id": 1031182213
                     }
@@ -139,6 +140,7 @@ async def db_startup(db):
         "account": {
             "updated": current_time,
             "data": {
+                "LEADER_INVESTED_CAP": 0.3,
                 "active": True,
                 "tick_interval": 30,
                 "tick_boost": 10,
