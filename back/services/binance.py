@@ -70,7 +70,7 @@ class Binance:
             n_leaders = pool["leader_ID"].dropna().unique().size
 
             positions_closed = pool.copy()[pool["leader_symbol"].isna()]
-            if positions_closed.size > 0:
+            if len(positions_closed) > 0:
                 positions_closed["SYMBOL_PRICE"] = positions_closed["symbol"].apply(lambda symbol: float(self.app.binance.client.ticker_price(symbol)["price"]))
                 positions_closed["CURRENT_VALUE"] = positions_closed["netAsset"] * positions_closed["SYMBOL_PRICE"]
 
@@ -80,7 +80,7 @@ class Binance:
                 positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("final_symbol")
 
             positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
-            if positions_opened_changed.size > 0:
+            if len(positions_opened_changed) > 0:
                 user_leverage = user["account"]["data"]["leverage"]
 
                 positions_opened_changed["INVESTED_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"]
@@ -88,22 +88,22 @@ class Binance:
                 positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"]
 
                 positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["MIX_SHARE"] / positions_opened_changed["MIX_SHARE"].sum() * positions_opened_changed["INVESTED_RATIO"]
-
                 positions_opened_changed["TARGET_LEVERAGE"] = positions_opened_changed["leader_LEVERED_RATIO"] / positions_opened_changed["leader_UNLEVERED_RATIO"]
                 positions_opened_changed.loc[positions_opened_changed["TARGET_LEVERAGE"] > user_leverage, "TARGET_LEVERAGE"] = user_leverage
                 positions_opened_changed["TARGET_VALUE"] = valueUSDT * positions_opened_changed["TARGET_SHARE"] * positions_opened_changed["TARGET_LEVERAGE"]
                 positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
-                print("POSITIONS_OPENED_CHANGED")
-                print(positions_opened_changed)
-                print("")
-                print(positions_opened_changed["TARGET_SHARE"].abs().sum())
-                print(positions_opened_changed["TARGET_VALUE"].abs().sum())
+                # print("POSITIONS_OPENED_CHANGED")
+                # print(positions_opened_changed)
+                # print("")
+                # print(positions_opened_changed["TARGET_SHARE"].abs().sum())
+                # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
 
                 if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25:
-                    positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff)]
+                    positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
-                positions_opened_changed = positions_opened_changed.groupby("symbol").agg({
-                    "final_symbol": 'last',
+            if len(positions_opened_changed) > 0:
+                positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
+                    "symbol": 'last',
                     "netAsset": 'last',
                     "leader_markPrice_AVERAGE": 'mean',
                     "leader_ID": 'unique',
@@ -116,6 +116,7 @@ class Binance:
                     "TARGET_VALUE": 'sum'
                     }).reset_index()
                 positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
+
                 # clash_multiplier = 1 + (levered_account_value * target_ratio - positions_opened_changed["TARGET_VALUE"].abs().sum()) / positions_opened_changed["TARGET_VALUE"].abs().sum()
                 # print("CLASHSHSHA")
                 # print(clash_multiplier)
@@ -129,7 +130,7 @@ class Binance:
             positions_opened = positions_opened_changed.copy()[positions_opened_changed["symbol"].isna()].set_index("final_symbol")
             
             positions_changed = positions_opened_changed.copy()[~positions_opened_changed["symbol"].isna()]
-            if positions_changed.size > 0:
+            if len(positions_changed) > 0:
                 positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice_AVERAGE"]
                 positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
                 positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
@@ -226,7 +227,6 @@ class Binance:
                 return symbol, symbol_precisions.loc[symbol]
             
             else:
-                print(symbol)
                 precision_response = self.client.exchange_info(symbol=symbol)
 
                 details = precision_response['symbols'][0]
