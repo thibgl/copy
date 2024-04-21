@@ -58,6 +58,7 @@ class Binance:
 
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
             valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
+            collateral_margin_level = float(margin_account_data["totalCollateralValueInUSDT"])
 
             new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') and row["symbol"] not in thousand_ignore else [row["symbol"], False]), axis=1)
             new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
@@ -97,7 +98,9 @@ class Binance:
                 print("")
                 print(positions_opened_changed["TARGET_SHARE"].abs().sum())
                 print(positions_opened_changed["TARGET_VALUE"].abs().sum())
-                positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff)]
+
+                if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25:
+                    positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff)]
 
                 positions_opened_changed = positions_opened_changed.groupby("symbol").agg({
                     "final_symbol": 'last',
@@ -145,7 +148,7 @@ class Binance:
                     "value_USDT": valueUSDT,
                     # "levered_ratio": levered_ratio,
                     # "unlevered_ratio": unlevered_ratio,
-                    "collateral_margin_level": float(margin_account_data["totalCollateralValueInUSDT"]),
+                    "collateral_margin_level": collateral_margin_level,
                     "collateral_value_USDT": float(margin_account_data["collateralMarginLevel"]),
                     "n_leaders": n_leaders
                 },
