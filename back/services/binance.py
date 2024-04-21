@@ -117,7 +117,7 @@ class Binance:
                 positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("final_symbol")
             # print(mix_diff)
             # positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
-            positions_opened_changed = pool.copy()[pool["leader_symbol"].isin(mix_diff) if n_leaders == user["account"]["data"]["n_leaders"] else ~pool["leader_symbol"].isna()]
+            positions_opened_changed = pool.copy()[pool["leader_symbol"].isin(mix_diff) if n_leaders == user["account"]["data"]["n_leaders"] else ~pool["leader_symbol"].isna() if float(margin_account_data["collateralMarginLevel"]) < 1.25 else ~pool["leader_symbol"].isna()]
             if positions_opened_changed.size > 0:
                 positions_opened_changed = positions_opened_changed.groupby("final_symbol").apply(self.aggregate_current_positions, include_groups=False).reset_index()
                 # print(positions_opened_changed)
