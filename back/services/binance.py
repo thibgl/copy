@@ -99,6 +99,7 @@ class Binance:
                 # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
 
                 if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25:
+                    print('MIX PASS')
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
             if len(positions_opened_changed) > 0:
