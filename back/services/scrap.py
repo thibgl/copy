@@ -233,52 +233,56 @@ class Scrap:
 
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
             positions = pd.DataFrame(positions_response["data"])
-            positions["ID"] = str(leader["_id"])
-            positions = positions.set_index("ID")
-            positions = positions.apply(lambda column: column.astype(float) if column.name in self.sum_columns + self.average_columns else column)
-            # print("POSITIONS")
-            # print(positions)
-            # print("")
-            # print("POSITIONS")
-            # print(positions.dtypes)
-            # print("")
-            filtered_positions = positions.loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
-            filtered_positions = filtered_positions.drop(columns=self.drop_columns)
-            filtered_positions["ABSOLUTE_LEVERED_VALUE"] = filtered_positions["notionalValue"].abs()
-            filtered_positions["ABSOLUTE_UNLEVERED_VALUE"] = filtered_positions["ABSOLUTE_LEVERED_VALUE"] / filtered_positions["leverage"]
-            # print("FILTERED_POSITIONS")
-            # print(filtered_positions)
-            # print("")
-            grouped_positions = filtered_positions.groupby("symbol").apply(self.aggregate_leader_positions, handle_position_direction=True, include_groups=False).reset_index()
-            grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
-            # print("GROUPED_POSITIONS")
-            # print(grouped_positions)
-            # print("")
-            grouped_positions["ID"] = str(leader["_id"])
-            grouped_positions = grouped_positions.rename(columns={key: key + "_SUM" for key in self.sum_columns} | {key: key + "_AVERAGE" for key in self.average_columns}).set_index("ID")
-            grouped_positions["LEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum()
-            grouped_positions["UNLEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum()
-            # total_balance = leader["account"]["data"]["total_balance"]
-            total_balance = float(leader["detail"]["data"]["marginBalance"])
-            levered_ratio = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum() / total_balance
-            unlevered_ratio = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum() / total_balance
 
-            grouped_positions["LEVERED_RATIO"] = levered_ratio
-            grouped_positions["UNLEVERED_RATIO"] = unlevered_ratio
-            # print("GROUPED_POSITIONS")
-            # print(grouped_positions)
-            # print("")
-            positions_update = {
-                "account": {
-                "levered_ratio": levered_ratio,
-                    "unlevered_ratio": unlevered_ratio,
-                },
-                "positions": filtered_positions.to_dict(),
-                "grouped_positions": grouped_positions.to_dict()
-            }
+            if len(positions) > 0:
+                positions["ID"] = str(leader["_id"])
+                positions = positions.set_index("ID")
+                positions = positions.apply(lambda column: column.astype(float) if column.name in self.sum_columns + self.average_columns else column)
+                # print("POSITIONS")
+                # print(positions)
+                # print("")
+                # print("POSITIONS")
+                # print(positions.dtypes)
+                # print("")
+                # print(binance_id)
+                filtered_positions = positions.loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
+                filtered_positions = filtered_positions.drop(columns=self.drop_columns)
+                filtered_positions["ABSOLUTE_LEVERED_VALUE"] = filtered_positions["notionalValue"].abs()
+                filtered_positions["ABSOLUTE_UNLEVERED_VALUE"] = filtered_positions["ABSOLUTE_LEVERED_VALUE"] / filtered_positions["leverage"]
+                # print("FILTERED_POSITIONS")
+                # print(filtered_positions)
+                # print("")
+                grouped_positions = filtered_positions.groupby("symbol").apply(self.aggregate_leader_positions, handle_position_direction=True, include_groups=False).reset_index()
+                grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
+                # print("GROUPED_POSITIONS")
+                # print(grouped_positions)
+                # print("")
+                grouped_positions["ID"] = str(leader["_id"])
+                grouped_positions = grouped_positions.rename(columns={key: key + "_SUM" for key in self.sum_columns} | {key: key + "_AVERAGE" for key in self.average_columns}).set_index("ID")
+                grouped_positions["LEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum()
+                grouped_positions["UNLEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum()
+                # total_balance = leader["account"]["data"]["total_balance"]
+                total_balance = float(leader["detail"]["data"]["marginBalance"])
+                levered_ratio = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum() / total_balance
+                unlevered_ratio = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum() / total_balance
 
-            return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "UNLEVERED_RATIO"]]
-        
+                grouped_positions["LEVERED_RATIO"] = levered_ratio
+                grouped_positions["UNLEVERED_RATIO"] = unlevered_ratio
+                # print("GROUPED_POSITIONS")
+                # print(grouped_positions)
+                # print("")
+                positions_update = {
+                    "account": {
+                    "levered_ratio": levered_ratio,
+                        "unlevered_ratio": unlevered_ratio,
+                    },
+                    "positions": filtered_positions.to_dict(),
+                    "grouped_positions": grouped_positions.to_dict()
+                }
+
+                return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "UNLEVERED_RATIO"]]
+
+            return positions, []
         # except Exception as e:
         #     await self.handle_exception(bot, e, 'leader_positions_update', None)
     
@@ -316,20 +320,23 @@ class Scrap:
                 }
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
+            if utils.current_time() - leader["updated"] > 3600000:
+                detail = await self.leader_detail_update(bot, leader=leader)
+                await self.app.database.update(obj=leader, update=detail, collection='leaders')
+                #! -> remove leader from user list
             if leader["detail"]["data"]["positionShow"] and leader["detail"]["data"]["status"] == "ACTIVE" and leader["detail"]["data"]["initInvestAsset"] == "USDT":
                 positions, grouped_positions = await self.leader_positions_update(bot, leader)
 
-                if grouped_positions.size > 0:
+                if len(grouped_positions) > 0:
                     await self.app.database.update(obj=leader, update=positions, collection='leaders')
+                
+                else:
+                    detail = await self.leader_detail_update(bot, leader=leader)
+                    await self.app.database.update(obj=leader, update=detail, collection='leaders')
                 # print(grouped_positions)
                 return leader, grouped_positions
-                
-            elif leader["updated"] - utils.current_time() > 3600000:
-                print("UPDATE LEADER")
-                detail = await self.leader_detail_update(bot, binance_id=binance_id)
-                await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
-            return leader, None
+            return leader, []
 
         # except Exception as e:
         #     await self.handle_exception(bot, e, 'get_leader', None)

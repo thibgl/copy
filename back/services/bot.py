@@ -39,11 +39,11 @@ class Bot:
                                 try:
                                     _, leader_grouped_positions = await self.app.scrap.get_leader(bot, leader_id=leader_id)
 
-                                    if leader_grouped_positions.size > 0:
-                                        roster = pd.concat([roster, leader_grouped_positions]) if roster.size > 0 else leader_grouped_positions
+                                    if len(leader_grouped_positions) > 0:
+                                        roster = pd.concat([roster, leader_grouped_positions]) if len(roster) > 0 else leader_grouped_positions
                                         leader_mix = leader_grouped_positions[["symbol", "positionAmount_SUM"]].rename(columns={"positionAmount_SUM": "BAG"})
                                         leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
-                                        leader_mixes = pd.concat([leader_mixes, leader_mix]) if leader_mixes.size > 0 else leader_mix
+                                        leader_mixes = pd.concat([leader_mixes, leader_mix]) if len(leader_mixes) > 0 else leader_mix
                                 
                                 except Exception as e:
                                     print(e)

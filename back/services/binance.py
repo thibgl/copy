@@ -47,6 +47,7 @@ class Binance:
             margin_account_data = self.client.margin_account()
 
             positions = []
+            # ! -> df
             for asset in margin_account_data["userAssets"]:
                 amount = float(asset["netAsset"])
                 if amount != 0 and asset["asset"] != 'USDT':
@@ -68,6 +69,7 @@ class Binance:
             pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
             pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
             n_leaders = pool["leader_ID"].dropna().unique().size
+            print(f'[{utils.current_readable_time()}]: Updating {n_leaders} leaders')
 
             positions_closed = pool.copy()[pool["leader_symbol"].isna()]
             if len(positions_closed) > 0:
@@ -99,7 +101,7 @@ class Binance:
                 # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
 
                 if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25:
-                    print('MIX PASS')
+                    # print('MIX PASS')
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
             if len(positions_opened_changed) > 0:
@@ -118,7 +120,7 @@ class Binance:
                     }).reset_index()
                 positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
 
-                # clash_multiplier = 1 + (levered_account_value * target_ratio - positions_opened_changed["TARGET_VALUE"].abs().sum()) / positions_opened_changed["TARGET_VALUE"].abs().sum()
+                # ! clash_multiplier = 1 + (levered_account_value * target_ratio - positions_opened_changed["TARGET_VALUE"].abs().sum()) / positions_opened_changed["TARGET_VALUE"].abs().sum()
                 # print("CLASHSHSHA")
                 # print(clash_multiplier)
                 # positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_VALUE"] * clash_multiplier
