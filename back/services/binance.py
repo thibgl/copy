@@ -183,9 +183,9 @@ class Binance:
     
     
     async def open_position(self, user, symbol:str, amount:float):
-        weight = 6
+        # weight = 6
 # 
-        try:
+        # try:
             side = 'BUY'
             if amount < 0:
                 side = 'SELL'
@@ -194,14 +194,14 @@ class Binance:
             
             return response
 
-        except Exception as e:
-            await self.handle_exception(user, e, 'open_position', symbol)
+        # except Exception as e:
+        #     await self.handle_exception(user, e, 'open_position', symbol)
             
 
     async def close_position(self, user, symbol:str, amount:float):
-        weight = 6
+        # weight = 6
 
-        try:
+        # try:
             side = 'BUY'
             if amount < 0:
                 side = 'SELL'
@@ -210,8 +210,8 @@ class Binance:
 
             return response
         
-        except Exception as e:
-            await self.handle_exception(user, e, 'close_position', symbol)
+        # except Exception as e:
+        #     await self.handle_exception(user, e, 'close_position', symbol)
         
     def truncate_amount(self, amount, stepSize):
         asset_precision = stepSize.split('1')[0].count('0')
