@@ -46,15 +46,11 @@ class Binance:
 
             margin_account_data = self.client.margin_account()
 
-            positions = []
-            # ! -> df
-            for asset in margin_account_data["userAssets"]:
-                amount = float(asset["netAsset"])
-                if amount != 0 and asset["asset"] != 'USDT':
-                    positions.append(asset)
-
-            positions = pd.DataFrame(positions)
-            positions = positions.apply(lambda column: column.astype(float) if column.name != 'asset' else column)
+            positions = pd.DataFrame(margin_account_data["userAssets"])
+            for column in positions.columns:
+                if column != 'asset':
+                    positions[column] = positions[column].astype(float)
+            positions = positions.loc[(positions["asset"] != 'USDT') & (positions["netAsset"] != 0)]
             positions["symbol"] = positions["asset"] + 'USDT'
 
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
