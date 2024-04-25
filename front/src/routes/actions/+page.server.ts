@@ -11,7 +11,7 @@ export const actions = {
 
 
         try {
-            const response = await fetch('http://localhost:8000/api/token', {
+            const response = await fetch('http://localhost:8000/auth/token', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -36,7 +36,7 @@ export const actions = {
     },
     logout: async ({ cookies }) => {
         try {
-            const response = await fetch('http://localhost:8000/api/logout', {
+            const response = await fetch('http://localhost:8000/auth/logout', {
                 method: 'GET', // or POST if that's how your endpoint is configured
                 credentials: 'include' // Needed to include cookies in the request
             })

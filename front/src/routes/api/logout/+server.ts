@@ -2,7 +2,7 @@ import type { RequestHandler } from './$types'
 
 export const GET: RequestHandler = async ({ cookies }) => {
 	try {
-		const response = await fetch('http://localhost:8000/api/logout', {
+		const response = await fetch('http://localhost:8000/auth/logout', {
 			method: 'GET', // or POST if that's how your endpoint is configured
 			credentials: 'include' // Needed to include cookies in the request
 		})

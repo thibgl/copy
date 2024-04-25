@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+
 	const tableArr = [{ name: 'test', position: 3, symbol: 'XXX', weight: 32 }];
 	const totalWeight = 42;
 </script>
@@ -8,27 +10,31 @@
 	<table class="table table-hover">
 		<thead>
 			<tr>
-				<th>Position</th>
-				<th>Name</th>
 				<th>Symbol</th>
-				<th>Weight</th>
+				<th>Amount</th>
+				<th>Free</th>
+				<th>Locked</th>
+				<th>Borrowed</th>
+				<th>Interest</th>
 			</tr>
 		</thead>
 		<tbody>
-			{#each tableArr as row, i}
+			{#each Object.keys($page.data.user.positions.symbol) as symbol, i}
 				<tr>
-					<td>{row.position}</td>
-					<td>{row.name}</td>
-					<td>{row.symbol}</td>
-					<td>{row.weight}</td>
+					<td>{$page.data.user.positions.symbol[symbol]}</td>
+					<td>{$page.data.user.positions.netAsset[symbol]}</td>
+					<td>{$page.data.user.positions.free[symbol]}</td>
+					<td>{$page.data.user.positions.locked[symbol]}</td>
+					<td>{$page.data.user.positions.borrowed[symbol]}</td>
+					<td>{$page.data.user.positions.interest[symbol]}</td>
 				</tr>
 			{/each}
 		</tbody>
-		<tfoot>
+		<!-- <tfoot>
 			<tr>
 				<th colspan="3">Calculated Total Weight</th>
 				<td>{totalWeight}</td>
 			</tr>
-		</tfoot>
+		</tfoot> -->
 	</table>
 </div>

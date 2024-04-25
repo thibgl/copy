@@ -50,6 +50,8 @@
 	import BNBIcon from '~icons/cryptocurrency-color/bnb';
 
 	let botOn = false;
+
+	console.log($page.data.user);
 </script>
 
 <!-- App Shell -->
@@ -68,13 +70,13 @@
 				</a>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
-				{#if $page.data.isAuthenticated}
+				{#if $page.data.user}
 					<button class="btn variant-filled-tertiary">
-						<span>0</span><BTCIcon />
-						<spans>/</spans>
-						<span>1000</span><USDTIcon />
-						<spans>|</spans>
-						<span>0</span><BNBIcon />
+						<span>{$page.data.user.account.value_BTC}</span><BTCIcon />
+						<span>/</span>
+						<span>{Math.round($page.data.user.account.value_USDT * 100) / 100}</span><USDTIcon />
+						<!-- <span>|</span>
+						<span>0</span><BNBIcon /> -->
 					</button>
 					<button
 						class="btn space-x-0 transition-colors duration-300 relative"
@@ -96,7 +98,7 @@
 		</AppBar>
 	</svelte:fragment>
 	<svelte:fragment slot="sidebarLeft">
-		{#if $page.data.isAuthenticated}
+		{#if $page.data.user}
 			<AppRail width="w-full">
 				<!-- --- -->
 				<AppRailAnchor href="/" selected={$page.url.pathname === '/'}>
@@ -137,7 +139,7 @@
 	<div class="container h-full mx-auto flex justify-center items-center">
 		<div class="space-y-10 text-center flex flex-col items-center">
 			<!-- Animated Logo -->
-			{#if $page.data.isAuthenticated}
+			{#if $page.data.user}
 				<slot />
 			{:else}
 				<figure>

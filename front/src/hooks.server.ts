@@ -9,7 +9,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (authToken) {
         try {
             // Attempt to fetch user data using the JWT
-            const response = await fetch('http://localhost:8000/api/user', {
+            const response = await fetch('http://localhost:8000/auth/user', {
                 method: 'GET',
                 headers: {
                     'Authorization': authToken,
@@ -20,7 +20,7 @@ export const handle: Handle = async ({ event, resolve }) => {
             if (response.ok) {
                 // If the request is successful, set the user data in locals for use in endpoints/load functions
                 const userData = await response.json()
-                console.log(userData)
+                // console.log(userData)
                 event.locals.user = userData
             } else {
                 console.error('Failed to verify user')
