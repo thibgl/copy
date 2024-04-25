@@ -202,7 +202,7 @@ class Binance:
             if amount < 0:
                 side = 'SELL'
 
-            response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
+            response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_REPAY')
 
             return response
         

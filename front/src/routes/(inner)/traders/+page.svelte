@@ -6,7 +6,8 @@
 
 	export let data: PageData;
 	const userLeaders = data.userLeaders;
-	$: console.log($userLeaders);
+	const userFavorites = data.userFavorites;
+	$: console.log($userFavorites);
 	// const test = writable({});
 	// console.log(typeof test);
 	const tableArr = [{ name: 'test', position: 3, symbol: 'XXX', weight: 32 }];
@@ -14,13 +15,38 @@
 
 	import TraderIcon from '~icons/ph/user-plus';
 	import FavoriteIcon from '~icons/ph/star';
+	import FavoriteEnabledIcon from '~icons/ph/star-fill';
 	import CopyIcon from '~icons/ph/lightning';
 	import CopyEnabledIcon from '~icons/ph/lightning-fill';
-
+	import USDTIcon from '~icons/cryptocurrency-color/usdt';
 	// console.log($page.data.leaders);
 
 	// Assuming you get this initial data from somewhere, maybe load function
 	// console.log($userLeaders);
+
+	async function favLeader(leader) {
+		const response = await fetch(`api/unfollow?binanceId=${leader.detail.leadPortfolioId}`);
+		if (response.ok) {
+			$userFavorites.push(leader._id);
+			$userFavorites = $userFavorites;
+		} else {
+			console.error('Failed to unfollow leader');
+		}
+	}
+
+	async function unfavLeader(leader) {
+		const response = await fetch(`api/unfollow?binanceId=${leader.detail.leadPortfolioId}`);
+		if (response.ok) {
+			const index = $userFavorites.indexOf(leader._id);
+			if (index > -1) {
+				// only splice array when item is found
+				$userFavorites.splice(index, 1); // 2nd parameter means remove one item only
+			}
+			$userFavorites = $userFavorites;
+		} else {
+			console.error('Failed to unfollow leader');
+		}
+	}
 
 	async function followLeader(leader) {
 		const response = await fetch(`api/unfollow?binanceId=${leader.detail.leadPortfolioId}`);
@@ -79,7 +105,15 @@
 				</a>
 
 				<div class="flex space-x-3">
-					<FavoriteIcon class="w-8 h-8" />
+					{#if $userFavorites.includes(leader._id)}
+						<button on:click={() => unfavLeader(leader)}>
+							<FavoriteEnabledIcon class="w-8 h-8 text-tertiary-500" />
+						</button>
+					{:else}
+						<button on:click={() => favLeader(leader)}>
+							<FavoriteIcon class="w-8 h-8" />
+						</button>
+					{/if}
 					{#if Object.keys($userLeaders).includes(leader._id)}
 						<button on:click={() => unfollowLeader(leader)}>
 							<CopyEnabledIcon class="w-8 h-8 text-warning-500" />
@@ -91,9 +125,40 @@
 					{/if}
 				</div>
 			</header>
-			<section class="p-4"></section>
+			<section class="p-4 space-y-1 flex flex-col items-start">
+				<span>
+					<span class="badge variant-filled">Copiers</span>
+					<span class="">{leader.detail.currentCopyCount}</span>
+				</span>
+				<span class="flex">
+					<span class="badge variant-filled">AUM</span>
+					<span class="flex space-x-1 items-center">
+						<span>{Math.round(+leader.detail.aumAmount)}</span>
+						<span><USDTIcon /></span>
+					</span>
+				</span>
+				<span class="flex">
+					<span class="badge variant-filled">Balance</span>
+					<span class="flex space-x-1 items-center">
+						<span>{Math.round(+leader.detail.marginBalance)}</span>
+						<span><USDTIcon /></span>
+					</span>
+				</span>
+				<span>
+					<span class="badge variant-filled">Levered</span>
+					<span class="">
+						<span>{Math.round(leader.account.levered_ratio * 100) / 100}</span>
+					</span>
+				</span>
+				<span>
+					<span class="badge variant-filled">Unlevered</span>
+					<span class="">
+						<span>{Math.round(leader.account.unlevered_ratio * 100) / 100}</span>
+					</span>
+				</span>
+			</section>
 			<footer class="card-footer">
-				<ProgressRadial width="w-16" font={128} value={95}>95</ProgressRadial>
+				<!-- <ProgressRadial width="w-16" font={128} value={95}>95</ProgressRadial> -->
 			</footer>
 		</div>
 	{/each}

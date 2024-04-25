@@ -61,22 +61,7 @@ async def create_leader(leaderId: str):
 async def tick_positions():
     await app.bot.tick(API=True)
 
-@app.get('/user/follow/{binanceId}')
-async def follow(binanceId: str):
-    bot = await app.db.bot.find_one()
-    leader, _ = await app.scrap.get_leader(bot, binance_id=binanceId)
 
-    if leader:
-        user = await app.db.users.find_one()
-        followed_leaders = pd.DataFrame(user["leaders"]["data"])
-
-        if str(leader["_id"]) not in followed_leaders.index.values:
-            followed_leaders.loc[str(leader["_id"])] = 1
-
-            update = {
-                "leaders": followed_leaders.to_dict()
-            }
-            await app.database.update(user, update, 'users')
 
 @app.get('/user/toogle_bot')
 async def toogle_bot():
@@ -109,6 +94,16 @@ async def scrap_data(userId: str):
     return response.json()
 
 
+@app.get('/scrapLeaders')
+async def scrap_data():
+    bot = await app.db.bot.find_one()
+    response = await app.scrap.fetch_pages(bot, 'leaders', results_limit=0)
+
+    print(pd.DataFrame(response["data"]).head().to())
+
+    # return response.json()
+
+
 @app.get('/scrap/{portfolioId}')
 async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
     response = app.scrap.fetch_data(portfolioId, dataType, params.model_dump())
@@ -127,14 +122,29 @@ async def binance_snapshot():
     account_snapshot = app.binance.account_snapshot()
 
     return account_snapshot
-    
-@app.post("/api/token", response_model=Token)
+
+@app.post('/auth/login')
+async def login(credentials: LoginCredentials):
+    user = await app.db.users.find_one({"username": credentials.username})
+    if user and bcrypt.verify(credentials.password, user["auth"]["data"]["password_hash"]):
+        # Here you should handle login logic, session, or token generation
+        user_obj = User(
+            id=str(user["_id"]),
+            username=user["auth"]["data"]["username"],
+            password_hash=user["auth"]["data"]["password_hash"],
+        )
+        return {"login": True, "message": "Login successful", "data": user_obj.dict()}
+    else:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+@app.post("/auth/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await app.auth.authenticate_user(
         # app.db, 
         form_data.username, 
         form_data.password
         )
+    # print(user)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -143,9 +153,23 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     access_token_expires = timedelta(minutes=app.auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = app.auth.create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user["username"]}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/auth/user", response_model=User)
+async def read_user(current_user: User = Depends(app.auth.get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    current_user.pop("auth")
+    current_user.pop("mix")
+    return current_user
+
+@app.get("/auth/logout")
+async def logout():
+    # Here you should handle logout logic, session termination, or token invalidation
+    return {"logout": True}
+
 
 @app.get("/")
 async def read_root():
@@ -155,30 +179,47 @@ async def read_root():
 async def home():
     return {"ping": "pong!"}
 
-@app.post('/api/login')
-async def login(credentials: LoginCredentials):
-    user_data = await app.db.users.find_one({"username": credentials.username})
-    if user_data and bcrypt.verify(credentials.password, user_data["account"]["data"]["password_hash"]):
-        # Here you should handle login logic, session, or token generation
-        user_obj = User(
-            id=str(user_data["_id"]),
-            username=user_data["account"]["data"]["username"],
-            password_hash=user_data["account"]["data"]["password_hash"],
-        )
-        return {"login": True, "message": "Login successful", "data": user_obj.dict()}
-    else:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-@app.get("/api/logout")
-async def logout():
-    # Here you should handle logout logic, session termination, or token invalidation
-    return {"logout": True}
-
 @app.get('/leaders/all', response_model=AllLeaders)
 async def all_leaders():
     leaders_cursor = app.db.leaders.find()
-    leaders = await leaders_cursor.to_list(length=None)
+    # leaders = await leaders_cursor.to_list(length=None)
+    leaders = []
+    async for leader in leaders_cursor:
+        leader.pop("positions")
+        leader.pop("mix")
+        leader.pop("performance")
+        leaders.append(app.database.unpack(leader))
+
     return {"success": True, "message": "All Leaders List", "data": leaders}
+
+@app.get('/leaders/follow/{binanceId}')
+async def follow(binanceId: str):
+    bot = await app.db.bot.find_one()
+    user = await app.db.users.find_one()
+    leader, _ = await app.scrap.get_leader(bot, user, binance_id=binanceId)
+
+    if leader:
+        followed_leaders = pd.DataFrame(user["leaders"]["data"])
+
+        if str(leader["_id"]) not in followed_leaders.index.values:
+            followed_leaders.loc[str(leader["_id"])] = 1
+
+            update = {
+                "leaders": followed_leaders.to_dict()
+            }
+            await app.database.update(user, update, 'users')
+
+@app.get('/leaders/unfollow/{binanceId}')
+async def unfollow(binanceId: str):
+    bot = await app.db.bot.find_one()
+    user = await app.db.users.find_one()
+    leader = await app.db.leaders.find_one({"binanceId": binanceId})
+    print(leader["_id"])
+    # if str(leader["_id"]) not in user["leaders"]["data"].keys():
+    #     update = {
+    #         "leaders": user["leaders"]["data"].pop(leader["_id"])
+    #     }
+    #     await app.database.update(user, update, 'users')
 
 @app.get('/api/data')
 async def handle_data_get():
@@ -197,11 +238,7 @@ async def register_user(user: RegisterUser):
     })
     return {"message": "User registered successfully", "id": str(result.inserted_id)}
 
-@app.get("/api/user", response_model=User)
-async def read_user(current_user: User = Depends(app.auth.get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return current_user
+
 
 
 @app.on_event("startup")

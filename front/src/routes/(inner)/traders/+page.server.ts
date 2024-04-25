@@ -6,7 +6,10 @@ export const load: PageServerLoad = async ({ fetch, parent }) => {
     const data = await parent()
     const leaders = await fetch("http://localhost:8000/leaders/all").then((response) => response.json())
     // console.log(leaders)
-    return { ...data, leaders: leaders.data }
+    return {
+        ...data,
+        leaders: leaders.data
+    }
 }
 
 export const actions = {

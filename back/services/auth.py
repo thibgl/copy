@@ -41,8 +41,8 @@ class Auth:
 
     async def authenticate_user(self, username: str, password: str):
         user = await self.app.db.users.find_one({"username": username})
-        if user and self.verify_password(password, user["password_hash"]):
-            return User(**user)
+        if user and self.verify_password(password, user["auth"]["data"]["password_hash"]):
+            return self.app.database.unpack(user)
         return False
 
     async def get_current_user(self, token: str = Depends(oauth2_scheme)):
@@ -63,7 +63,7 @@ class Auth:
         user = await self.app.db.users.find_one({"username": token_data.username})
         if user is None:
             raise credentials_exception
-        return user
+        return self.app.database.unpack(user)
 
     def protected_route():
         def decorator_route(self, func: Callable):

@@ -27,6 +27,8 @@ ObjectIdType = Annotated[
 
 class MongoModel(BaseModel):
     id: ObjectIdType = Field(None, alias="_id")
+    updated: int
+    updated_date: str
 
     class Config:
         arbitrary_types_allowed = True
@@ -78,24 +80,84 @@ class Transfer(MongoModel):
     transType: str
     leaderId: ObjectIdType = Field(None)
 
-class Leader(MongoModel):
-    binanceId: str
-    profileUrl: str
+
+class LeaderDetailData(BaseModel):
     userId: int
+    leadOwner: bool
+    hasCopy: bool
+    leadPortfolioId: str
     nickname: str
+    nicknameTranslate: Optional[str]
     avatarUrl: str
     status: str
+    description: str
+    descTranslate: Optional[str]
+    favoriteCount: int
+    currentCopyCount: int
+    maxCopyCount: int
+    totalCopyCount: int
+    marginBalance: str
     initInvestAsset: str
+    futuresType: str
+    aumAmount: str
+    copierPnl: str
+    copierPnlAsset: str
+    profitSharingRate: str
+    unrealizedProfitShareAmount: str
+    startTime: int
+    endTime: Optional[int]
+    closedTime: Optional[int]
+    tag: List[str]
     positionShow: bool
-    updatedAt: int
-    historicPNL: float
-    totalBalance: float
-    liveRatio: float
-    positionsValue: float
-    positionsNotionalValue: float
-    amounts: Dict[str, float]
-    values: Dict[str, float]
-    shares: Dict[str, float]
+    mockCopyCount: int
+    sharpRatio: Optional[str]
+    hasMock: bool
+    lockPeriod: Optional[int]
+    copierLockPeriodTime: Optional[int]
+    badgeName: Optional[str]
+    badgeModifyTime: Optional[int]
+    badgeCopierCount: Optional[int]
+    tagItemVos: List[Dict]
+    feedAgreement: bool
+    feedShareSwitch: bool
+    feedSharePushLimit: int
+    fixedRadioMinCopyUsd: int
+    fixedAmountMinCopyUsd: int
+    portfolioType: str
+    publicLeadPortfolioId: str
+    privateLeadPortfolioId: Optional[str]
+    inviteCodeCount: int
+    favorite: bool
+
+class LeaderAccountData(BaseModel):
+    levered_ratio: float
+    unlevered_ratio: float
+
+class LeaderGroupedPositionsData(BaseModel):
+    symbol: Dict[str, str]
+    positionAmount_SUM: Dict[str, float]
+    unrealizedProfit_SUM: Dict[str, float]
+    cumRealized_SUM: Dict[str, float]
+    notionalValue_SUM: Dict[str, float]
+    markPrice_AVERAGE: Dict[str, float]
+    ABSOLUTE_LEVERED_VALUE_SUM: Dict[str, float]
+    ABSOLUTE_UNLEVERED_VALUE_SUM: Dict[str, float]
+    entryPrice_AVERAGE: Dict[str, float]
+    leverage_AVERAGE: Dict[str, float]
+    breakEvenPrice_AVERAGE: Dict[str, float]
+    positionSide: Dict[str, str]
+    LEVERED_POSITION_SHARE: Dict[str, float]
+    UNLEVERED_POSITION_SHARE: Dict[str, float]
+    LEVERED_RATIO: Dict[str, float]
+    UNLEVERED_RATIO: Dict[str, float]
+
+class Leader(MongoModel):
+    binanceId: int
+    detail: LeaderDetailData
+    account: LeaderAccountData
+    grouped_positions: LeaderGroupedPositionsData
+
+
 
 class APIResponse(BaseModel):
     success: bool = False
@@ -136,20 +198,40 @@ class AllLeaders(APIResponse):
 #         validate_assignment=True
 
 
+class UserDetailData(BaseModel):
+    TARGET_RATIO: float
+    active: bool
+    chat_id: int
+    favorite_leaders: List[str]
 
+class UserAccountData(BaseModel):
+    leverage: int
+    value_USDT: float
+    value_BTC: float
+    levered_ratio: int
+    unlevered_ratio: float
+    collateral_margin_level: float
+    collateral_value_USDT: float
+    n_leaders: int
 
-class User(BaseModel):
-    model_config = ConfigDict()
+class UserLeadersData(BaseModel):
+    WEIGHT: Dict[str, int]
 
-    id: ObjectIdType = Field(None, alias="_id")
+class UserPositionsData(BaseModel):
+    free: Dict[str, float]
+    locked: Dict[str, float]
+    borrowed: Dict[str, float]
+    interest: Dict[str, float]
+    netAsset: Dict[str, float]
+    symbol: Dict[str, str]
+
+class User(MongoModel):
     username: str
-    password_hash: str
+    detail: UserDetailData
+    account: UserAccountData
+    leaders: UserLeadersData
+    positions: UserPositionsData
 
-    class Config:
-        arbitrary_types_allowed = True
-        populate_by_alias=True
-        populate_by_name=True
-        validate_assignment=True
 
 # Pydantic model for login credentials
 class LoginCredentials(BaseModel):

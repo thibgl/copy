@@ -1,4 +1,5 @@
 from lib import utils
+from bson.objectid import ObjectId
 
 indexes = {
     "users": {},
@@ -37,3 +38,15 @@ class Database:
                 await self.app.db[collection].insert_one(obj)
 
         return True
+    
+    def unpack(self, obj: object) -> object:
+        unpack = {}
+        for key, value in obj.items():
+            # if isinstance(value, ObjectId):
+            #     unpack[key] = str(value)
+            if isinstance(value, dict):
+                unpack[key] = value["data"]
+            else:
+                unpack[key] = value
+
+        return unpack

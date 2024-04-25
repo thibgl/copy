@@ -22,12 +22,13 @@ async def db_startup(db):
         root_user_data = {
             "updated": current_time,
             "updated_date": utils.current_readable_time(),
+            "username": "root",
             "auth": {
                 "updated": current_time,
                 "data": {
                     "username": "root",
                     "email": "root@example.com",
-                    "password_hash": '',
+                    "password_hash": bcrypt.hash("root"),
                     "binance_api_key": '',
                     "binance_secret_hash": ''
                     }
@@ -37,7 +38,8 @@ async def db_startup(db):
                 "data": {
                     "TARGET_RATIO": 0.6,
                     "active": True,
-                    "chat_id": 1031182213
+                    "chat_id": 1031182213,
+                    "favorite_leaders": []
                     }
             },
             "account": {           
@@ -49,13 +51,14 @@ async def db_startup(db):
                     "levered_ratio": 0,
                     "unlevered_ratio": 0,
                     "collateral_margin_level": 0,
-                    "collateral_value_USDT": 0
+                    "collateral_value_USDT": 0,
+                    "n_leaders": 0
                 }
             },
             "leaders": {
                 "updated": current_time,
                 "data": {
-                    "WEIGHT": {} #"3846188874749232129": 1, "3907342150781504256": 1
+                    "WEIGHT": {}, #"3846188874749232129": 1, "3907342150781504256": 1
                 }
             },
             "positions":{

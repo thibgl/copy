@@ -70,6 +70,7 @@ class Bot:
                                 await self.close_positions(bot, user, positions_closed, user_mix_new)
                                 await self.change_positions(bot, user, positions_changed, user_mix_new)
                                 await self.open_positions(bot, user, positions_opened, user_mix_new)
+                                await self.set_stop_losses(bot, user, positions_opened, positions_changed)
 
                             user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
                             user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
@@ -142,7 +143,10 @@ class Bot:
                 except Exception as e:
                     await self.handle_exception(bot, user, e, 'open_positions/partial_ajust', symbol, position.to_dict(), new_user_mix)
                     continue
-
+    
+    async def set_stop_losses(self, bot, user, changed_positions, opened_positions):
+        pass
+    
     async def handle_exception(self, bot, user, error, source, symbol, log, new_user_mix):
         trace = traceback.format_exc()
 

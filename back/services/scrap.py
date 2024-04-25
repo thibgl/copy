@@ -11,6 +11,22 @@ import numpy as np
 from bson.objectid import ObjectId
 
 endpoints = {
+    "leaders": {
+        "path": "friendly/future/copy-trade/home-page/query-list",
+        "type": "paginated",
+        "params": {
+            "dataType": "ROI",
+            "favoriteOnly": False,
+            "hideFull": False,
+            "nickname": "",
+            "order": "DESC",
+            "pageNumber": 1,
+            "pageSize": 18,
+            "portfolioType": "PUBLIC",
+            "timeRange": "90D"
+            # "userAsset": 17880.26883363
+        }
+    },
     "positions" : {
         "path": 'public/future/copy-trade/lead-data/positions?portfolioId=%s', 
         "type": "simple",
@@ -99,10 +115,11 @@ class Scrap:
     #* FETCH
     
 
-    async def fetch_data(self, bot, leaderId, endpointType, params={}):
+    async def fetch_data(self, bot, leaderId, endpointType):
         response = None
         try:
             endpoint = endpoints[endpointType]
+            params = endpoint["params"]
             # Filter out the empty params
             filtered_params = {}
             for default_key, default_value in endpoint['params'].items():
@@ -133,17 +150,17 @@ class Scrap:
             await self.handle_exception(bot, e, 'fetch_data', response)
 
 
-    async def fetch_pages(self, bot, leaderId, endpointType, params={}, page_number=None, result=None, latest_item=None, reference=None, progress_bar=None):
+    async def fetch_pages(self, bot, endpointType, params=None, leaderId=None, result=None, results_limit=0, latest_item=None, reference=None, progress_bar=None):
         response = None
         try:
-            if page_number is None:
-                page_number = 1
             if result is None:
                 result = []
+            if params is None:
+                params = endpoints[endpointType]["params"]
 
-            response = await self.fetch_data(bot, leaderId, endpointType, {"pageNumber": page_number} | params)
-   
-            if response["success"]:
+            response = await self.fetch_data(bot, leaderId, endpointType)
+
+            if response["code"] == '000000':
                 response_data = response["data"]
                 response_list = response_data["list"]
 
@@ -157,8 +174,8 @@ class Scrap:
                             item_index += 1
 
                             if item_index == 10:
-                                next_page = page_number + 1
-                                return await self.fetch_pages(bot, leaderId, endpointType, params, next_page, result, latest_item, reference)
+                                params["pageNumber"] += 1
+                                return await self.fetch_pages(bot, endpointType, params, leaderId, result, latest_item=latest_item, reference=reference, progress_bar=progress_bar)
                         else:
                             # print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
                             return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
@@ -169,22 +186,22 @@ class Scrap:
 
                     if progress_bar is None:
                         await self.app.log.create(bot, bot, 'INFO', 'scrap/fetch_pages', 'SCRAP/CREATE',f'Scraping {endpointType} for {leaderId}')
-                        progress_bar = tqdm(total=total_n_results)
+                        progress_bar = tqdm(total=results_limit if results_limit else total_n_results)
 
                     progress_bar.update(len(response_list))
                     # If remainder, add another page
                     if total_n_results % 10:
                         pages_length += 1
 
-                    if page_number <= pages_length:
-                        next_page = page_number + 1
+                    if params["pageNumber"] <= pages_length and total_n_results < results_limit:
+                        params["pageNumber"] +=1
 
-                        return await self.fetch_pages(bot, leaderId, endpointType, params, next_page, result, progress_bar=progress_bar)
+                        return await self.fetch_pages(bot, endpointType, params, leaderId, result, progress_bar=progress_bar)
                     else:
                         return { "success": True, "reason": "full", "message": f"Fetched all pages of {endpointType}", "data": result }
             
             else:
-                return { "success": False, "message": f"Could not fetch page {page_number}/{pages_length} of {endpointType}" }
+                return { "success": False, "message": f"Could not fetch page {params['pageNumber']}/{pages_length} of {endpointType}" }
             
         except Exception as e:
             await self.handle_exception(bot, e, 'fetch_pages', response)
@@ -217,6 +234,7 @@ class Scrap:
         for key in self.sum_columns: 
             result[key] = group[key].sum() if key in group.keys() else None
         for key in self.average_columns:
+            #! not good
             result[key] = np.average(group[key], weights=group["ABSOLUTE_LEVERED_VALUE"].abs()) if key in group.keys() else None
 
         if handle_position_direction:
