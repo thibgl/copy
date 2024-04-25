@@ -287,7 +287,7 @@ class Scrap:
         #     await self.handle_exception(bot, e, 'leader_positions_update', None)
     
 
-    async def get_leader(self, bot, leader_id=None, binance_id:str=None):
+    async def get_leader(self, bot, user, leader_id=None, binance_id:str=None):
         # try:
             if leader_id:
                 leader = await self.app.db.leaders.find_one({"_id": ObjectId(leader_id)})
@@ -336,7 +336,11 @@ class Scrap:
                 # print(grouped_positions)
                 return leader, grouped_positions
 
-            return leader, []
+            else:
+                #* to be updated correctly
+                user["leaders"]["data"]["WEIGHT"].pop(str(leader["_id"]))
+
+                return leader, []
 
         # except Exception as e:
         #     await self.handle_exception(bot, e, 'get_leader', None)
