@@ -215,6 +215,8 @@ class Scrap:
             if leader:
                 binance_id = leader["detail"]["data"]["leadPortfolioId"]
 
+            print(f'[{utils.current_readable_time()}]: Updating Details for {binance_id}')
+
             detail_response = await self.fetch_data(bot, binance_id, 'detail')
             detail = detail_response["data"]
 
@@ -227,6 +229,26 @@ class Scrap:
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_detail_update', None)
 
+
+    async def leader_performance_update(self, bot, leader=None, binance_id:str=None):
+        try:
+            if leader:
+                binance_id = leader["detail"]["data"]["leadPortfolioId"]
+
+            print(f'[{utils.current_readable_time()}]: Updating Performance for {binance_id}')
+
+            performance_response = await self.fetch_data(bot, binance_id, 'performance')
+            performance = performance_response["data"]
+
+            performance_update = {
+                "performance": performance
+            }
+
+            return performance_update
+    
+        except Exception as e:
+            await self.handle_exception(bot, e, 'leader_performance_update', None)
+        
 
     def aggregate_leader_positions(self, group: pd.DataFrame, handle_position_direction=False) -> pd.Series:
         result = {}
@@ -338,19 +360,21 @@ class Scrap:
                 }
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
-            if utils.current_time() - leader["updated"] > 3600000:
+            if "updated" not in leader["detail"].keys() or utils.current_time() - leader["detail"]["updated"] > 3600000:
                 detail = await self.leader_detail_update(bot, leader=leader)
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
                 #! -> remove leader from user list
+
+            if "updated" not in leader["performance"].keys() or utils.current_time() - leader["performance"]["updated"] > 3600000:
+                performance = await self.leader_performance_update(bot, leader=leader)
+                await self.app.database.update(obj=leader, update=performance, collection='leaders')
+
             if leader["detail"]["data"]["positionShow"] and leader["detail"]["data"]["status"] == "ACTIVE" and leader["detail"]["data"]["initInvestAsset"] == "USDT":
                 positions, grouped_positions = await self.leader_positions_update(bot, leader)
 
                 if len(grouped_positions) > 0:
                     await self.app.database.update(obj=leader, update=positions, collection='leaders')
                 
-                else:
-                    detail = await self.leader_detail_update(bot, leader=leader)
-                    await self.app.database.update(obj=leader, update=detail, collection='leaders')
                 # print(grouped_positions)
                 return leader, grouped_positions
 
@@ -417,17 +441,7 @@ class Scrap:
 #         return account_update
 
 
-#     async def leader_performance_update(self, leader):
-#         binance_id = leader["detail"]["data"]["leadPortfolioId"]
 
-#         performance_response = await self.fetch_data(binance_id, 'performance')
-#         performance = performance_response["data"]
-
-#         performance_update = {
-#             "performance": performance
-#         }
-
-#         return performance_update
 
 
     # async def create_leader(self, leaderId):

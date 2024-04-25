@@ -201,8 +201,8 @@ async def follow(binanceId: str):
     if leader:
         followed_leaders = pd.DataFrame(user["leaders"]["data"])
 
-        if str(leader["_id"]) not in followed_leaders.index.values:
-            followed_leaders.loc[str(leader["_id"])] = 1
+        if str(binanceId) not in followed_leaders.index.values:
+            followed_leaders.loc[binanceId] = 1
 
             update = {
                 "leaders": followed_leaders.to_dict()

@@ -99,7 +99,9 @@
 						alt="user avatar"
 					/>
 					<div class="flex flex-col items-start">
-						<p>{leader.detail.nickname}</p>
+						<p class="text-primary-500 italic font-bold">
+							{leader.detail.nicknameTranslate ?? leader.detail.nickname}
+						</p>
 						<p>{leader.detail.leadPortfolioId}</p>
 					</div>
 				</a>
@@ -107,7 +109,7 @@
 				<div class="flex space-x-3">
 					{#if $userFavorites.includes(leader._id)}
 						<button on:click={() => unfavLeader(leader)}>
-							<FavoriteEnabledIcon class="w-8 h-8 text-tertiary-500" />
+							<FavoriteEnabledIcon class="w-8 h-8 text-secondary-500" />
 						</button>
 					{:else}
 						<button on:click={() => favLeader(leader)}>
@@ -127,31 +129,31 @@
 			</header>
 			<section class="p-4 space-y-1 flex flex-col items-start">
 				<span>
-					<span class="badge variant-filled">Copiers</span>
+					<span class="badge variant-ghost-secondary">Copiers</span>
 					<span class="">{leader.detail.currentCopyCount}</span>
 				</span>
 				<span class="flex">
-					<span class="badge variant-filled">AUM</span>
+					<span class="badge variant-ghost-secondary">AUM</span>
 					<span class="flex space-x-1 items-center">
 						<span>{Math.round(+leader.detail.aumAmount)}</span>
 						<span><USDTIcon /></span>
 					</span>
 				</span>
 				<span class="flex">
-					<span class="badge variant-filled">Balance</span>
+					<span class="badge variant-ghost-secondary">Balance</span>
 					<span class="flex space-x-1 items-center">
 						<span>{Math.round(+leader.detail.marginBalance)}</span>
 						<span><USDTIcon /></span>
 					</span>
 				</span>
 				<span>
-					<span class="badge variant-filled">Levered</span>
+					<span class="badge variant-ghost-secondary">Levered</span>
 					<span class="">
 						<span>{Math.round(leader.account.levered_ratio * 100) / 100}</span>
 					</span>
 				</span>
 				<span>
-					<span class="badge variant-filled">Unlevered</span>
+					<span class="badge variant-ghost-secondary">Unlevered</span>
 					<span class="">
 						<span>{Math.round(leader.account.unlevered_ratio * 100) / 100}</span>
 					</span>
