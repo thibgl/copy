@@ -51,7 +51,7 @@
 
 	let botOn = false;
 
-	console.log($page.data.user);
+	// console.log($page.data.user);
 </script>
 
 <!-- App Shell -->
@@ -73,7 +73,7 @@
 				{#if $page.data.user}
 					<button class="btn variant-filled-tertiary">
 						<span>{$page.data.user.account.value_BTC}</span><BTCIcon />
-						<span>/</span>
+						<span>|</span>
 						<span>{Math.round($page.data.user.account.value_USDT * 100) / 100}</span><USDTIcon />
 						<!-- <span>|</span>
 						<span>0</span><BNBIcon /> -->
