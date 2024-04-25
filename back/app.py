@@ -25,7 +25,7 @@ app = FastAPI()
 # CORS middleware setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "https://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -158,12 +158,12 @@ async def home():
 @app.post('/api/login')
 async def login(credentials: LoginCredentials):
     user_data = await app.db.users.find_one({"username": credentials.username})
-    if user_data and bcrypt.verify(credentials.password, user_data["password_hash"]):
+    if user_data and bcrypt.verify(credentials.password, user_data["account"]["data"]["password_hash"]):
         # Here you should handle login logic, session, or token generation
         user_obj = User(
             id=str(user_data["_id"]),
-            username=user_data["username"],
-            password_hash=user_data["password_hash"],
+            username=user_data["account"]["data"]["username"],
+            password_hash=user_data["account"]["data"]["password_hash"],
         )
         return {"login": True, "message": "Login successful", "data": user_obj.dict()}
     else:
