@@ -198,7 +198,7 @@
 					</span>
 					<span>
 						<span class="">
-							<span>{Math.round(leader.performance.mdd * 100) / 100}</span>
+							<span>{Math.round(leader.performance.mdd * 100) / 100} %</span>
 						</span>
 						<span class="badge variant-ghost-secondary">MDD</span>
 					</span>
