@@ -186,6 +186,7 @@ async def all_leaders():
     leaders = []
     async for leader in leaders_cursor:
         leader.pop("positions")
+        leader.pop("grouped_positions")
         leader.pop("mix")
         leaders.append(app.database.unpack(leader))
 

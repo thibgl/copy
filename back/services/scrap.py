@@ -369,10 +369,10 @@ class Scrap:
                         }
                     },
                     "positions":{
-                        "data":[]
+                        "data":{}
                     },
                     "grouped_positions":{
-                        "data":[]
+                        "data":{}
                     },
                     "mix":{
                         "data":[]
@@ -386,12 +386,12 @@ class Scrap:
                 }
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
-            if utils.current_time() - leader["detail"]["updated"] > 3600000:
+            if utils.current_time() - leader["detail"]["updated"] > 3600000 * 3:
                 detail = await self.leader_detail_update(bot, leader=leader)
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
                 #! -> remove leader from user list
-            
-            if utils.current_time() - leader["chart"]["updated"] > 3600000:
+            # !Ca serait bien de faire tout ça après coup si 0 position detectée
+            if utils.current_time() - leader["chart"]["updated"] > 3600000 * 3:
                 chart = await self.leader_chart_update(bot, leader=leader)
                 await self.app.database.update(obj=leader, update=chart, collection='leaders')
 

@@ -32,8 +32,6 @@
 	// $: console.log($userFavorites);
 	// const test = writable({});
 	// console.log(typeof test);
-	const tableArr = [{ name: 'test', position: 3, symbol: 'XXX', weight: 32 }];
-	const totalWeight = 42;
 
 	import TraderIcon from '~icons/ph/user-plus';
 	import FavoriteIcon from '~icons/ph/star';
@@ -41,7 +39,6 @@
 	import CopyIcon from '~icons/ph/lightning';
 	import CopyEnabledIcon from '~icons/ph/lightning-fill';
 	import USDTIcon from '~icons/cryptocurrency-color/usdt';
-	import { scale } from 'svelte/transition';
 	// console.log($page.data.leaders);
 
 	// Assuming you get this initial data from somewhere, maybe load function
@@ -89,7 +86,6 @@
 			console.error('Failed to unfollow leader');
 		}
 	}
-	console.log(data.user.account.active_leaders.includes('3759265417059288833'));
 </script>
 
 <div class="flex flex-wrap gap-3 justify-center">
@@ -157,7 +153,7 @@
 				<div class="flex flex-col items-start space-y-1">
 					<span>
 						<span class="badge variant-ghost-secondary">Copiers</span>
-						<span class="">{leader.detail.currentCopyCount}</span>
+						<span class="">{leader.detail.currentCopyCount} / {leader.detail.maxCopyCount}</span>
 					</span>
 					<span class="flex">
 						<span class="badge variant-ghost-secondary">AUM</span>
