@@ -64,7 +64,9 @@ class Binance:
             pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
             pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
             pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
-            n_leaders = pool["leader_ID"].dropna().unique().size
+            active_leaders = pool["leader_ID"].dropna().unique()
+            n_leaders = active_leaders.size
+
             print(f'[{utils.current_readable_time()}]: Updating {n_leaders} leaders')
 
             positions_closed = pool.copy()[pool["leader_symbol"].isna()]
@@ -150,7 +152,8 @@ class Binance:
                     # "unlevered_ratio": unlevered_ratio,
                     "collateral_margin_level": collateral_margin_level,
                     "collateral_value_USDT": float(margin_account_data["collateralMarginLevel"]),
-                    "n_leaders": n_leaders
+                    "n_leaders": n_leaders,
+                    "active_leaders": list(active_leaders)
                 },
                 "positions": positions.set_index("asset").to_dict(),
                 # "mix": new_user_mix

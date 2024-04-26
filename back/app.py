@@ -187,7 +187,6 @@ async def all_leaders():
     async for leader in leaders_cursor:
         leader.pop("positions")
         leader.pop("mix")
-        leader.pop("performance")
         leaders.append(app.database.unpack(leader))
 
     return {"success": True, "message": "All Leaders List", "data": leaders}

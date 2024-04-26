@@ -52,7 +52,8 @@ async def db_startup(db):
                     "unlevered_ratio": 0,
                     "collateral_margin_level": 0,
                     "collateral_value_USDT": 0,
-                    "n_leaders": 0
+                    "n_leaders": 0,
+                    "active_leaders": []
                 }
             },
             "leaders": {

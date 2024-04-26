@@ -250,6 +250,26 @@ class Scrap:
             await self.handle_exception(bot, e, 'leader_performance_update', None)
         
 
+    async def leader_chart_update(self, bot, leader=None, binance_id:str=None):
+        try:
+            if leader:
+                binance_id = leader["detail"]["data"]["leadPortfolioId"]
+
+            print(f'[{utils.current_readable_time()}]: Updating Chart for {binance_id}')
+
+            chart_response = await self.fetch_data(bot, binance_id, 'chart')
+            chart = chart_response["data"]
+
+            chart_update = {
+                "chart": chart
+            }
+
+            return chart_update
+        
+        except Exception as e:
+            await self.handle_exception(bot, e, 'leader_detail_update', None)
+
+
     def aggregate_leader_positions(self, group: pd.DataFrame, handle_position_direction=False) -> pd.Series:
         result = {}
         
@@ -267,7 +287,7 @@ class Scrap:
         return pd.Series(result)
 
     async def leader_positions_update(self, bot, leader):
-        # try:
+        try:
 
             binance_id = leader["detail"]["data"]["leadPortfolioId"]
 
@@ -275,7 +295,7 @@ class Scrap:
             positions = pd.DataFrame(positions_response["data"])
 
             if len(positions) > 0:
-                positions["ID"] = str(leader["_id"])
+                positions["ID"] = binance_id
                 positions = positions.set_index("ID")
                 positions = positions.apply(lambda column: column.astype(float) if column.name in self.sum_columns + self.average_columns else column)
                 # print("POSITIONS")
@@ -297,7 +317,7 @@ class Scrap:
                 # print("GROUPED_POSITIONS")
                 # print(grouped_positions)
                 # print("")
-                grouped_positions["ID"] = str(leader["_id"])
+                grouped_positions["ID"] = str(binance_id)
                 grouped_positions = grouped_positions.rename(columns={key: key + "_SUM" for key in self.sum_columns} | {key: key + "_AVERAGE" for key in self.average_columns}).set_index("ID")
                 grouped_positions["LEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum()
                 grouped_positions["UNLEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum()
@@ -323,8 +343,8 @@ class Scrap:
                 return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "UNLEVERED_RATIO"]]
 
             return positions, []
-        # except Exception as e:
-        #     await self.handle_exception(bot, e, 'leader_positions_update', None)
+        except Exception as e:
+            await self.handle_exception(bot, e, 'leader_positions_update', None)
     
 
     async def get_leader(self, bot, user, leader_id=None, binance_id:str=None):
@@ -341,40 +361,49 @@ class Scrap:
                     "binanceId": detail["detail"]["leadPortfolioId"],
                     "detail":{
                         "data":{}
-                        },
+                    },
                     "account":{
-                        "data":{}
-                        },
+                        "data":{
+                            "levered_ratio": 0,
+                            "unleverd_ratio": 0
+                        }
+                    },
                     "positions":{
                         "data":[]
-                        },
+                    },
                     "grouped_positions":{
                         "data":[]
-                        },
+                    },
                     "mix":{
                         "data":[]
-                        },
+                    },
                     "performance":{
                         "data":{}
-                        },
+                    },
+                    "chart":{
+                        "data":[]
+                    },
                 }
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
-            if "updated" not in leader["detail"].keys() or utils.current_time() - leader["detail"]["updated"] > 3600000:
+            if utils.current_time() - leader["detail"]["updated"] > 3600000:
                 detail = await self.leader_detail_update(bot, leader=leader)
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
                 #! -> remove leader from user list
+            
+            if utils.current_time() - leader["chart"]["updated"] > 3600000:
+                chart = await self.leader_chart_update(bot, leader=leader)
+                await self.app.database.update(obj=leader, update=chart, collection='leaders')
 
-            if "updated" not in leader["performance"].keys() or utils.current_time() - leader["performance"]["updated"] > 3600000:
-                performance = await self.leader_performance_update(bot, leader=leader)
-                await self.app.database.update(obj=leader, update=performance, collection='leaders')
-
-            if leader["detail"]["data"]["positionShow"] and leader["detail"]["data"]["status"] == "ACTIVE" and leader["detail"]["data"]["initInvestAsset"] == "USDT":
+            if leader["detail"]["data"]["positionShow"] and leader["detail"]["data"]["status"] == "ACTIVE" and leader["detail"]["data"]["initInvestAsset"] == "USDT":            
                 positions, grouped_positions = await self.leader_positions_update(bot, leader)
 
                 if len(grouped_positions) > 0:
                     await self.app.database.update(obj=leader, update=positions, collection='leaders')
                 
+                    if utils.current_time() - leader["performance"]["updated"] > 3600000:
+                        performance = await self.leader_performance_update(bot, leader=leader)
+                        await self.app.database.update(obj=leader, update=performance, collection='leaders')
                 # print(grouped_positions)
                 return leader, grouped_positions
 

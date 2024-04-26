@@ -130,8 +130,17 @@ class LeaderDetailData(BaseModel):
     favorite: bool
 
 class LeaderAccountData(BaseModel):
-    levered_ratio: float
-    unlevered_ratio: float
+    levered_ratio: Optional[float]
+    unlevered_ratio: Optional[float]
+
+class LeaderPerformanceDate(BaseModel):
+    roi: float
+    pnl: float
+    mdd: float
+    winRate: float
+    winOrders: float
+    totalOrder: float
+    sharpRatio: str
 
 class LeaderGroupedPositionsData(BaseModel):
     symbol: Dict[str, str]
@@ -151,12 +160,18 @@ class LeaderGroupedPositionsData(BaseModel):
     LEVERED_RATIO: Dict[str, float]
     UNLEVERED_RATIO: Dict[str, float]
 
+class LeaderChartItem(BaseModel):
+    value: float
+    dataType: str
+    dateTime: int
+
 class Leader(MongoModel):
-    binanceId: int
+    binanceId: str
     detail: LeaderDetailData
     account: LeaderAccountData
-    grouped_positions: LeaderGroupedPositionsData
-
+    # grouped_positions: LeaderGroupedPositionsData
+    performance: LeaderPerformanceDate
+    chart: List[LeaderChartItem]
 
 
 class APIResponse(BaseModel):
@@ -213,6 +228,7 @@ class UserAccountData(BaseModel):
     collateral_margin_level: float
     collateral_value_USDT: float
     n_leaders: int
+    active_leaders: List[str]
 
 class UserLeadersData(BaseModel):
     WEIGHT: Dict[str, int]
