@@ -88,8 +88,9 @@ class Binance:
                 positions_opened_changed.loc[positions_opened_changed["INVESTED_RATIO"] > 1, "INVESTED_RATIO"] = 1
                 positions_opened_changed.loc[:, "INVESTED_RATIO_BOOSTED"] = positions_opened_changed["INVESTED_RATIO"] * (1 + (1 - positions_opened_changed["INVESTED_RATIO"]) ** (2 - positions_opened_changed["INVESTED_RATIO"]))
 
-                positions_opened_changed.loc[positions_opened_changed["leader_TICKS"] < 100, "leader_AVERAGE_LEVERED_RATIO"] = 0.05
-                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"]
+                positions_opened_changed.loc[positions_opened_changed["leader_TICKS"] < 100, "leader_AVERAGE_LEVERED_RATIO"] = 0.1
+                positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"] > 1, "leader_AVERAGE_LEVERED_RATIO"] = 1
+                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"]
                 positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["MIX_SHARE"] / positions_opened_changed["MIX_SHARE"].sum()
 
                 positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * user_leverage * positions_opened_changed["INVESTED_RATIO_BOOSTED"]
@@ -132,7 +133,7 @@ class Binance:
                 positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
                 positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
 
-                positions_changed["OPEN"] = ((positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["netAsset"] > 0)) | ((positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["netAsset"] < 0)) | False
+                positions_changed["OPEN"] = positions_changed["TARGET_AMOUNT"] > positions_changed["netAsset"]
                 positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
                 positions_changed["DIFF_VALUE_ABS"] = positions_changed["DIFF_VALUE"].abs()
 

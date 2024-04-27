@@ -113,7 +113,7 @@ class Bot:
                         await self.app.binance.open_position(user, symbol, position["TARGET_AMOUNT_TRUNCATED"])
                         await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["TARGET_AMOUNT_TRUNCATED"]}', details=position.to_dict())
                     except Exception as e:
-                        await self.handle_exception(bot, user, e, 'open_positions/full_ajust', symbol, position.to_dict(), new_user_mix)
+                        await self.handle_exception(bot, user, e, 'change_positions/full_ajust', symbol, position.to_dict(), new_user_mix)
                         continue
 
                 else:
@@ -121,7 +121,7 @@ class Bot:
                         await self.app.binance.open_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
                         await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
                     except Exception as e:
-                        await self.handle_exception(bot, user, e, 'open_positions/diff_ajust', symbol, position.to_dict(), new_user_mix)
+                        await self.handle_exception(bot, user, e, 'change_positions/diff_ajust', symbol, position.to_dict(), new_user_mix)
                         continue
             else:
                 try:
@@ -132,7 +132,7 @@ class Bot:
                         await self.app.binance.close_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
                         await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/AJUST',f'Closed Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
                 except Exception as e:
-                    await self.handle_exception(bot, user, e, 'open_positions/partial_ajust', symbol, position.to_dict(), new_user_mix)
+                    await self.handle_exception(bot, user, e, 'change_positions/partial_ajust', symbol, position.to_dict(), new_user_mix)
                     continue
     
     async def set_stop_losses(self, bot, user, changed_positions, opened_positions):
