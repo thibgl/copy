@@ -91,7 +91,7 @@ class Binance:
                 positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"] * positions_opened_changed["INVESTED_RATIO"] * positions_opened_changed["INVESTED_RATIO_BOOST"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"]
                 positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["MIX_SHARE"] / positions_opened_changed["MIX_SHARE"].sum()
 
-                positions_opened_changed["TARGET_VALUE"] = valueUSDT * positions_opened_changed["TARGET_SHARE"] * user["detail"]["data"]["TARGET_RATIO"] * user_leverage
+                positions_opened_changed["TARGET_VALUE"] = valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * positions_opened_changed["TARGET_SHARE"] * user_leverage
                 positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
                 # print(positions_opened_changed)
                 # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
