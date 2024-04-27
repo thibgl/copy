@@ -7,7 +7,7 @@ export default defineConfig({
 	server: {
 		// Listen on all network interfaces
 		host: '0.0.0.0',
-		port: 3000, // Optional: specify a port number
+		port: 5173, // Optional: specify a port number
 		// Optional: Enable strict port checking
 		strictPort: true
 	},

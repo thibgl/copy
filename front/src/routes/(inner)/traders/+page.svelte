@@ -4,6 +4,8 @@
 	import { Avatar, ProgressRadial } from '@skeletonlabs/skeleton';
 	import { writable } from 'svelte/store';
 	import { Line } from 'svelte-chartjs';
+	import { onMount } from 'svelte';
+
 	import {
 		Chart as ChartJS,
 		// Title,
@@ -26,6 +28,14 @@
 		CategoryScale,
 		Filler
 	);
+
+	let style: CSSStyleDeclaration | null;
+	$: style = null;
+
+	onMount(() => {
+		style = getComputedStyle(document.body);
+	});
+
 	export let data: PageData;
 	const userLeaders = data.userLeaders;
 	const userFavorites = data.userFavorites;
@@ -215,46 +225,48 @@
 				</div>
 			</section>
 			<footer class="card-footer p-0">
-				<Line
-					data={{
-						labels: leader.chart.map((item) => item.dateTime),
-						datasets: [
-							{
-								// label: 'My First dataset',
-								fill: true,
-
-								lineTension: 0.3,
-								backgroundColor: 'rgba(225, 204,230, .3)',
-								borderColor: 'white',
-								borderCapStyle: 'butt',
-								borderDash: [],
-								borderDashOffset: 0.0,
-								borderJoinStyle: 'miter',
-								// pointBorderColor: 'rgb(205, 130,1 58)',
-								// pointBackgroundColor: 'rgb(255, 255, 255)',
-								// pointBorderWidth: 10,
-								// pointHoverRadius: 5,
-								// pointHoverBackgroundColor: 'rgb(0, 0, 0)',
-								// pointHoverBorderColor: 'rgba(220, 220, 220,1)',
-								// pointHoverBorderWidth: 2,
-								pointRadius: 0,
-								// pointHitRadius: 10,
-								data: leader.chart.map((item) => item.value)
-							}
-						]
-					}}
-					options={{
-						scales: {
-							x: {
-								display: false
+				{#if style}
+					<Line
+						data={{
+							labels: leader.chart.map((item) => new Date(item.dateTime)),
+							datasets: [
+								{
+									// label: 'My First dataset',
+									fill: true,
+									backgroundColor: `rgb(${style.getPropertyValue('--color-surface-600')})`,
+									lineTension: 0.5,
+									borderColor: `rgb(${data.user.account.active_leaders.includes(leader.binanceId) ? style.getPropertyValue('--color-warning-500') : style.getPropertyValue('--color-primary-500')})`,
+									borderCapStyle: 'butt',
+									borderDash: [],
+									borderDashOffset: 0.0,
+									borderJoinStyle: 'miter',
+									// pointBorderColor: 'rgb(205, 130,1 58)',
+									// pointBackgroundColor: 'rgb(255, 255, 255)',
+									// pointBorderWidth: 10,
+									// pointHoverRadius: 5,
+									pointHoverBackgroundColor: 'rgb(0, 0, 0)',
+									pointHoverBorderColor: 'rgba(220, 220, 220,1)',
+									pointHoverBorderWidth: 2,
+									pointRadius: 0,
+									pointHitRadius: 10,
+									data: leader.chart.map((item) => item.value)
+								}
+							]
+						}}
+						options={{
+							scales: {
+								x: {
+									display: false
+								},
+								y: {
+									display: false
+								}
 							},
-							y: {
-								display: false
-							}
-						},
-						maintainAspectRatio: false
-					}}
-				/>
+							maintainAspectRatio: false
+						}}
+					/>
+				{/if}
+
 				<!-- <ProgressRadial width="w-16" font={128} value={95}>95</ProgressRadial> -->
 			</footer>
 		</div>
