@@ -329,7 +329,7 @@ class Scrap:
                     "grouped_positions": grouped_positions.to_dict(),
                 }
 
-                return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "UNLEVERED_RATIO", "AVERAGE_LEVERAGE"]]
+                return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "leverage_AVERAGE", "LEVERED_RATIO", "UNLEVERED_RATIO", "AVERAGE_LEVERAGE"]]
             
             else:
                 return positions, []
