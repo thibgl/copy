@@ -315,21 +315,44 @@ class Scrap:
                 total_balance = float(leader["detail"]["data"]["marginBalance"])
                 levered_ratio = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum() / total_balance
                 unlevered_ratio = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum() / total_balance
+    
+                if "ticks" in leader["account"]["data"].keys():
+                    ticks = leader["account"]["data"]["ticks"] + 1
+                else:
+                    ticks = 1
+
+                if "average_levered_ratio" not in leader["account"]["data"].keys():
+                    average_levered_ratio = levered_ratio
+                else:
+                    average_levered_ratio = leader["account"]["data"]["average_levered_ratio"] + (levered_ratio - leader["account"]["data"]["average_levered_ratio"]) / ticks
+
+                if "average_unlevered_ratio" not in leader["account"]["data"].keys():
+                    average_unlevered_ratio = unlevered_ratio
+                else:
+                    average_unlevered_ratio = leader["account"]["data"]["average_unlevered_ratio"] + (unlevered_ratio - leader["account"]["data"]["average_unlevered_ratio"]) / ticks
+
+                # print(ticks, average_levered_ratio, average_unlevered_ratio)
 
                 grouped_positions["LEVERED_RATIO"] = levered_ratio
                 grouped_positions["UNLEVERED_RATIO"] = unlevered_ratio
-                grouped_positions["AVERAGE_LEVERAGE"] = levered_ratio / unlevered_ratio / len(grouped_positions)
+                grouped_positions["AVERAGE_LEVERED_RATIO"] = average_levered_ratio
+                grouped_positions["AVERAGE_UNLEVERED_RATIO"] = average_unlevered_ratio
+                grouped_positions["AVERAGE_LEVERAGE"] = levered_ratio / unlevered_ratio
+                grouped_positions["TICKS"] = ticks
 
                 positions_update = {
                     "account": {
-                    "levered_ratio": levered_ratio,
+                        "ticks": ticks,
+                        "levered_ratio": levered_ratio,
                         "unlevered_ratio": unlevered_ratio,
+                        "average_levered_ratio": average_levered_ratio,
+                        "average_unlevered_ratio": average_unlevered_ratio,
                     },
                     "positions": filtered_positions.to_dict(),
                     "grouped_positions": grouped_positions.to_dict(),
                 }
 
-                return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "leverage_AVERAGE", "LEVERED_RATIO", "UNLEVERED_RATIO", "AVERAGE_LEVERAGE"]]
+                return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "AVERAGE_LEVERED_RATIO", "AVERAGE_LEVERAGE", "TICKS"]]
             
             else:
                 return positions, []

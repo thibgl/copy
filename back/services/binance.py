@@ -86,17 +86,20 @@ class Binance:
 
                 positions_opened_changed["INVESTED_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"]
                 positions_opened_changed.loc[positions_opened_changed["INVESTED_RATIO"] > 1, "INVESTED_RATIO"] = 1
-                positions_opened_changed.loc[:, "INVESTED_RATIO_BOOST"] = 1 + (1 - positions_opened_changed["INVESTED_RATIO"]) ** (2 - positions_opened_changed["INVESTED_RATIO"])
+                positions_opened_changed.loc[:, "INVESTED_RATIO_BOOSTED"] = positions_opened_changed["INVESTED_RATIO"] * (1 + (1 - positions_opened_changed["INVESTED_RATIO"]) ** (2 - positions_opened_changed["INVESTED_RATIO"]))
 
-                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"]
+                positions_opened_changed.loc[positions_opened_changed["leader_TICKS"] < 100, "leader_AVERAGE_LEVERED_RATIO"] = 0.05
+                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"]
                 positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["MIX_SHARE"] / positions_opened_changed["MIX_SHARE"].sum()
 
-                positions_opened_changed["TARGET_VALUE"] = valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * positions_opened_changed["TARGET_SHARE"] * user_leverage  * positions_opened_changed["INVESTED_RATIO"] * positions_opened_changed["INVESTED_RATIO_BOOST"]
-                # positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
+                positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * user_leverage * positions_opened_changed["INVESTED_RATIO_BOOSTED"]
+                positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
+
                 # print(positions_opened_changed)
                 # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
+                # print(positions_opened_changed["TARGET_VALUE_TEST"].abs().sum())
 
-                if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25:
+                if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25 and not (positions_opened_changed['leader_TICKS'] == 100).any():
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
             if len(positions_opened_changed) > 0:
@@ -210,10 +213,12 @@ class Binance:
         decimals = stepSize.split('1')[0].count('0')
         multiplier = 10 ** decimals if decimals > 0 else 1
         final_amount = math.floor(abs(amount) * multiplier) / multiplier
-
         return final_amount if amount >= 0 else -final_amount
 
+        # final_amount = round(amount, decimals)
 
+        # return final_amount
+    
     async def get_symbol_precision(self, bot, symbol):
         try:
 
