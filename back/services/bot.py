@@ -17,7 +17,7 @@ class Bot:
         bot = await self.app.db.bot.find_one()
 
         while bot["account"]["data"]["active"]:
-            print(f'[{utils.current_readable_time()}]: Fetching Positions')
+            # print(f'[{utils.current_readable_time()}]: Fetching Positions')
             start_time = utils.current_time()
             tick_boost = False
 
@@ -51,31 +51,22 @@ class Bot:
 
                         user_mix = pd.DataFrame(user["mix"]["data"]).to_dict()
                         user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict()
-                        # print("user_mix.to_dict(), user_mix_new.to_dict()")
-                        # print(user_mix, user_mix_new)
-                        # print("roster")
-                        # print(roster)
-                        if user_mix != user_mix_new:
-                            # print("user_mix_diff")
-                            # print([bag[0] for bag in user_mix_diff])
-                            user_positions_new = roster[roster.index.isin(user_leaders.index)]
-                            # user_roster = roster[roster.index.isin(user_leaders.index)]
-                            user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
-                            # print(user_mix_diff)
-                            # user_positions_new = user_roster[user_roster["symbol"].isin([bag[0] for bag in user_mix_diff])]
-                            user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff)
-                            user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
+                        user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
+                        user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                            if user_account_update_success:
-                                await self.close_positions(bot, user, positions_closed, user_mix_new)
-                                await self.change_positions(bot, user, positions_changed, user_mix_new)
-                                await self.open_positions(bot, user, positions_opened, user_mix_new)
-                                await self.set_stop_losses(bot, user, positions_opened, positions_changed)
+                        user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff)
+                        user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
-                            user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
-                            user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
-                
-                            tick_boost = any([positions_closed.size > 0, positions_changed.size > 0, positions_opened.size > 0])
+                        if user_account_update_success:
+                            await self.close_positions(bot, user, positions_closed, user_mix_new)
+                            await self.change_positions(bot, user, positions_changed, user_mix_new)
+                            await self.open_positions(bot, user, positions_opened, user_mix_new)
+                            await self.set_stop_losses(bot, user, positions_opened, positions_changed)
+
+                        user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
+                        user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
+            
+                        tick_boost = any([positions_closed.size > 0, positions_changed.size > 0, positions_opened.size > 0])
 
                 except Exception as e:
                     print(e)

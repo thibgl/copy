@@ -86,27 +86,17 @@ class Binance:
 
                 positions_opened_changed["INVESTED_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"]
                 positions_opened_changed.loc[positions_opened_changed["INVESTED_RATIO"] > 1, "INVESTED_RATIO"] = 1
-                positions_opened_changed.loc[:, "INVESTED_RATIO_BOOST"] = 1 + (np.log(np.exp(user["detail"]["data"]["TARGET_RATIO"] - positions_opened_changed["INVESTED_RATIO"]) ** (2 - positions_opened_changed["INVESTED_RATIO"])))
-                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["INVESTED_RATIO"]
+                positions_opened_changed.loc[:, "INVESTED_RATIO_BOOST"] = 1 + (1 - positions_opened_changed["INVESTED_RATIO"]) ** (2 - positions_opened_changed["INVESTED_RATIO"])
 
+                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"] * positions_opened_changed["INVESTED_RATIO"] * positions_opened_changed["INVESTED_RATIO_BOOST"] * positions_opened_changed["leader_LEVERED_POSITION_SHARE"]
                 positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["MIX_SHARE"] / positions_opened_changed["MIX_SHARE"].sum()
-                positions_opened_changed["TARGET_LEVERAGE"] = positions_opened_changed["leader_LEVERED_RATIO"] / positions_opened_changed["leader_UNLEVERED_RATIO"]
-                positions_opened_changed.loc[positions_opened_changed["TARGET_LEVERAGE"] > user_leverage, "TARGET_LEVERAGE"] = user_leverage
 
-                # positions_opened_changed["TARGET_VALUE"] = valueUSDT * positions_opened_changed["TARGET_SHARE"] * positions_opened_changed["TARGET_LEVERAGE"]
-                positions_opened_changed["TARGET_VALUE"] = valueUSDT * positions_opened_changed["TARGET_SHARE"] * positions_opened_changed["TARGET_LEVERAGE"] * positions_opened_changed["INVESTED_RATIO_BOOST"]
-                # print(positions_opened_changed[['final_symbol', 'INVESTED_RATIO', 'TARGET_RATIO', "TARGET_VALUE"]])
-                # print(positions_opened_changed["TARGET_VALUE"].sum())
-
+                positions_opened_changed["TARGET_VALUE"] = valueUSDT * positions_opened_changed["TARGET_SHARE"] * user["detail"]["data"]["TARGET_RATIO"] * user_leverage
                 positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
-                # print("POSITIONS_OPENED_CHANGED")
                 # print(positions_opened_changed)
-                # print("")
-                # print(positions_opened_changed["TARGET_SHARE"].abs().sum())
                 # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
 
                 if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25:
-                    # print('MIX PASS')
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
             if len(positions_opened_changed) > 0:
@@ -117,24 +107,18 @@ class Binance:
                     "leader_ID": 'unique',
                     "leader_WEIGHT": 'sum',
                     "leader_LEVERED_POSITION_SHARE": 'sum',
-                    "INVESTED_RATIO": 'mean', 
-                    "INVESTED_RATIO_BOOST": 'mean',
                     "MIX_SHARE": 'sum',
                     "TARGET_SHARE": 'sum',
-                    "TARGET_LEVERAGE": 'mean',
                     "TARGET_VALUE": 'sum'
                     }).reset_index()
                 positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
-                # print(positions_opened_changed[['final_symbol', 'INVESTED_RATIO', "TARGET_VALUE"]])
-                # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
-                # ! clash_multiplier = 1 + (levered_account_value * target_ratio - positions_opened_changed["TARGET_VALUE"].abs().sum()) / positions_opened_changed["TARGET_VALUE"].abs().sum()
-                # print("CLASHSHSHA")
-                # print(clash_multiplier)
-                # positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_VALUE"] * clash_multiplier
+                
                 positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice_AVERAGE"]
 
                 positions_opened_changed = await self.get_precisions(bot, positions_opened_changed)
                 positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
+                # print(positions_opened_changed)
+                # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
                 positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
 
             positions_opened = positions_opened_changed.copy()[positions_opened_changed["symbol"].isna()].set_index("final_symbol")
