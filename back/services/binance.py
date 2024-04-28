@@ -90,7 +90,7 @@ class Binance:
 
                 positions_opened_changed.loc[positions_opened_changed["leader_TICKS"] < 100, "leader_AVERAGE_LEVERED_RATIO"] = 0.1
                 positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"] > 1, "leader_AVERAGE_LEVERED_RATIO"] = 1
-                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"]
+                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_UNLEVERED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"]
                 positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["MIX_SHARE"] / positions_opened_changed["MIX_SHARE"].sum()
 
                 positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * user_leverage * positions_opened_changed["INVESTED_RATIO_BOOSTED"]
@@ -133,7 +133,7 @@ class Binance:
                 positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
                 positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
 
-                positions_changed["OPEN"] = positions_changed["TARGET_AMOUNT"] > positions_changed["netAsset"]
+                positions_changed["OPEN"] = ((positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["TARGET_AMOUNT"] > 0)) | ((positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["TARGET_AMOUNT"] < 0))
                 positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
                 positions_changed["DIFF_VALUE_ABS"] = positions_changed["DIFF_VALUE"].abs()
 
@@ -212,13 +212,12 @@ class Binance:
         
     def truncate_amount(self, amount, stepSize):
         decimals = stepSize.split('1')[0].count('0')
-        multiplier = 10 ** decimals if decimals > 0 else 1
-        final_amount = math.floor(abs(amount) * multiplier) / multiplier
-        return final_amount if amount >= 0 else -final_amount
+        # multiplier = 10 ** decimals if decimals > 0 else 1
+        # final_amount = math.floor(abs(amount) * multiplier) / multiplier
+        # return final_amount if amount >= 0 else -final_amount
 
-        # final_amount = round(amount, decimals)
-
-        # return final_amount
+        final_amount = round(amount, decimals)
+        return final_amount
     
     async def get_symbol_precision(self, bot, symbol):
         try:
