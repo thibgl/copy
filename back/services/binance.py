@@ -1,16 +1,11 @@
 import os
 from binance.spot import Spot
-import requests
-import time
-import json
 from urllib.parse import urlencode
-import hmac
-import hashlib
 import traceback
 from lib import utils
 import pandas as pd
-import numpy as np
 import math
+from decimal import Decimal, ROUND_DOWN
 
 thousand_ignore = ["1000SATSUSDT"]
 
@@ -40,6 +35,17 @@ class Binance:
         dataframe = dataframe.merge(precisions, left_on="final_symbol", right_index=True, how='left')
 
         return dataframe
+    
+    async def format_closed_positions(self, bot, closed_positions):
+        closed_positions["SYMBOL_PRICE"] = closed_positions["symbol"].apply(lambda symbol: float(self.app.binance.client.ticker_price(symbol)["price"]))
+        closed_positions["CURRENT_VALUE"] = closed_positions["netAsset"] * closed_positions["SYMBOL_PRICE"]
+
+        closed_positions = await self.get_precisions(bot, closed_positions)
+        closed_positions = self.validate_amounts(closed_positions, "netAsset", "CURRENT_VALUE")
+
+        closed_positions = closed_positions[closed_positions["netAsset_PASS"]].set_index("final_symbol")
+
+        return closed_positions
 
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff): #self, user
         weigth = 10
@@ -57,90 +63,96 @@ class Binance:
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
             valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
             collateral_margin_level = float(margin_account_data["totalCollateralValueInUSDT"])
-
-            new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') and row["symbol"] not in thousand_ignore else [row["symbol"], False]), axis=1)
-            new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
-
             pool = positions[['symbol', 'netAsset']]
-            pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
-            pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
-            pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
-            active_leaders = pool["leader_ID"].dropna().unique()
-            n_leaders = active_leaders.size
 
-            print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} leaders')
+            if len(new_positions) > 0:
+                new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') and row["symbol"] not in thousand_ignore else [row["symbol"], False]), axis=1)
+                new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
 
-            positions_closed = pool.copy()[pool["leader_symbol"].isna()]
-            if len(positions_closed) > 0:
-                positions_closed["SYMBOL_PRICE"] = positions_closed["symbol"].apply(lambda symbol: float(self.app.binance.client.ticker_price(symbol)["price"]))
-                positions_closed["CURRENT_VALUE"] = positions_closed["netAsset"] * positions_closed["SYMBOL_PRICE"]
+                pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
+                pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
+                pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
+                active_leaders = pool["leader_ID"].dropna().unique()
+                n_leaders = active_leaders.size
 
-                positions_closed = await self.get_precisions(bot, positions_closed)
-                positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
+                print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} leaders')
 
-                positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("final_symbol")
+                positions_closed = pool.copy()[pool["leader_symbol"].isna()]
+                if len(positions_closed) > 0:
+                    positions_closed = await self.format_closed_positions(bot, positions_closed)
 
-            positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
-            if len(positions_opened_changed) > 0:
-                user_leverage = user["account"]["data"]["leverage"]
+                positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
+                if len(positions_opened_changed) > 0:
+                    user_leverage = user["account"]["data"]["leverage"]
 
-                positions_opened_changed["INVESTED_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"]
-                positions_opened_changed.loc[positions_opened_changed["INVESTED_RATIO"] > 1, "INVESTED_RATIO"] = 1
-                positions_opened_changed.loc[:, "INVESTED_RATIO_BOOSTED"] = positions_opened_changed["INVESTED_RATIO"] * (1 + (1 - positions_opened_changed["INVESTED_RATIO"]) ** (2 - positions_opened_changed["INVESTED_RATIO"]))
+                    positions_opened_changed["INVESTED_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"]
+                    positions_opened_changed.loc[positions_opened_changed["INVESTED_RATIO"] > 1, "INVESTED_RATIO"] = 1
+                    positions_opened_changed.loc[:, "INVESTED_RATIO_BOOSTED"] = positions_opened_changed["INVESTED_RATIO"] * (1 + (1 - positions_opened_changed["INVESTED_RATIO"]) ** (2 - positions_opened_changed["INVESTED_RATIO"]))
 
-                positions_opened_changed.loc[positions_opened_changed["leader_TICKS"] < 100, "leader_AVERAGE_LEVERED_RATIO"] = 0.1
-                positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"] > 1, "leader_AVERAGE_LEVERED_RATIO"] = 1
-                positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_UNLEVERED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"]
-                positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["MIX_SHARE"] / positions_opened_changed["MIX_SHARE"].sum()
+                    positions_opened_changed.loc[positions_opened_changed["leader_TICKS"] < 100, "leader_AVERAGE_LEVERED_RATIO"] = 0.1
+                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"] > 1, "leader_AVERAGE_LEVERED_RATIO"] = 1
+                    positions_opened_changed["MIX_SHARE"] = positions_opened_changed["leader_LEVERED_POSITION_SHARE"] * positions_opened_changed["leader_WEIGHT"] * positions_opened_changed["leader_AVERAGE_UNLEVERED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"]
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["MIX_SHARE"] / positions_opened_changed["MIX_SHARE"].sum()
 
-                positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * user_leverage * positions_opened_changed["INVESTED_RATIO_BOOSTED"]
-                positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
+                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * user_leverage * positions_opened_changed["INVESTED_RATIO_BOOSTED"]
+                    positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
 
-                # print(positions_opened_changed)
-                # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
-                # print(positions_opened_changed["TARGET_VALUE_TEST"].abs().sum())
+                    # print(positions_opened_changed)
+                    # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
+                    # print(positions_opened_changed["TARGET_VALUE_TEST"].abs().sum())
 
-                if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25 and not (positions_opened_changed['leader_TICKS'] == 100).any():
-                    positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
+                    if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25 and not (positions_opened_changed['leader_TICKS'] == 100).any():
+                        positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
-            if len(positions_opened_changed) > 0:
-                positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
-                    "symbol": 'last',
-                    "netAsset": 'last',
-                    "leader_markPrice_AVERAGE": 'mean',
-                    "leader_ID": 'unique',
-                    "leader_WEIGHT": 'sum',
-                    "leader_LEVERED_POSITION_SHARE": 'sum',
-                    "MIX_SHARE": 'sum',
-                    "TARGET_SHARE": 'sum',
-                    "TARGET_VALUE": 'sum'
-                    }).reset_index()
-                positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
+                if len(positions_opened_changed) > 0:
+                    positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
+                        "symbol": 'last',
+                        "netAsset": 'last',
+                        "leader_markPrice_AVERAGE": 'mean',
+                        "leader_ID": 'unique',
+                        "leader_WEIGHT": 'sum',
+                        "leader_LEVERED_POSITION_SHARE": 'sum',
+                        "MIX_SHARE": 'sum',
+                        "TARGET_SHARE": 'sum',
+                        "TARGET_VALUE": 'sum'
+                        }).reset_index()
+                    positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
+                    
+                    positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice_AVERAGE"]
+
+                    positions_opened_changed = await self.get_precisions(bot, positions_opened_changed)
+                    positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
+                    # print(positions_opened_changed)
+                    # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
+                    positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
+
+                positions_opened = positions_opened_changed.copy()[positions_opened_changed["symbol"].isna()].set_index("final_symbol")
                 
-                positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice_AVERAGE"]
+                positions_changed = positions_opened_changed.copy()[~positions_opened_changed["symbol"].isna()]
+                if len(positions_changed) > 0:
+                    positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice_AVERAGE"]
+                    positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
+                    positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
 
-                positions_opened_changed = await self.get_precisions(bot, positions_opened_changed)
-                positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
-                # print(positions_opened_changed)
-                # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
-                positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
+                    positions_changed["OPEN"] = ((positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["TARGET_AMOUNT"] > 0)) | ((positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["TARGET_AMOUNT"] < 0))
+                    positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
+                    positions_changed["DIFF_VALUE_ABS"] = positions_changed["DIFF_VALUE"].abs()
 
-            positions_opened = positions_opened_changed.copy()[positions_opened_changed["symbol"].isna()].set_index("final_symbol")
-            
-            positions_changed = positions_opened_changed.copy()[~positions_opened_changed["symbol"].isna()]
-            if len(positions_changed) > 0:
-                positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice_AVERAGE"]
-                positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
-                positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
+                    positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE")
+                    positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE")
+                    positions_changed = positions_changed.sort_values(by=["DIFF_VALUE_ABS"], ascending=False)
+                    positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
+            else:
+                print(f'[{utils.current_readable_time()}]: Updating Positions')
 
-                positions_changed["OPEN"] = ((positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["TARGET_AMOUNT"] > 0)) | ((positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["TARGET_AMOUNT"] < 0))
-                positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
-                positions_changed["DIFF_VALUE_ABS"] = positions_changed["DIFF_VALUE"].abs()
-
-                positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE")
-                positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE")
-                positions_changed = positions_changed.sort_values(by=["DIFF_VALUE_ABS"], ascending=False)
-                positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
+                positions_closed = pool.copy()
+                positions_closed["final_symbol"] = positions_closed["symbol"]
+                positions_closed = await self.format_closed_positions(bot, positions_closed)
+                
+                positions_opened = []
+                positions_changed = []
+                n_leaders = 0
+                active_leaders = []
 
             user_account_update = {
                 "account": {
@@ -158,6 +170,7 @@ class Binance:
             }
 
             return user_account_update, positions_closed, positions_opened, positions_changed
+
 
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
@@ -211,13 +224,17 @@ class Binance:
         #     await self.handle_exception(user, e, 'close_position', symbol)
         
     def truncate_amount(self, amount, stepSize):
-        decimals = stepSize.split('1')[0].count('0')
+        # decimals = stepSize.split('1')[0].count('0')
         # multiplier = 10 ** decimals if decimals > 0 else 1
         # final_amount = math.floor(abs(amount) * multiplier) / multiplier
         # return final_amount if amount >= 0 else -final_amount
 
-        final_amount = round(amount, decimals)
-        return final_amount
+        # final_amount = round(amount, decimals)
+        # return final_amount
+        amount = Decimal(amount)
+        decimals = Decimal(stepSize)
+        truncated = (amount // decimals) * decimals
+        return float(truncated.quantize(decimals, rounding=ROUND_DOWN))
     
     async def get_symbol_precision(self, bot, symbol):
         try:

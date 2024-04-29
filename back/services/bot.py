@@ -50,7 +50,8 @@ class Bot:
                                     continue
 
                         user_mix = pd.DataFrame(user["mix"]["data"]).to_dict()
-                        user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict()
+
+                        user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict() if len(leader_mixes) > 0 else {"BAG": {}}
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
@@ -66,10 +67,12 @@ class Bot:
                         user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
                         user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
             
-                        tick_boost = any([positions_closed.size > 0, positions_changed.size > 0, positions_opened.size > 0])
+                        tick_boost = any([len(positions_closed) > 0, len(positions_changed) > 0, len(positions_opened) > 0])
 
                 except Exception as e:
-                    print(e)
+                    trace = traceback.format_exc()
+                    await self.app.log.create(bot, user, 'ERROR', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
+
                     continue
 
             if not API:
@@ -81,59 +84,62 @@ class Bot:
     async def close_positions(self, bot, user, closed_positions, new_user_mix):
         # print(closed_positions)
         # print("closed_positions")
-        for symbol, position in closed_positions.iterrows():
-            try:
-                await self.app.binance.close_position(user, symbol, -position["netAsset_TRUNCATED"])
-                await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {position["netAsset_TRUNCATED"]}', details=position.to_dict())
-            except Exception as e:
-                await self.handle_exception(bot, user, e, 'close_positions', symbol, position.to_dict(), new_user_mix)
-                continue
+        if len(closed_positions) > 0:
+            for symbol, position in closed_positions.iterrows():
+                try:
+                    await self.app.binance.close_position(user, symbol, -position["netAsset_TRUNCATED"])
+                    await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {position["netAsset_TRUNCATED"]}', details=position.to_dict())
+                except Exception as e:
+                    await self.handle_exception(bot, user, e, 'close_positions', symbol, position.to_dict(), new_user_mix)
+                    continue
 
     async def open_positions(self, bot, user, opened_positions, new_user_mix):
         # print("opened_positions")
         # print(opened_positions)
-        for symbol, position in opened_positions.iterrows():
-            try:
-                # print(position)
-                await self.app.binance.open_position(user, symbol, position["TARGET_AMOUNT_TRUNCATED"])
-                await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {position["TARGET_AMOUNT_TRUNCATED"]}', details=position.to_dict())
-            except Exception as e:
-                await self.handle_exception(bot, user, e, 'open_positions', symbol, position.to_dict(), new_user_mix)
-                continue
+        if len(opened_positions) > 0:
+            for symbol, position in opened_positions.iterrows():
+                try:
+                    # print(position)
+                    await self.app.binance.open_position(user, symbol, position["TARGET_AMOUNT_TRUNCATED"])
+                    await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {position["TARGET_AMOUNT_TRUNCATED"]}', details=position.to_dict())
+                except Exception as e:
+                    await self.handle_exception(bot, user, e, 'open_positions', symbol, position.to_dict(), new_user_mix)
+                    continue
     
     async def change_positions(self, bot, user, changed_positions, new_user_mix):
         # print("changed_positions")
         # print(changed_positions)
-        for symbol, position in changed_positions.iterrows():
-            if position["SWITCH_DIRECTION"]:
-                if position["netAsset_PASS"] and position["TARGET_AMOUNT_PASS"]:
-                    try:
-                        await self.app.binance.close_position(user, symbol, -position["netAsset_TRUNCATED"])
-                        await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/AJUST',f'Closed Position: {symbol} - {position["netAsset_TRUNCATED"]}', details=position.to_dict())
-                        await self.app.binance.open_position(user, symbol, position["TARGET_AMOUNT_TRUNCATED"])
-                        await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["TARGET_AMOUNT_TRUNCATED"]}', details=position.to_dict())
-                    except Exception as e:
-                        await self.handle_exception(bot, user, e, 'change_positions/full_ajust', symbol, position.to_dict(), new_user_mix)
-                        continue
+        if len(changed_positions) > 0:
+            for symbol, position in changed_positions.iterrows():
+                if position["SWITCH_DIRECTION"]:
+                    if position["netAsset_PASS"] and position["TARGET_AMOUNT_PASS"]:
+                        try:
+                            await self.app.binance.close_position(user, symbol, -position["netAsset_TRUNCATED"])
+                            await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/AJUST',f'Closed Position: {symbol} - {position["netAsset_TRUNCATED"]}', details=position.to_dict())
+                            await self.app.binance.open_position(user, symbol, position["TARGET_AMOUNT_TRUNCATED"])
+                            await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["TARGET_AMOUNT_TRUNCATED"]}', details=position.to_dict())
+                        except Exception as e:
+                            await self.handle_exception(bot, user, e, 'change_positions/full_ajust', symbol, position.to_dict(), new_user_mix)
+                            continue
 
+                    else:
+                        try:
+                            await self.app.binance.open_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
+                            await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
+                        except Exception as e:
+                            await self.handle_exception(bot, user, e, 'change_positions/diff_ajust', symbol, position.to_dict(), new_user_mix)
+                            continue
                 else:
                     try:
-                        await self.app.binance.open_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
-                        await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
+                        if position["OPEN"]:
+                            await self.app.binance.open_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
+                            await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
+                        else:
+                            await self.app.binance.close_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
+                            await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/AJUST',f'Closed Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
                     except Exception as e:
-                        await self.handle_exception(bot, user, e, 'change_positions/diff_ajust', symbol, position.to_dict(), new_user_mix)
+                        await self.handle_exception(bot, user, e, 'change_positions/partial_ajust', symbol, position.to_dict(), new_user_mix)
                         continue
-            else:
-                try:
-                    if position["OPEN"]:
-                        await self.app.binance.open_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
-                        await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
-                    else:
-                        await self.app.binance.close_position(user, symbol, position["DIFF_AMOUNT_TRUNCATED"])
-                        await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/AJUST',f'Closed Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())
-                except Exception as e:
-                    await self.handle_exception(bot, user, e, 'change_positions/partial_ajust', symbol, position.to_dict(), new_user_mix)
-                    continue
     
     async def set_stop_losses(self, bot, user, changed_positions, opened_positions):
         pass
