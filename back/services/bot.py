@@ -15,13 +15,13 @@ class Bot:
 
     async def tick(self, API=False):
         bot = await self.app.db.bot.find_one()
+        
+        start_time = utils.current_time()
+        tick_boost = False
 
-        while bot["account"]["data"]["active"]:
+        if bot["account"]["data"]["active"]:
             # print(f'[{utils.current_readable_time()}]: Fetching Positions')
-            start_time = utils.current_time()
-            tick_boost = False
 
-            bot = await self.app.db.bot.find_one()
             users = self.app.db.users.find()
 
             roster = pd.DataFrame(columns=["ID"])
@@ -69,16 +69,18 @@ class Bot:
             
                         tick_boost = any([len(positions_closed) > 0, len(positions_changed) > 0, len(positions_opened) > 0])
 
+                #! faire le transfer de TP
                 except Exception as e:
                     trace = traceback.format_exc()
                     await self.app.log.create(bot, user, 'ERROR', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
 
                     continue
 
-            if not API:
-                end_time = (utils.current_time() - start_time) / 1000
-                interval = bot["account"]["data"]["tick_boost"] if tick_boost else bot["account"]["data"]["tick_interval"]
-                await asyncio.sleep(interval - end_time)
+        if not API:
+            end_time = (utils.current_time() - start_time) / 1000
+            interval = bot["account"]["data"]["tick_boost"] if tick_boost else bot["account"]["data"]["tick_interval"]
+            await asyncio.sleep(interval - end_time)
+            await self.tick()
 
 
     async def close_positions(self, bot, user, closed_positions, new_user_mix):
@@ -86,6 +88,7 @@ class Bot:
         # print("closed_positions")
         if len(closed_positions) > 0:
             for symbol, position in closed_positions.iterrows():
+                print(position)
                 try:
                     await self.app.binance.close_position(user, symbol, -position["netAsset_TRUNCATED"])
                     await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {position["netAsset_TRUNCATED"]}', details=position.to_dict())

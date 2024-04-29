@@ -332,7 +332,7 @@ class Scrap:
                     average_unlevered_ratio = leader["account"]["data"]["average_unlevered_ratio"] + (unlevered_ratio - leader["account"]["data"]["average_unlevered_ratio"]) / ticks
 
                 # print(ticks, average_levered_ratio, average_unlevered_ratio)
-
+                #! faire un vrai relevé de perf après cha nouveau trade, capé avec un nombre de x periodes
                 grouped_positions["LEVERED_RATIO"] = levered_ratio
                 grouped_positions["UNLEVERED_RATIO"] = unlevered_ratio
                 grouped_positions["AVERAGE_LEVERED_RATIO"] = average_levered_ratio
