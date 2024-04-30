@@ -195,7 +195,7 @@ class Binance:
     async def open_position(self, user, symbol:str, amount:float):
         # weight = 6
 # 
-        # try:
+        try:
             side = 'BUY'
             if amount < 0:
                 side = 'SELL'
@@ -204,14 +204,19 @@ class Binance:
             
             return response
 
-        # except Exception as e:
-        #     await self.handle_exception(user, e, 'open_position', symbol)
-            
+        except Exception as e:
+            if e.args[2] == 'Account has insufficient balance for requested action.':
+                print('Account has insufficient balance for requested action.')
+
+                response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
+
+                return response
+                
 
     async def close_position(self, user, symbol:str, amount:float):
         # weight = 6
 
-        # try:
+        try:
             side = 'BUY'
             if amount < 0:
                 side = 'SELL'
@@ -220,12 +225,17 @@ class Binance:
 
             return response
         
-        # except Exception as e:
-        #     await self.handle_exception(user, e, 'close_position', symbol)
+        except Exception as e:
+            if e.args[2] == 'Account has insufficient balance for requested action.':
+                print('Account has insufficient balance for requested action.')
+
+                response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
+
+                return response
         
     def truncate_amount(self, amount, stepSize):
         # decimals = stepSize.split('1')[0].count('0')
-        
+
         # multiplier = 10 ** decimals if decimals > 0 else 1
         # final_amount = math.floor(abs(amount) * multiplier) / multiplier
         # return final_amount if amount >= 0 else -final_amount
