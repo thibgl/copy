@@ -225,12 +225,14 @@ class Binance:
         
     def truncate_amount(self, amount, stepSize):
         # decimals = stepSize.split('1')[0].count('0')
+        
         # multiplier = 10 ** decimals if decimals > 0 else 1
         # final_amount = math.floor(abs(amount) * multiplier) / multiplier
         # return final_amount if amount >= 0 else -final_amount
 
         # final_amount = round(amount, decimals)
         # return final_amount
+
         amount = Decimal(amount)
         decimals = Decimal(stepSize)
         truncated = (amount // decimals) * decimals
