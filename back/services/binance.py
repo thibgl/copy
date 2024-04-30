@@ -201,7 +201,7 @@ class Binance:
                 side = 'SELL'
 
             response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='MARGIN_BUY')
-            print(response)
+
             return response
 
         except Exception as e:
