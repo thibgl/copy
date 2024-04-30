@@ -83,7 +83,7 @@ class Binance:
 
                 positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
                 if len(positions_opened_changed) > 0:
-                    user_leverage = user["account"]["data"]["leverage"]
+                    user_leverage = user["account"]["data"]["leverage"] - 1
 
                     positions_opened_changed["INVESTED_RATIO"] = positions_opened_changed["leader_LEVERED_RATIO"]
                     positions_opened_changed.loc[positions_opened_changed["INVESTED_RATIO"] > 1, "INVESTED_RATIO"] = 1
@@ -101,7 +101,7 @@ class Binance:
                     # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
                     # print(positions_opened_changed["TARGET_VALUE_TEST"].abs().sum())
 
-                    if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.25 and not (positions_opened_changed['leader_TICKS'] == 100).any():
+                    if n_leaders == user["account"]["data"]["n_leaders"] and collateral_margin_level > 1.15 and not (positions_opened_changed['leader_TICKS'] == 100).any():
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
                 if len(positions_opened_changed) > 0:
@@ -201,10 +201,11 @@ class Binance:
                 side = 'SELL'
 
             response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='MARGIN_BUY')
-            
+            print(response)
             return response
 
         except Exception as e:
+            print(e)
             if e.args[2] == 'Account has insufficient balance for requested action.':
                 print('Account has insufficient balance for requested action.')
 
@@ -226,6 +227,7 @@ class Binance:
             return response
         
         except Exception as e:
+            print(e)
             if e.args[2] == 'Account has insufficient balance for requested action.':
                 print('Account has insufficient balance for requested action.')
 
