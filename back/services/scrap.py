@@ -231,7 +231,7 @@ class Scrap:
         
             else:
                 print(f'[{utils.current_readable_time()}]: Error fetching Detail for {binance_id}')
-                return pd.DataFrame(leader["detail"]["data"])
+                return leader["detail"]["data"]
             
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_detail_update', None)
@@ -259,7 +259,7 @@ class Scrap:
     
             else:
                 print(f'[{utils.current_readable_time()}]: Error fetching Performance for {binance_id}')
-                return pd.DataFrame(leader["performance"]["data"])
+                return leader["performance"]["data"]
         
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_performance_update', None)
@@ -286,7 +286,7 @@ class Scrap:
             
             else:
                 print(f'[{utils.current_readable_time()}]: Error fetching Chart for {binance_id}')
-                return pd.DataFrame(leader["chart"]["data"])
+                return leader["chart"]["data"]
     
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_detail_update', None)
