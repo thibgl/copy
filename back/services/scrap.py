@@ -230,7 +230,7 @@ class Scrap:
                 return detail_update
         
             else:
-                print(f'[{utils.current_readable_time()}]: Error fetching Detail for {binance_id}')
+                await self.handle_exception(bot, e, f'leader_detail_update - NO FETCH for {binance_id}', None)
                 return leader["detail"]["data"]
             
         except Exception as e:
@@ -258,7 +258,7 @@ class Scrap:
                 return performance_update
     
             else:
-                print(f'[{utils.current_readable_time()}]: Error fetching Performance for {binance_id}')
+                await self.handle_exception(bot, e, f'leader_performance_update - NO FETCH for {binance_id}', None)
                 return leader["performance"]["data"]
         
         except Exception as e:
@@ -285,11 +285,11 @@ class Scrap:
                 return chart_update
             
             else:
-                print(f'[{utils.current_readable_time()}]: Error fetching Chart for {binance_id}')
+                await self.handle_exception(bot, e, f'leader_chart_update - NO FETCH for {binance_id}', None)
                 return leader["chart"]["data"]
     
         except Exception as e:
-            await self.handle_exception(bot, e, 'leader_detail_update', None)
+            await self.handle_exception(bot, e, 'leader_chart_update', None)
 
 
     def aggregate_leader_positions(self, group: pd.DataFrame, handle_position_direction=False) -> pd.Series:
@@ -308,12 +308,11 @@ class Scrap:
         # result["LEADER_IDS"] = list(set(group["LEADER_ID"]))
         return pd.Series(result)
 
-    async def leader_positions_update(self, bot, leader):
+    async def leader_positions_update(self, bot, leader, lifecycle):
         try:
-
             binance_id = leader["detail"]["data"]["leadPortfolioId"]
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
-
+            # print(positions_response.keys())
             if positions_response and 'data' in positions_response.keys():
                 positions = pd.DataFrame(positions_response["data"])
 
@@ -381,14 +380,18 @@ class Scrap:
                     return {}, []
                     
             else:
-                print(f'[{utils.current_readable_time()}]: Error fetching Positions for {binance_id}')
-                return {}, pd.DataFrame(leader["grouped_positions"]["data"])
+                await self.handle_exception(bot, e, f'leader_positions_update - NO FETCH for {binance_id}', None)
+                lifecycle["tick_boost"], lifecycle["reset_rotate"] = True, True
+                if leader["grouped_positions"]["data"]:
+                    return {}, pd.DataFrame(leader["grouped_positions"]["data"])
+                else:
+                    return {}, []
             
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_positions_update', None)
     
 
-    async def get_leader(self, bot, user, leader_id=None, binance_id:str=None):
+    async def get_leader(self, bot, user, lifecycle, leader_id=None, binance_id:str=None):
         try:
             if leader_id:
                 leader = await self.app.db.leaders.find_one({"_id": ObjectId(leader_id)})
@@ -427,24 +430,12 @@ class Scrap:
                 }
                 await self.app.database.update(obj=leader, update=detail, collection='leaders')
 
-            if utils.current_time() - leader["detail"]["updated"] > 3600000 * 3:
-                detail = await self.leader_detail_update(bot, leader=leader)
-                await self.app.database.update(obj=leader, update=detail, collection='leaders')
-                #! -> remove leader from user list
-            # !Ca serait bien de faire tout ça après coup si 0 position detectée
-            if utils.current_time() - leader["chart"]["updated"] > 3600000 * 3:
-                chart = await self.leader_chart_update(bot, leader=leader)
-                await self.app.database.update(obj=leader, update=chart, collection='leaders')
-
             if leader["detail"]["data"]["positionShow"] and leader["detail"]["data"]["status"] == "ACTIVE" and leader["detail"]["data"]["initInvestAsset"] == "USDT":            
-                positions, grouped_positions = await self.leader_positions_update(bot, leader)
+                positions, grouped_positions = await self.leader_positions_update(bot, leader, lifecycle)
 
                 if len(grouped_positions) > 0:
                     await self.app.database.update(obj=leader, update=positions, collection='leaders')
-                
-                    if utils.current_time() - leader["performance"]["updated"] > 3600000:
-                        performance = await self.leader_performance_update(bot, leader=leader)
-                        await self.app.database.update(obj=leader, update=performance, collection='leaders')
+
                 # print(grouped_positions)
                 return leader, grouped_positions
 
@@ -457,6 +448,26 @@ class Scrap:
         except Exception as e:
             await self.handle_exception(bot, e, 'get_leader', None)
 
+    async def update_leaders(self, bot, roster):
+        for binance_id in roster.index.values:
+            leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
+            update = {}
+
+            if utils.current_time() - leader["detail"]["updated"] > 3600000 * 3:
+                detail = await self.leader_detail_update(bot, leader=leader)
+                update.update(detail)
+
+            if utils.current_time() - leader["chart"]["updated"] > 3600000 * 3:
+                chart = await self.leader_chart_update(bot, leader=leader)
+                update.update(chart)
+
+            if utils.current_time() - leader["performance"]["updated"] > 3600000:
+                performance = await self.leader_performance_update(bot, leader=leader)
+                update.update(performance)
+
+            await self.app.database.update(obj=leader, update=update, collection='leaders')
+
+
     #* LIFECYCLE
 
 
@@ -465,10 +476,10 @@ class Scrap:
 
         await self.app.log.create(bot, bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details={"trace": trace, "log": details})
 
-        self.cleanup()
-        self.start()
+        # self.cleanup()
+        # self.start()
 
-        pass
+        # pass
     
     
     def start(self):

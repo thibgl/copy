@@ -20,7 +20,7 @@ import pandas as pd
 # import sys
 load_dotenv()
 
-app_mode = os.environ.get("MODE") == 'SERVER'
+server_mode = os.environ.get("MODE") == 'SERVER'
 # logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
 # Load env variables
 # Intialize App
@@ -43,7 +43,7 @@ app.db = app.mongodb_client.db
 app.auth = Auth(app)
 app.database = Database(app)
 
-if app_mode:
+if server_mode:
     app.binance = Binance(app)
     app.scrap = Scrap(app)
     app.bot = Bot(app)
@@ -283,15 +283,15 @@ async def startup():
     #         }
     #     }
     # )
-    if app_mode:
+    if server_mode:
         asyncio.create_task(app.bot.tick())
 
     # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    if app_mode:
-        # app.scrap.cleanup()
+    if server_mode:
+        app.scrap.cleanup()
         app.mongodb_client.close()
 
 

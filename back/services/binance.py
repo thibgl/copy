@@ -47,10 +47,9 @@ class Binance:
 
         return closed_positions
 
-    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff): #self, user
+    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, lifecycle): #self, user
         weigth = 10
         try:
-
             margin_account_data = self.client.margin_account()
 
             positions = pd.DataFrame(margin_account_data["userAssets"])
@@ -80,6 +79,7 @@ class Binance:
                 positions_closed = pool.copy()[pool["leader_symbol"].isna()]
                 if len(positions_closed) > 0:
                     positions_closed = await self.format_closed_positions(bot, positions_closed)
+                    if len(positions_closed) > 0: lifecycle["tick_boost"] = True
 
                 positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
                 if len(positions_opened_changed) > 0:
@@ -127,7 +127,9 @@ class Binance:
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
 
                 positions_opened = positions_opened_changed.copy()[positions_opened_changed["symbol"].isna()].set_index("final_symbol")
-                
+                    
+                if len(positions_opened) > 0: lifecycle["tick_boost"] = True
+
                 positions_changed = positions_opened_changed.copy()[~positions_opened_changed["symbol"].isna()]
                 if len(positions_changed) > 0:
                     positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice_AVERAGE"]
@@ -142,6 +144,8 @@ class Binance:
                     positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE")
                     positions_changed = positions_changed.sort_values(by=["DIFF_VALUE_ABS"], ascending=False)
                     positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
+
+                    if len(positions_changed) > 0: lifecycle["tick_boost"] = True
             else:
                 print(f'[{utils.current_readable_time()}]: Updating Positions')
 
@@ -171,7 +175,6 @@ class Binance:
 
             return user_account_update, positions_closed, positions_opened, positions_changed
 
-
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
 
@@ -194,7 +197,6 @@ class Binance:
     
     async def open_position(self, user, symbol:str, amount:float):
         # weight = 6
-# 
         try:
             side = 'BUY'
             if amount < 0:
@@ -205,18 +207,18 @@ class Binance:
             return response
 
         except Exception as e:
-            print(e)
             if e.args[2] == 'Account has insufficient balance for requested action.':
-                print('Account has insufficient balance for requested action.')
+                await self.handle_exception(user, user, e, 'close_position - insufficient balance', None)
 
                 response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
 
                 return response
+            else:
+                print(e)
                 
 
-    async def close_position(self, user, symbol:str, amount:float):
+    async def close_position(self, bot, symbol:str, amount:float):
         # weight = 6
-
         try:
             side = 'BUY'
             if amount < 0:
@@ -227,14 +229,16 @@ class Binance:
             return response
         
         except Exception as e:
-            print(e)
             if e.args[2] == 'Account has insufficient balance for requested action.':
+                await self.handle_exception(bot, bot, e, 'close_position - insufficient balance', None)
                 print('Account has insufficient balance for requested action.')
 
                 response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
 
                 return response
-        
+            else:
+                print(e)
+
     def truncate_amount(self, amount, stepSize):
         # decimals = stepSize.split('1')[0].count('0')
 
@@ -252,7 +256,6 @@ class Binance:
     
     async def get_symbol_precision(self, bot, symbol):
         try:
-
             symbol_precisions = pd.DataFrame(bot["precisions"]["data"])
             
             if symbol in symbol_precisions.index:
