@@ -21,3 +21,4 @@ fake_useragent
 tqdm
 pandas
 numpy
+dotenv

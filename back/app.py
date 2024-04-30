@@ -3,6 +3,7 @@
 # todo: inclure le type dans le mix que si il a engagé un minimum de son capital
 # todo: V3 ==> PANDAS / NUMPY
 import os
+import sys
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
@@ -13,11 +14,12 @@ from datetime import timedelta
 from services import Binance, Auth, Scrap, Bot, Log, Database #, Telegram
 from lib import *
 import uvicorn
-import time
 import asyncio
 import schedule
 import pandas as pd
+import logging
 
+logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
 # Load env variables
 load_dotenv()
 # Intialize App
