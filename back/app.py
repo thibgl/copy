@@ -287,7 +287,7 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    # app.scrap.cleanup()
+    app.scrap.cleanup()
     app.mongodb_client.close()
 
 
