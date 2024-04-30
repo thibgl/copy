@@ -18,10 +18,11 @@ import schedule
 import pandas as pd
 # import logging
 # import sys
+load_dotenv()
+
 app_mode = os.environ.get("MODE") == 'SERVER'
 # logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
 # Load env variables
-load_dotenv()
 # Intialize App
 app = FastAPI()
 # CORS middleware setup
@@ -290,7 +291,7 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     if app_mode:
-        app.scrap.cleanup()
+        # app.scrap.cleanup()
         app.mongodb_client.close()
 
 

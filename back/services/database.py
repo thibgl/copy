@@ -14,7 +14,7 @@ class Database:
     async def update(self, obj: object, update: object, collection: str) -> bool:
         current_time = utils.current_time()
 
-        if update:
+        if update and len(update.keys()) > 0:
             update_format = {}
             update_format["updated"] = current_time
             update_format["updated_date"] = utils.current_readable_time()

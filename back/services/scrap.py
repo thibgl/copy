@@ -219,7 +219,7 @@ class Scrap:
 
             detail_response = await self.fetch_data(bot, binance_id, 'detail')
             
-            if 'data' in detail_response.keys():
+            if detail_response and 'data' in detail_response.keys():
 
                 detail = detail_response["data"]
 
@@ -246,7 +246,7 @@ class Scrap:
 
             performance_response = await self.fetch_data(bot, binance_id, 'performance')
 
-            if 'data' in performance_response.keys():
+            if performance_response and 'data' in performance_response.keys():
 
                 performance = performance_response["data"]
 
@@ -274,7 +274,7 @@ class Scrap:
 
             chart_response = await self.fetch_data(bot, binance_id, 'chart')
 
-            if 'data' in chart_response.keys():
+            if chart_response and 'data' in chart_response.keys():
 
                 chart = chart_response["data"]
 
@@ -314,7 +314,7 @@ class Scrap:
             binance_id = leader["detail"]["data"]["leadPortfolioId"]
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
 
-            if 'data' in positions_response.keys():
+            if positions_response and 'data' in positions_response.keys():
                 positions = pd.DataFrame(positions_response["data"])
 
                 positions["ID"] = binance_id
@@ -378,11 +378,11 @@ class Scrap:
                     return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "AVERAGE_LEVERED_RATIO", "AVERAGE_UNLEVERED_RATIO", "AVERAGE_LEVERAGE", "TICKS"]]
                 
                 else:
-                    return positions, []
+                    return {}, []
                     
             else:
                 print(f'[{utils.current_readable_time()}]: Error fetching Positions for {binance_id}')
-                return pd.DataFrame(leader["positions"]["data"]), pd.DataFrame(leader["grouped_positions"]["data"])
+                return {}, pd.DataFrame(leader["grouped_positions"]["data"])
             
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_positions_update', None)
