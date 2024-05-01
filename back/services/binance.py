@@ -18,10 +18,12 @@ class Binance:
         self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY)
 
 
-    def validate_amounts(self, dataframe, amount_column, value_column):
+    def validate_amounts(self, dataframe, amount_column, value_column, price_column):
         truncated_amount_column = amount_column + "_TRUNCATED"
         dataframe[truncated_amount_column] = dataframe.apply(lambda row: self.truncate_amount(row[amount_column], row["stepSize"]), axis=1)
         dataframe[amount_column + "_PASS"] = (dataframe[value_column].abs() > dataframe["minNotional"] * 1.05) & (dataframe[truncated_amount_column].abs() > dataframe["minQty"])
+        dataframe["MIN_AMOUNT"] = (dataframe["minNotional"] / dataframe[price_column]).combine(dataframe["minQty"] * (dataframe["minNotional"] / dataframe[price_column]), max) * 1.05
+
 
         return dataframe
     
@@ -41,15 +43,15 @@ class Binance:
         closed_positions["CURRENT_VALUE"] = closed_positions["netAsset"] * closed_positions["SYMBOL_PRICE"]
 
         closed_positions = await self.get_precisions(bot, closed_positions)
-        closed_positions = self.validate_amounts(closed_positions, "netAsset", "CURRENT_VALUE")
+        closed_positions = self.validate_amounts(closed_positions, "netAsset", "CURRENT_VALUE", "SYMBOL_PRICE")
 
         closed_positions = closed_positions[closed_positions["netAsset_PASS"]].set_index("final_symbol")
 
         return closed_positions
 
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, lifecycle): #self, user
-        weigth = 10
-        try:
+        # weigth = 10
+        # try:
             margin_account_data = self.client.margin_account()
 
             positions = pd.DataFrame(margin_account_data["userAssets"])
@@ -99,7 +101,7 @@ class Binance:
                     positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * user_leverage * positions_opened_changed["INVESTED_RATIO_BOOSTED"]
                     positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
 
-                    # print(positions_opened_changed)
+                    print(positions_opened_changed)
                     # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
                     # print(positions_opened_changed["TARGET_VALUE_TEST"].abs().sum())
 
@@ -118,15 +120,15 @@ class Binance:
                         "TARGET_SHARE": 'sum',
                         "TARGET_VALUE": 'sum'
                         }).reset_index()
-                    positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
                     
                     positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice_AVERAGE"]
 
                     positions_opened_changed = await self.get_precisions(bot, positions_opened_changed)
-                    positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
-                    # print(positions_opened_changed)
-                    # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
+                    positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE", "leader_markPrice_AVERAGE")
+
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
+
+                    positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
 
                 positions_opened = positions_opened_changed.copy()[positions_opened_changed["symbol"].isna()].set_index("final_symbol")
                     
@@ -138,14 +140,16 @@ class Binance:
                     positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
                     positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
 
+                    positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE", "leader_markPrice_AVERAGE")
+                    positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE", "leader_markPrice_AVERAGE")
+
+                    positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
+
+                    positions_changed["DIFF_VALUE_ABS"] = positions_changed["DIFF_VALUE"].abs()
+                    positions_changed = positions_changed.sort_values(by=["DIFF_VALUE_ABS"], ascending=False)
+                
                     positions_changed["OPEN"] = ((positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["TARGET_AMOUNT"] > 0)) | ((positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["TARGET_AMOUNT"] < 0))
                     positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
-                    positions_changed["DIFF_VALUE_ABS"] = positions_changed["DIFF_VALUE"].abs()
-
-                    positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE")
-                    positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE")
-                    positions_changed = positions_changed.sort_values(by=["DIFF_VALUE_ABS"], ascending=False)
-                    positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
 
                     if len(positions_changed) > 0: lifecycle["tick_boost"] = True
             else:
@@ -177,8 +181,8 @@ class Binance:
 
             return user_account_update, positions_closed, positions_opened, positions_changed, pool
 
-        except Exception as e:
-            await self.handle_exception(bot, user, e, 'user_account_update', None)
+        # except Exception as e:
+        #     await self.handle_exception(bot, user, e, 'user_account_update', None)
 
 
     async def user_account_close(self, bot, user, new_user_mix):
@@ -208,7 +212,7 @@ class Binance:
             print(e)
 
     
-    async def open_position(self, user, symbol:str, amount:float):
+    async def open_position(self, bot, symbol:str, amount:float, min_amount:float, retry=True):
         # weight = 6
         try:
             side = 'BUY'
@@ -220,17 +224,20 @@ class Binance:
             return response
 
         except Exception as e:
-            if e.args[2] == 'Account has insufficient balance for requested action.':
-                await self.handle_exception(user, user, e, 'close_position - insufficient balance', None, notify=False)
+            if e.args[2] == 'Account has insufficient balance for requested action.' and retry:
+                self.close_position(bot, symbol, -min_amount if side == 'BUY' else min_amount, min_amount, False)
+                self.open_position(bot, symbol, amount + min_amount, min_amount, False)
+                await self.handle_exception(bot, bot, e, 'close_position - insufficient balance', None, notify=False)
 
-                response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
+                # response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
 
                 return response
             else:
+                print('Account has insufficient balance for requested action.')
                 print(e)
                 
 
-    async def close_position(self, bot, symbol:str, amount:float):
+    async def close_position(self, bot, symbol:str, amount:float, min_amount:float, retry=True):
         # weight = 6
         try:
             side = 'BUY'
@@ -242,14 +249,16 @@ class Binance:
             return response
         
         except Exception as e:
-            if e.args[2] == 'Account has insufficient balance for requested action.':
+            if e.args[2] == 'Account has insufficient balance for requested action.' and retry:
+                self.open_position(bot, symbol, min_amount if side == 'SELL' else -min_amount, min_amount, False)
+                self.close_position(bot, symbol, amount + min_amount, min_amount, False)
                 await self.handle_exception(bot, bot, e, 'close_position - insufficient balance', None, notify=False)
-                print('Account has insufficient balance for requested action.')
 
-                response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
+                # response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
 
-                return response
+                # return response
             else:
+                print('Account has insufficient balance for requested action.')
                 print(e)
 
     def truncate_amount(self, amount, stepSize):

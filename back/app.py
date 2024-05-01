@@ -49,6 +49,26 @@ if server_mode:
     app.bot = Bot(app)
     app.log = Log(app)
 
+# try:
+    # response = app.binance.client.margin_max_transferable(asset='USDT')
+    # print(response)
+    # response = app.binance.client.user_universal_transfer(asset='USDT', toSymbol='BTCUSDT', amount=5,type='MAIN_ISOLATED_MARGIN')
+    # #isolated_margin_transfer(asset='USDT', symbol='BTCUSDT', amount=5, transFrom='SPOT', transTo='ISOLATED_MARGIN')
+    # print(response)
+    # response = app.binance.client.new_margin_order(symbol='BTCUSDT', side='BUY', type='MARKET', quantity=0.00010, sideEffectType='MARGIN_BUY', isIsolated='TRUE')
+    # print(response)
+#     response = app.binance.client.isolated_margin_account()
+#     rows = [
+#     {**{'BASE_' + k: v for k, v in item['baseAsset'].items()},
+#      **{'QUOTE_' + k: v for k, v in item['quoteAsset'].items()},
+#      **{k: v for k, v in item.items() if k not in ['baseAsset', 'quoteAsset']}
+#      } for item in response["assets"]
+# ]
+    
+#     print(pd.DataFrame(rows).set_index("symbol"))
+# except Exception as e:
+#     print(e)
+
 @app.post('/scrap/{portfolioId}/{dataType}')
 async def scrap_data(portfolioId: str, dataType:str, params: Params = Body(default={})):
     response = app.scrap.fetch_data(portfolioId, dataType, params.model_dump())
