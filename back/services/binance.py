@@ -56,32 +56,34 @@ class Binance:
             for column in positions.columns:
                 if column != 'asset':
                     positions[column] = positions[column].astype(float)
-            positions = positions.loc[(positions["asset"] != 'USDT') & (positions["netAsset"] != 0)]
+            positions = positions.loc[(positions["netAsset"] != 0)]
             positions["symbol"] = positions["asset"] + 'USDT'
 
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
             valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
             collateral_margin_level = float(margin_account_data["totalCollateralValueInUSDT"])
-            pool = positions[['symbol', 'netAsset']]
+
+            pool = positions[['asset', 'symbol', 'netAsset', 'borrowed', 'free']]
+            live_pool = pool.copy().loc[pool["asset"] != 'USDT']
 
             if len(new_positions) > 0:
                 new_positions[["final_symbol", "thousand"]] = new_positions.apply(lambda row: pd.Series([row["symbol"][4:], True] if row["symbol"].startswith('1000') and row["symbol"] not in thousand_ignore else [row["symbol"], False]), axis=1)
                 new_positions.loc[new_positions["thousand"], "markPrice_AVERAGE"] /= 1000
 
-                pool = pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
-                pool["final_symbol"] = pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
-                pool = pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
-                active_leaders = pool["leader_ID"].dropna().unique()
+                live_pool = live_pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
+                live_pool["final_symbol"] = live_pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
+                live_pool = live_pool.merge(user_leaders.add_prefix("leader_"), left_on="leader_ID", right_index=True, how='left')
+                active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
 
                 print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} leaders')
 
-                positions_closed = pool.copy()[pool["leader_symbol"].isna()]
+                positions_closed = live_pool.copy()[live_pool["leader_symbol"].isna()]
                 if len(positions_closed) > 0:
                     positions_closed = await self.format_closed_positions(bot, positions_closed)
                     if len(positions_closed) > 0: lifecycle["tick_boost"] = True
 
-                positions_opened_changed = pool.copy()[~pool["leader_symbol"].isna()]
+                positions_opened_changed = live_pool.copy()[~live_pool["leader_symbol"].isna()]
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
 
@@ -149,7 +151,7 @@ class Binance:
             else:
                 print(f'[{utils.current_readable_time()}]: Updating Positions')
 
-                positions_closed = pool.copy()
+                positions_closed = live_pool.copy()
                 positions_closed["final_symbol"] = positions_closed["symbol"]
                 positions_closed = await self.format_closed_positions(bot, positions_closed)
                 
@@ -173,7 +175,7 @@ class Binance:
                 # "mix": new_user_mix
             }
 
-            return user_account_update, positions_closed, positions_opened, positions_changed
+            return user_account_update, positions_closed, positions_opened, positions_changed, pool
 
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
@@ -194,6 +196,17 @@ class Binance:
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_close', None)
     
+
+    async def repay_position(self, user, symbol, amount:float):
+        # weight = 6
+        try:
+            response = self.client.borrow_repay(asset='USDT', symbol=symbol, amount=str(abs(amount)), type='REPAY', isIsolated='FALSE')
+
+            return response
+
+        except Exception as e:
+            print(e)
+
     
     async def open_position(self, user, symbol:str, amount:float):
         # weight = 6
@@ -208,7 +221,7 @@ class Binance:
 
         except Exception as e:
             if e.args[2] == 'Account has insufficient balance for requested action.':
-                await self.handle_exception(user, user, e, 'close_position - insufficient balance', None)
+                await self.handle_exception(user, user, e, 'close_position - insufficient balance', None, notify=False)
 
                 response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
 
@@ -230,7 +243,7 @@ class Binance:
         
         except Exception as e:
             if e.args[2] == 'Account has insufficient balance for requested action.':
-                await self.handle_exception(bot, bot, e, 'close_position - insufficient balance', None)
+                await self.handle_exception(bot, bot, e, 'close_position - insufficient balance', None, notify=False)
                 print('Account has insufficient balance for requested action.')
 
                 response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
@@ -288,7 +301,7 @@ class Binance:
             await self.handle_exception(bot, bot, e, 'get_symbol_precision', None)
 
 
-    async def handle_exception(self, bot, user, error, source, symbol):
+    async def handle_exception(self, bot, user, error, source, symbol, notify=True):
         trace = traceback.format_exc()
 
         await self.app.log.create(bot, user, 'ERROR', f'client/{source}', 'TRADE', f'Error in Binance API: {symbol} - {error}', details=trace)

@@ -56,7 +56,7 @@ class Bot:
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed, pool = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
                         if user_account_update_success:
@@ -73,6 +73,7 @@ class Bot:
                             self.app.scrap.start()
 
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
+                            await self.repay_debts(bot, pool)
                             await self.app.scrap.update_leaders(bot, roster)
 
                 #! faire le transfer de TP
@@ -88,6 +89,18 @@ class Bot:
             await asyncio.sleep(interval - end_time)
             await self.tick()
 
+
+    async def repay_debts(self, bot, pool):
+        excess_pool = pool.copy()[(pool["borrowed"] != 0) & (pool["borrowed"] > pool["netAsset"].abs())].set_index('symbol')
+
+        for symbol, position in excess_pool.iterrows():
+            print(position)
+            try:
+                await self.app.binance.repay_position(bot, symbol, position["free"])
+            except Exception as e:
+                trace = traceback.format_exc()
+                print(trace)
+                continue
 
     async def close_positions(self, bot, user, closed_positions, new_user_mix):
         if len(closed_positions) > 0:
@@ -128,7 +141,6 @@ class Bot:
                             continue
 
                     else:
-                        print('simple switch')
                         try:
                             await self.app.binance.open_position(bot, symbol, position["DIFF_AMOUNT_TRUNCATED"])
                             await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/AJUST',f'Opened Position: {symbol} - {position["DIFF_AMOUNT_TRUNCATED"]}', details=position.to_dict())

@@ -230,8 +230,8 @@ class Scrap:
                 return detail_update
         
             else:
-                await self.handle_exception(bot, e, f'leader_detail_update - NO FETCH for {binance_id}', None)
-                return leader["detail"]["data"]
+                await self.handle_exception(bot, 'e', f'leader_detail_update - NO FETCH for {binance_id}', None)
+                return {"detail": leader["detail"]["data"]}
             
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_detail_update', None)
@@ -258,8 +258,8 @@ class Scrap:
                 return performance_update
     
             else:
-                await self.handle_exception(bot, e, f'leader_performance_update - NO FETCH for {binance_id}', None)
-                return leader["performance"]["data"]
+                await self.handle_exception(bot, 'e', f'leader_performance_update - NO FETCH for {binance_id}', None)
+                return {"performance": leader["performance"]["data"]}
         
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_performance_update', None)
@@ -285,8 +285,8 @@ class Scrap:
                 return chart_update
             
             else:
-                await self.handle_exception(bot, e, f'leader_chart_update - NO FETCH for {binance_id}', None)
-                return leader["chart"]["data"]
+                await self.handle_exception(bot, 'e', f'leader_chart_update - NO FETCH for {binance_id}', None)
+                return {"chart": leader["chart"]["data"]}
     
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_chart_update', None)
@@ -380,7 +380,7 @@ class Scrap:
                     return {}, []
                     
             else:
-                await self.handle_exception(bot, e, f'leader_positions_update - NO FETCH for {binance_id}', None)
+                await self.handle_exception(bot, 'e', f'leader_positions_update - NO FETCH for {binance_id}', None)
                 lifecycle["tick_boost"], lifecycle["reset_rotate"] = True, True
                 if leader["grouped_positions"]["data"]:
                     return {}, pd.DataFrame(leader["grouped_positions"]["data"])
