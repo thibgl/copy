@@ -59,8 +59,8 @@ if server_mode:
     # print(response)
 #     response = app.binance.client.isolated_margin_account()
 #     rows = [
-#     {**{'BASE_' + k: v for k, v in item['baseAsset'].items()},
-#      **{'QUOTE_' + k: v for k, v in item['quoteAsset'].items()},
+#     {**{'base_' + k: v for k, v in item['baseAsset'].items()},
+#      **{'quote_' + k: v for k, v in item['quoteAsset'].items()},
 #      **{k: v for k, v in item.items() if k not in ['baseAsset', 'quoteAsset']}
 #      } for item in response["assets"]
 # ]

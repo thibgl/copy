@@ -29,7 +29,7 @@ class Bot:
             leader_mixes = pd.DataFrame()
 
             async for user in users:
-                # try:
+                try:
                     user_leaders = pd.DataFrame(user["leaders"]["data"])
                     
                     if user_leaders.size > 0:
@@ -77,11 +77,11 @@ class Bot:
                             await self.app.scrap.update_leaders(bot, roster)
 
                 #! faire le transfer de TP
-                # except Exception as e:
-                #     trace = traceback.format_exc()
-                #     await self.app.log.create(bot, user, 'ERROR', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
+                except Exception as e:
+                    trace = traceback.format_exc()
+                    await self.app.log.create(bot, user, 'ERROR', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
 
-                #     continue
+                    continue
 
         if not API:
             end_time = (utils.current_time() - start_time) / 1000

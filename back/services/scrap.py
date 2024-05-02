@@ -80,8 +80,7 @@ class Scrap:
             "cumRealized",
             "notionalValue",
             "markPrice",
-            "ABSOLUTE_LEVERED_VALUE",
-            "ABSOLUTE_UNLEVERED_VALUE"
+            "UNLEVERED_VALUE",
         ]
 
         self.average_columns = [
@@ -299,7 +298,7 @@ class Scrap:
             result[key] = group[key].sum() if key in group.keys() else None
         for key in self.average_columns:
             #! not good
-            result[key] = np.average(group[key], weights=group["ABSOLUTE_LEVERED_VALUE"].abs()) if key in group.keys() else None
+            result[key] = np.average(group[key], weights=group["notionalValue"].abs()) if key in group.keys() else None
 
         if handle_position_direction:
             if len(group) > 1: result["positionSide"] = "BOTH"
@@ -323,20 +322,22 @@ class Scrap:
                 filtered_positions = positions.loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
                 if len(filtered_positions) > 0:
                     filtered_positions = filtered_positions.drop(columns=self.drop_columns)
-                    filtered_positions["ABSOLUTE_LEVERED_VALUE"] = filtered_positions["notionalValue"].abs()
-                    filtered_positions["ABSOLUTE_UNLEVERED_VALUE"] = filtered_positions["ABSOLUTE_LEVERED_VALUE"] / filtered_positions["leverage"]
+                    filtered_positions["UNLEVERED_VALUE"] = filtered_positions["notionalValue"] / filtered_positions["leverage"]
         
                     grouped_positions = filtered_positions.groupby("symbol").apply(self.aggregate_leader_positions, handle_position_direction=True, include_groups=False).reset_index()
                     grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
-
                     grouped_positions["ID"] = str(binance_id)
                     grouped_positions = grouped_positions.rename(columns={key: key + "_SUM" for key in self.sum_columns} | {key: key + "_AVERAGE" for key in self.average_columns}).set_index("ID")
-                    grouped_positions["LEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum()
-                    grouped_positions["UNLEVERED_POSITION_SHARE"] = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"] / grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum()
+
+                    total_levered_value = abs(grouped_positions["notionalValue_SUM"].sum())
+                    total_unlevered_value = abs(grouped_positions["UNLEVERED_VALUE_SUM"].sum())
+
+                    grouped_positions["LEVERED_POSITION_SHARE"] = grouped_positions["notionalValue_SUM"].abs() / total_levered_value
+                    grouped_positions["UNLEVERED_POSITION_SHARE"] = grouped_positions["UNLEVERED_VALUE_SUM"].abs() / total_unlevered_value
 
                     total_balance = float(leader["detail"]["data"]["marginBalance"])
-                    levered_ratio = grouped_positions["ABSOLUTE_LEVERED_VALUE_SUM"].sum() / total_balance
-                    unlevered_ratio = grouped_positions["ABSOLUTE_UNLEVERED_VALUE_SUM"].sum() / total_balance
+                    levered_ratio = total_levered_value / total_balance
+                    unlevered_ratio = total_unlevered_value / total_balance
         
                     if "ticks" in leader["account"]["data"].keys():
                         ticks = leader["account"]["data"]["ticks"] + 1
@@ -374,7 +375,7 @@ class Scrap:
                         "grouped_positions": grouped_positions.to_dict(),
                     }
 
-                    return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "AVERAGE_LEVERED_RATIO", "AVERAGE_UNLEVERED_RATIO", "AVERAGE_LEVERAGE", "TICKS"]]
+                    return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "UNLEVERED_RATIO", "AVERAGE_LEVERED_RATIO", "AVERAGE_UNLEVERED_RATIO", "AVERAGE_LEVERAGE", "TICKS"]]
                 
                 else:
                     return {}, []

@@ -51,7 +51,7 @@ class Binance:
 
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, lifecycle): #self, user
         # weigth = 10
-        # try:
+        try:
             margin_account_data = self.client.margin_account()
 
             positions = pd.DataFrame(margin_account_data["userAssets"])
@@ -101,7 +101,8 @@ class Binance:
                     positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user["detail"]["data"]["TARGET_RATIO"] * user_leverage * positions_opened_changed["INVESTED_RATIO_BOOSTED"]
                     positions_opened_changed.loc[positions_opened_changed["leader_positionAmount_SUM"] < 0, "TARGET_VALUE"] *= -1
 
-                    print(positions_opened_changed)
+                    # print(positions_opened_changed)
+                    # print(positions_opened_changed["leader_UNLEVERED_RATIO"].unique().sum())
                     # print(positions_opened_changed["TARGET_VALUE"].abs().sum())
                     # print(positions_opened_changed["TARGET_VALUE_TEST"].abs().sum())
 
@@ -181,8 +182,8 @@ class Binance:
 
             return user_account_update, positions_closed, positions_opened, positions_changed, pool
 
-        # except Exception as e:
-        #     await self.handle_exception(bot, user, e, 'user_account_update', None)
+        except Exception as e:
+            await self.handle_exception(bot, user, e, 'user_account_update', None)
 
 
     async def user_account_close(self, bot, user, new_user_mix):
