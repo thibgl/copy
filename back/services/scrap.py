@@ -74,35 +74,6 @@ class Scrap:
 
         self.start()
 
-        self.sum_columns = [
-            "positionAmount",
-            "unrealizedProfit",
-            "cumRealized",
-            "notionalValue",
-            "markPrice",
-            "UNLEVERED_VALUE",
-        ]
-
-        self.average_columns = [
-            "entryPrice",
-            "markPrice",
-            "leverage",
-            "breakEvenPrice",
-        ]
-
-        self.drop_columns = [
-            "id",
-            "collateral",
-            "isolated",
-            "isolatedWallet",
-            "adl",
-            "askNotional",
-            "bidNotional"
-        ]
-
-    def cooldown(self):
-        # time.sleep(self.COOLDOWN)
-        pass
 
     def gen_headers(self):
         headers = {'User-Agent':str(self.user_agent.random)}
@@ -291,54 +262,47 @@ class Scrap:
             await self.handle_exception(bot, e, 'leader_chart_update', None)
 
 
-    def aggregate_leader_positions(self, group: pd.DataFrame, handle_position_direction=False) -> pd.Series:
-        result = {}
-        
-        for key in self.sum_columns: 
-            result[key] = group[key].sum() if key in group.keys() else None
-        for key in self.average_columns:
-            #! not good
-            result[key] = np.average(group[key], weights=group["notionalValue"].abs()) if key in group.keys() else None
-
-        if handle_position_direction:
-            if len(group) > 1: result["positionSide"] = "BOTH"
-            else: result["positionSide"] = group["positionSide"].values[0]
-
-        # result["LEADER_IDS"] = list(set(group["LEADER_ID"]))
-        return pd.Series(result)
-
     async def leader_positions_update(self, bot, leader, lifecycle):
         try:
             binance_id = leader["detail"]["data"]["leadPortfolioId"]
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
-            # print(positions_response.keys())
+
             if positions_response and 'data' in positions_response.keys():
                 positions = pd.DataFrame(positions_response["data"])
 
                 positions["ID"] = binance_id
                 positions = positions.set_index("ID")
-                positions = positions.apply(lambda column: column.astype(float) if column.name in self.sum_columns + self.average_columns else column)
+                positions = positions.apply(lambda column: column.astype(float) if column.name in ["markPrice", "positionAmount", "notionalValue", "leverage"] else column)
         
-                filtered_positions = positions.loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
+                filtered_positions = positions.copy().loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
                 if len(filtered_positions) > 0:
-                    filtered_positions = filtered_positions.drop(columns=self.drop_columns)
                     filtered_positions["UNLEVERED_VALUE"] = filtered_positions["notionalValue"] / filtered_positions["leverage"]
+                    filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"].abs() / filtered_positions["notionalValue"].abs().sum()
+                    filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"]
         
-                    grouped_positions = filtered_positions.groupby("symbol").apply(self.aggregate_leader_positions, handle_position_direction=True, include_groups=False).reset_index()
+                    grouped_positions = filtered_positions.groupby("symbol").agg({
+                        "markPrice": 'mean',
+                        "positionAmount": 'sum',
+                        "notionalValue": 'sum',
+                        "UNLEVERED_VALUE": 'sum',
+                        "POSITION_SHARE": 'sum',
+                        "leverage_WEIGHTED": 'mean'
+                        }).reset_index()
+
                     grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
                     grouped_positions["ID"] = str(binance_id)
-                    grouped_positions = grouped_positions.rename(columns={key: key + "_SUM" for key in self.sum_columns} | {key: key + "_AVERAGE" for key in self.average_columns}).set_index("ID")
+                    grouped_positions = grouped_positions.set_index("ID")
 
-                    total_levered_value = abs(grouped_positions["notionalValue_SUM"].sum())
-                    total_unlevered_value = abs(grouped_positions["UNLEVERED_VALUE_SUM"].sum())
-
-                    grouped_positions["LEVERED_POSITION_SHARE"] = grouped_positions["notionalValue_SUM"].abs() / total_levered_value
-                    grouped_positions["UNLEVERED_POSITION_SHARE"] = grouped_positions["UNLEVERED_VALUE_SUM"].abs() / total_unlevered_value
+                    total_levered_value = grouped_positions["notionalValue"].abs().sum()
+                    total_unlevered_value = grouped_positions["UNLEVERED_VALUE"].abs().sum()
 
                     total_balance = float(leader["detail"]["data"]["marginBalance"])
                     levered_ratio = total_levered_value / total_balance
                     unlevered_ratio = total_unlevered_value / total_balance
-        
+                    
+                    average_leverage = levered_ratio / unlevered_ratio
+                    scaled_unlevered_ratio = 4 / ((1 + unlevered_ratio) ** 2) * unlevered_ratio
+
                     if "ticks" in leader["account"]["data"].keys():
                         ticks = leader["account"]["data"]["ticks"] + 1
                     else:
@@ -354,14 +318,10 @@ class Scrap:
                     else:
                         average_unlevered_ratio = leader["account"]["data"]["average_unlevered_ratio"] + (unlevered_ratio - leader["account"]["data"]["average_unlevered_ratio"]) / ticks
 
-                    # print(ticks, average_levered_ratio, average_unlevered_ratio)
-                    #! faire un vrai relevé de perf après cha nouveau trade, capé avec un nombre de x periodes
-                    grouped_positions["LEVERED_RATIO"] = levered_ratio
-                    grouped_positions["UNLEVERED_RATIO"] = unlevered_ratio
-                    grouped_positions["AVERAGE_LEVERED_RATIO"] = average_levered_ratio
-                    grouped_positions["AVERAGE_UNLEVERED_RATIO"] = average_unlevered_ratio
-                    grouped_positions["AVERAGE_LEVERAGE"] = levered_ratio / unlevered_ratio
                     grouped_positions["TICKS"] = ticks
+                    grouped_positions["PERFORMANCE"] = leader["performance"]["data"]["roi"]
+                    grouped_positions["AVERAGE_LEVERAGE"] = average_leverage
+                    grouped_positions['INVESTED_RATIO'] = levered_ratio if levered_ratio <= 1 else unlevered_ratio
 
                     positions_update = {
                         "account": {
@@ -375,7 +335,7 @@ class Scrap:
                         "grouped_positions": grouped_positions.to_dict(),
                     }
 
-                    return positions_update, grouped_positions[["symbol", "positionAmount_SUM", "markPrice_AVERAGE", "LEVERED_POSITION_SHARE", "LEVERED_RATIO", "UNLEVERED_RATIO", "AVERAGE_LEVERED_RATIO", "AVERAGE_UNLEVERED_RATIO", "AVERAGE_LEVERAGE", "TICKS"]]
+                    return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "PERFORMANCE", "AVERAGE_LEVERAGE", "INVESTED_RATIO", "POSITION_SHARE"]]
                 
                 else:
                     return {}, []
@@ -449,6 +409,7 @@ class Scrap:
         except Exception as e:
             await self.handle_exception(bot, e, 'get_leader', None)
 
+
     async def update_leaders(self, bot, roster):
         for binance_id in roster.index.values:
             leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
@@ -492,321 +453,3 @@ class Scrap:
 
     def cleanup(self):
         self.gateway.shutdown()
-
-
-
-#    async def leader_account_update(self, leader):
-#         binance_id = leader["detail"]["data"]["leadPortfolioId"]
-        
-#         transfer_history_response = await self.fetch_pages(binance_id, 'transfer_history')
-
-#         transfer_history = pd.DataFrame(transfer_history_response)
-#         transfer_history["ID"] = str(leader["_id"])
-#         transfer_history["INCOMING"] = transfer_history["to"] == 'Lead Trading Account'
-#         transfer_history["RELATIVE_VALUE"] = transfer_history.apply(lambda row: row["amount"] if row["INCOMING"] else -row["amount"], axis=1)
-
-#         position_history = await self.fetch_pages(binance_id, 'position_history')
-#         position_history = pd.DataFrame(position_history)
-#         position_history["ID"] = str(leader["_id"])
-
-#         transfer_balance = transfer_history["RELATIVE_VALUE"].sum()
-#         historic_PNL = position_history["closingPnl"].sum()
-#         total_balance = transfer_balance + historic_PNL
-
-#         account_update = {
-#             "account": {
-#                 "transfer_balance": transfer_balance,
-#                 "historic_PNL": historic_PNL,
-#                 "total_balance": total_balance,
-#             },
-#         }
-
-#         return account_update
-
-
-
-
-
-    # async def create_leader(self, leaderId):
-    #     try:   
-    #         bot = await self.app.db.bot.find_one()
-    #         detail_reponse = await self.fetch_data(bot, leaderId, "detail")
-
-    #         if detail_reponse["success"]:
-    #             detail_data = detail_reponse["data"]
-
-    #         else:
-    #             return { "success": False, "message": "Could not fetch Detail" }
-            
-    #         if detail_data["positionShow"] == True:
-    #             # todo: update leader if fail reasons
-
-    #             if detail_data["status"] != "ACTIVE":
-    #                 return { "success": False, "message": "Leader is not Active" }
-
-    #             if detail_data["initInvestAsset"] != "USDT":
-    #                 return { "success": False, "message": "Leader is not using USDT" }
-                
-    #             leader_db = await self.app.db.leaders.find_one({"binanceId": leaderId})
-
-    #             if leader_db:
-    #                 leader = leader_db
-
-    #             else:
-    #                 leader = {
-    #                         "binanceId": leaderId,
-    #                         "profileUrl": f'https://www.binance.com/en/copy-trading/lead-details/{leaderId}',
-    #                         "userId": detail_data["userId"],
-    #                         "nickname": detail_data["nickname"],
-    #                         "avatarUrl": detail_data["avatarUrl"],
-    #                         "status": detail_data["status"],
-    #                         "initInvestAsset": detail_data["initInvestAsset"],
-    #                         "positionShow": detail_data["positionShow"],
-    #                         "updatedAt": utils.current_time(),
-    #                         "historicPNL": 0,
-    #                         "transferBalance": 0,
-    #                         "totalBalance": 0,
-    #                         "liveRatio": 0,
-    #                         "positionsValue": 0,
-    #                         "positionsNotionalValue": 0,
-    #                         "amounts": {},
-    #                         "notionalValues": {},
-    #                         "values": {},
-    #                         "shares": {},
-    #                         "leverages": {}
-    #                     }
-    #                 await self.app.db.leaders.insert_one(leader)
-
-    #             # print(leader_db)
-
-    #             # self.cooldown()
-    #             await self.tick_positions(bot, leader)
-
-    #             # self.cooldown()
-    #             await self.update_leader_stats(bot, leader)
-                
-    #             #todo do not replace if nothing changed ?
-    #             await self.app.db.leaders.update_one(
-    #                 {"_id": leader["_id"]}, 
-    #                 {"$set": leader}
-    #             )
-                
-    #             # print(leader)
-    #         else:
-    #             return { "success": False, "message": "Leader is not sharing Positions" }
-
-    #     except Exception as e:
-    #         await self.handle_exception(bot, e, 'create_leader', detail_reponse)
-
-
-    # async def tick_leader(self, bot, leader):
-    #     try:   
-    #         detail_reponse = await self.fetch_data(bot, leader["binanceId"], "detail")
-
-    #         if detail_reponse["success"]:
-    #             detail_data = detail_reponse["data"]
-
-    #             leader.update({
-    #                 "status": detail_data["status"],
-    #                 "initInvestAsset": detail_data["initInvestAsset"],
-    #                 "positionShow": detail_data["positionShow"],
-    #                 "updatedAt": utils.current_time(),
-    #             })
-
-
-    #             await self.app.db.leaders.update_one(
-    #                 {"_id": leader["_id"]}, 
-    #                 {"$set": leader}
-    #             )
-            
-    #     except Exception as e:
-    #         await self.handle_exception(bot, e, 'tick_leader', detail_reponse)
-
-
-    # async def update_leader_stats(self, bot, leader):
-    #     try:
-    #         await self.tick_position_history(bot, leader)
-
-    #         # self.cooldown()
-    #         await self.tick_transfer_history(bot, leader)
-        
-    #         total_balance = leader["historicPNL"] + leader["transferBalance"] + leader["positionsValue"]
-
-    #         update = {
-    #             "totalBalance": total_balance,
-    #             "liveRatio": leader["positionsValue"] / total_balance,
-    #             "updatedAt": utils.current_time()
-    #         }
-
-    #         leader.update(update)
-
-    #         await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
-
-    #         return update
-    #     except Exception as e:
-    #         await self.handle_exception(bot, e, 'update_leader_stats', leader)
-
-    
-    # async def tick_transfer_history(self, bot, leader):
-    #     try:
-    #         latest_transfer = await self.app.db.transfer_history.find_one(
-    #                 {"leaderId": leader["_id"]},
-    #                 sort=[('time', -1)]
-    #             )
-
-    #         transfer_history_response = await self.fetch_pages(bot, leader["binanceId"], "transfer_history", reference='time', latest_item=latest_transfer)
-    #         # print(transfer_history_response)
-    #         # transfers = []
-
-    #         if transfer_history_response["success"]:
-    #             transfer_history = transfer_history_response["data"]
-
-    #             for transfer in transfer_history:
-    #                 # if "transType" in transfer.keys():
-    #                     transfer["leaderId"] = leader["_id"]
-    #                     transfer_type = transfer["transType"]
-
-    #                     if transfer_type == "LEAD_INVEST" or transfer_type == "LEAD_DEPOSIT":
-    #                         leader["transferBalance"] += float(transfer["amount"])
-
-    #                     elif transfer_type == "LEAD_WITHDRAW":
-    #                         leader["transferBalance"] -= float(transfer["amount"])
-
-    #                     else:
-    #                         print(f"WARNING! UNKNOWN TRANFER TYPE: {transfer_type}")
-
-    #                     # transfers.append(transfer)
-
-    #             if len(transfer_history) > 0:
-    #                 await self.app.db.transfer_history.insert_many(transfer_history)
-
-    #         return transfer_history_response
-        
-    #     except Exception as e:
-    #         await self.handle_exception(bot, e, 'tick_transfer_history', transfer_history_response)
-
-
-    # async def tick_position_history(self, bot, leader):
-    #     try:
-    #         latest_position = await self.app.db.position_history.find_one(
-    #             {"leaderId": leader["_id"]},
-    #             sort=[('updateTime', -1)]
-    #         )
-            
-    #         position_history_response = await self.fetch_pages(bot, leader["binanceId"], "position_history", reference='updateTime', latest_item=latest_position)
-
-    #         if position_history_response["success"]:
-    #             new_position_history = position_history_response["data"]
-    #             partially_closed_positions = await self.app.db.position_history.distinct('id', {'status': 'Partially Closed'})
-    #             new_positions = []
-    #             # print(partially_closed_positions)
-    #             for position in new_position_history:
-    #                 position["leaderId"] = leader["_id"]
-
-    #                 if position["id"] in partially_closed_positions:
-    #                     partially_closed_position = await self.app.db.position_history.find_one({"leaderId": leader["_id"], "id": position["id"]})
-    #                     leader['historicPNL'] -= float(partially_closed_position["closingPnl"])
-
-    #                     await self.app.db.position_history.replace_one({"leaderId": leader["_id"], "id": position["id"]}, position)
-    #                 else:
-    #                     leader['historicPNL'] += float(position["closingPnl"])
-    #                     new_positions.append(position)
-
-    #             if len(new_positions) > 0:
-    #                 await self.app.db.position_history.insert_many(new_positions)
-                
-    #         return position_history_response
-        
-    #     except Exception as e:
-    #         await self.handle_exception(bot, e, 'tick_position_history', position_history_response)
-
-
-    # async def tick_positions(self, bot, leader):
-    #     try:
-    #         binanceId = leader["binanceId"]
-    #         fetch_data_response = await self.fetch_data(bot, binanceId, "positions")
-
-    #         if fetch_data_response["success"]:
-    #             positions_data = fetch_data_response["data"]
-    #             latest_amounts = leader["amounts"]
-    #             positions_notional_value = 0
-    #             positions_value = 0
-    #             positions = []
-    #             amounts, values, notional_values, shares, leverages = {}, {}, {}, {}, {}
-
-    #             for position in positions_data:
-    #                 position_amount = float(position["positionAmount"])
-    #                 symbol, _ = await self.app.binance.get_asset_precision(bot, position["symbol"])
-
-    #                 if symbol and position_amount != 0:
-    #                     position["leaderId"] = leader["_id"]
-    #                     leverage = position["leverage"]
-    #                     notional_value = float(position["notionalValue"])
-    #                     position_value = abs(notional_value / leverage)
-
-    #                     if symbol not in amounts: 
-    #                         amounts[symbol] = 0
-    #                         notional_values[symbol] = 0
-    #                         values[symbol] = 0
-
-    #                     amounts[symbol] += position_amount
-    #                     notional_values[symbol] += notional_value
-    #                     values[symbol] += position_value
-    #                     leverages[symbol] = leverage
-
-    #                     positions_notional_value += abs(notional_value)
-    #                     positions_value += position_value
-    #                     positions.append(position)
-    #             # print(values)
-    #             if amounts != latest_amounts:
-    #                 current_set, last_set = set(amounts.items()), set(latest_amounts.items())
-    #                 current_difference, last_difference = current_set.difference(last_set), last_set.difference(current_set)
-
-    #                 for bag in last_difference:
-    #                     symbol, amount = bag
-
-    #                     if amount != 0:
-    #                         if symbol not in amounts:
-    #                             # print(f'{bag} CLOSED POSITION')
-    #                             await self.app.db.positions.delete_one({"leaderId": leader["_id"], "symbol": symbol})
-
-    #                 for bag in current_difference:
-    #                     symbol, amount = bag
-
-    #                     if amount != 0:
-    #                         symbol_positions = [position for position in positions if position.get('symbol') == symbol]
-
-    #                         if symbol in latest_amounts:
-    #                             # print(f'{bag} CHANGED POSITION')
-    #                             for symbol_position in symbol_positions:
-    #                                 await self.app.db.positions.replace_one({"leaderId": leader["_id"], "id": symbol_position["id"]}, symbol_position)
-    #                         else:
-    #                             # print(f'{bag} NEW POSITION')
-    #                             for symbol_position in symbol_positions:
-    #                                 await self.app.db.positions.insert_one(symbol_position)
-
-    #             for symbol, value in values.items():
-    #                 shares[symbol] = value / positions_value
-
-    #             update = {
-    #                 "positionsValue": positions_value,
-    #                 "positionsNotionalValue": positions_notional_value,
-    #                 "amounts": amounts,
-    #                 "notionalValues": notional_values,
-    #                 "shares": shares,
-    #                 "values": values,
-    #                 "leverages": leverages,
-    #                 "updatedAt": utils.current_time(),
-    #                 }
-    #             # print(update)
-    #             leader.update(update)
-
-    #             await self.app.db.leaders.update_one({"_id": leader["_id"]}, {"$set": update})
-
-    #             # if len(unknown_symbols) > 0:
-    #             #     self.app.db.bot.update_one({}, {"$set": {"symbols": bot["symbols"]}})
-
-    #         return fetch_data_response
-        
-    #     except Exception as e:
-    #         await self.handle_exception(bot, e, 'tick_positions', fetch_data_response)
