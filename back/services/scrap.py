@@ -321,7 +321,7 @@ class Scrap:
                     grouped_positions["TICKS"] = ticks
                     grouped_positions["PERFORMANCE"] = leader["performance"]["data"]["roi"]
                     grouped_positions["AVERAGE_LEVERAGE"] = average_leverage
-                    grouped_positions['INVESTED_RATIO'] = levered_ratio if levered_ratio <= 1 else unlevered_ratio
+                    grouped_positions["INVESTED_RATIO"] = levered_ratio if levered_ratio <= 1 else unlevered_ratio
 
                     positions_update = {
                         "account": {

@@ -87,14 +87,34 @@ class Binance:
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
 
-                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] >= user_leverage,"SCALED_LEVERAGE"] = user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"]
-                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] < user_leverage,"SCALED_LEVERAGE"] = positions_opened_changed["leader_AVERAGE_LEVERAGE"] / user_leverage
+                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] > user_leverage,"SCALED_LEVERAGE"] = 2 - (user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"])
+                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] <= user_leverage,"SCALED_LEVERAGE"] = user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"]
 
-                    positions_opened_changed["leader_INVESTED_RATIO"] *= user["detail"]["data"]["LEADER_CAP"]
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["leader_INVESTED_RATIO"] * positions_opened_changed["SCALED_LEVERAGE"]
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["leader_INVESTED_RATIO"] * positions_opened_changed["SCALED_LEVERAGE"] * positions_opened_changed["user_WEIGHT"] * user["detail"]["data"]["LEADER_CAP"] / 2
+                    positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_SHARE"] *= -1
 
+                    # print(positions_opened_changed)
+
+                    positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
+                        "symbol": 'first',
+                        "leader_symbol": 'first',
+                        "netAsset": 'first',
+                        "borrowed": 'first',
+                        "free": 'first',
+                        "stepSize": 'first',
+                        "minQty": 'first',
+                        "minNotional": 'first',
+                        "leader_ID": 'unique',
+                        "leader_PERFORMANCE": 'mean',
+                        "leader_positionAmount": 'sum',
+                        "leader_markPrice": 'mean',
+                        "TARGET_SHARE": 'sum',
+                        }).reset_index()
+                    
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["TARGET_SHARE"].abs()
                     positions_opened_changed = positions_opened_changed.sort_values(by=["leader_PERFORMANCE", "TARGET_SHARE"], ascending=False)
                     positions_opened_changed["CUMULATIVE_SHARE"] = positions_opened_changed["TARGET_SHARE"].cumsum()
+                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user_leverage
 
                     positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <=  user["detail"]["data"]["TARGET_RATIO"]]
                     user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
@@ -111,20 +131,6 @@ class Binance:
                     
                     if collateral_margin_level > 1.15:
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
-
-                if len(positions_opened_changed) > 0:
-                    positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
-                        "symbol": 'last',
-                        "netAsset": 'last',
-                        "stepSize": 'last',
-                        "minQty": 'last',
-                        "minNotional": 'last',
-                        "leader_markPrice": 'mean',
-                        "leader_ID": 'unique',
-                        "user_WEIGHT": 'sum',
-                        "TARGET_SHARE": 'sum',
-                        "TARGET_VALUE": 'sum',
-                        }).reset_index()
                     
                     positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice"]
 
