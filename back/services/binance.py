@@ -47,8 +47,8 @@ class Binance:
         return closed_positions
 
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, lifecycle): #self, user
-        # weigth = 10
-        # try:
+        weigth = 10
+        try:
             margin_account_data = self.client.margin_account()
 
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
@@ -185,8 +185,8 @@ class Binance:
 
             return user_account_update, positions_closed, positions_opened, positions_changed, excess_pool
 
-        # except Exception as e:
-        #     await self.handle_exception(bot, user, e, 'user_account_update', None)
+        except Exception as e:
+            await self.handle_exception(bot, user, e, 'user_account_update', None)
 
 
     async def user_account_close(self, bot, user, new_user_mix):
