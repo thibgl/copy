@@ -140,7 +140,7 @@ class LeaderPerformanceDate(BaseModel):
     winRate: float
     winOrders: float
     totalOrder: float
-    sharpRatio: str
+    sharpRatio: Union[str, None]
 
 class LeaderGroupedPositionsData(BaseModel):
     symbol: Dict[str, str]

@@ -37,14 +37,11 @@ class Binance:
 
         return dataframe
     
-    async def format_closed_positions(self, bot, closed_positions):
-        closed_positions["SYMBOL_PRICE"] = closed_positions["symbol"].apply(lambda symbol: float(self.app.binance.client.ticker_price(symbol)["price"]))
-        closed_positions["CURRENT_VALUE"] = closed_positions["netAsset"] * closed_positions["SYMBOL_PRICE"]
+    async def get_symbol_prices(self, bot, dataframe):
+        dataframe["SYMBOL_PRICE"] = dataframe.apply(lambda row: float(self.app.binance.client.ticker_price(row["symbol"])["price"]), axis=1)
+        dataframe["CURRENT_VALUE"] = dataframe["netAsset"] * dataframe["SYMBOL_PRICE"]
 
-        closed_positions = self.validate_amounts(closed_positions, "netAsset", "CURRENT_VALUE", "SYMBOL_PRICE")
-        closed_positions = closed_positions[closed_positions["netAsset_PASS"]].set_index("final_symbol")
-
-        return closed_positions
+        return dataframe
 
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, lifecycle): #self, user
         weigth = 10
@@ -81,7 +78,9 @@ class Binance:
 
                 positions_closed = live_pool.copy()[live_pool["leader_symbol"].isna()]
                 if len(positions_closed) > 0:
-                    positions_closed = await self.format_closed_positions(bot, positions_closed)
+                    positions_closed = await self.get_symbol_prices(bot, positions_closed)
+                    positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE", "SYMBOL_PRICE")
+                    positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
 
                 positions_opened_changed = live_pool.copy()[~live_pool["leader_symbol"].isna()]
                 if len(positions_opened_changed) > 0:
@@ -122,13 +121,14 @@ class Binance:
                     positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user_leverage
                     positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_VALUE"] *= -1
 
-                    # print(positions_opened_changed)
+                    print(positions_opened_changed)
                     
-                    excess_pool = live_pool.copy()[(live_pool["borrowed"] != 0) & (live_pool["borrowed"] > live_pool["netAsset"].abs())].set_index('symbol')
-                    excess_pool["FREE_VALUE"] = excess_pool["free"] * excess_pool["leader_markPrice"]
-                    excess_pool = self.validate_amounts(excess_pool, "free", "FREE_VALUE", "leader_markPrice")
-                    excess_pool = excess_pool.loc[excess_pool["FREE_VALUE"] > 2]
-                    
+                    # excess_pool = live_pool.copy()[(live_pool["borrowed"] != 0) & (live_pool["borrowed"] > live_pool["netAsset"].abs())]
+                    # excess_pool = excess_pool.groupby('symbol').first()
+                    # excess_pool["FREE_VALUE"] = excess_pool["free"] * excess_pool["leader_markPrice"]
+                    # excess_pool = self.validate_amounts(excess_pool, "free", "FREE_VALUE", "leader_markPrice")
+                    # excess_pool = excess_pool.loc[excess_pool["FREE_VALUE"] > 2]
+
                     if collateral_margin_level > 1.15:
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
                     
@@ -158,21 +158,21 @@ class Binance:
                     positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
 
 
-                if any([len(positions_closed) > 0, len(positions_closed) > 0, len(positions_changed) > 0, len(excess_pool) > 0]): 
+                if any([len(positions_closed) > 0, len(positions_closed) > 0, len(positions_changed) > 0]): #, len(excess_pool) > 0
                     lifecycle["tick_boost"] = True
                     
             else:
                 print(f'[{utils.current_readable_time()}]: Updating Positions')
 
                 positions_closed = live_pool.copy()
-                positions_closed["final_symbol"] = positions_closed["symbol"]
-                positions_closed = await self.format_closed_positions(bot, positions_closed)
-                
+                positions_closed = await self.get_symbol_prices(bot, positions_closed)
+                positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE", "SYMBOL_PRICE")
+                positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
                 positions_opened = []
                 positions_changed = []
                 n_leaders = 0
                 active_leaders = []
-                excess_pool = []
+                # excess_pool = []
                 
             user_account_update = {
                 "account": {
@@ -189,7 +189,7 @@ class Binance:
                 # "mix": new_user_mix
             }
 
-            return user_account_update, positions_closed, positions_opened, positions_changed, excess_pool
+            return user_account_update, positions_closed, positions_opened, positions_changed#, excess_pool
 
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
@@ -332,7 +332,7 @@ class Binance:
 
     async def handle_exception(self, bot, user, error, source, symbol, notify=True):
         trace = traceback.format_exc()
-
+        print(trace)
         await self.app.log.create(bot, user, 'ERROR', f'client/{source}', 'TRADE', f'Error in Binance API: {symbol} - {error}', details=trace)
 
         pass

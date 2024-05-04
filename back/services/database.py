@@ -14,7 +14,7 @@ class Database:
             update_format = {}
             update_format["updated"] = current_time
             update_format["updated_date"] = utils.current_readable_time()
-            
+
             for key, value in update.items():
                 if key in self.root_values:
                     update_format[key] = value
@@ -35,6 +35,7 @@ class Database:
             if "_id" in obj.keys():
                 await self.app.db[collection].update_one({"_id": obj["_id"]}, {"$set": update_format})
             else:
+                obj.update(update_format)
                 await self.app.db[collection].insert_one(obj)
 
         return True

@@ -96,9 +96,21 @@
 			console.error('Failed to unfollow leader');
 		}
 	}
+
+	$page.data.leaders.sort(
+		(a, b) =>
+			+Object.keys($userLeaders).includes(b.binanceId) -
+			+Object.keys($userLeaders).includes(a.binanceId)
+	);
 </script>
 
-<div class="flex flex-wrap gap-3 justify-center">
+<div class="flex flex-col space-y-3">
+	<div>
+		<button
+			class="btn variant-filled-primary"
+			on:click={() => fetch('http://localhost:8000/scrapLeaders')}>SCRAP LEADERS</button
+		>
+	</div>
 	<!-- <form action="/actions?/addTrader" method="POST" class="card w-96 aspect-video">
 		<header class="card-header flex justify-between items-center">
 			<h2>Add a Trader</h2>
@@ -111,164 +123,166 @@
 			<btn class="btn variant-outline-primary">Submit</btn>
 		</footer>
 	</form> -->
-	{#each $page.data.leaders as leader}
-		<div class="card w-96 aspect-video space-y-3" class:opacity-50={leader.status === 'CLOSED'}>
-			<header class="card-header flex justify-between items-center">
-				<a
-					class="flex space-x-3 items-center"
-					href={'https://www.binance.com/en/copy-trading/lead-details/' + leader.binanceId}
-					target="_blank"
-				>
-					<!-- <Avatar src={lead.userPhotoUrl} fallback="src/lib/images/user.png" /> -->
-					<img
-						class="w-12 h-12 rounded-full bg-gray-500"
-						src={leader.detail.avatarUrl.length > 0
-							? leader.detail.avatarUrl
-							: 'src/lib/images/user.png'}
-						alt="user avatar"
-					/>
-					<div class="flex flex-col items-start">
-						<p
-							class="text-primary-500 italic font-bold"
-							class:text-warning-500={data.user.account.active_leaders.includes(leader.binanceId)}
-						>
-							{leader.detail.nicknameTranslate ?? leader.detail.nickname}
-						</p>
-						<p>{leader.binanceId}</p>
+	<section class="flex flex-wrap gap-3 justify-center">
+		{#each $page.data.leaders as leader}
+			<div class="card w-96 aspect-video space-y-3" class:opacity-50={leader.status === 'CLOSED'}>
+				<header class="card-header flex justify-between items-center">
+					<a
+						class="flex space-x-3 items-center"
+						href={'https://www.binance.com/en/copy-trading/lead-details/' + leader.binanceId}
+						target="_blank"
+					>
+						<!-- <Avatar src={lead.userPhotoUrl} fallback="src/lib/images/user.png" /> -->
+						<img
+							class="w-12 h-12 rounded-full bg-gray-500"
+							src={leader.detail.avatarUrl.length > 0
+								? leader.detail.avatarUrl
+								: 'src/lib/images/user.png'}
+							alt="user avatar"
+						/>
+						<div class="flex flex-col items-start">
+							<p
+								class="text-primary-500 italic font-bold"
+								class:text-warning-500={data.user.account.active_leaders.includes(leader.binanceId)}
+							>
+								{leader.detail.nicknameTranslate ?? leader.detail.nickname}
+							</p>
+							<p>{leader.binanceId}</p>
+						</div>
+					</a>
+
+					<div class="flex space-x-3">
+						{#if $userFavorites.includes(leader.binanceId)}
+							<button on:click={() => unfavLeader(leader)}>
+								<FavoriteEnabledIcon class="w-8 h-8 text-secondary-500" />
+							</button>
+						{:else}
+							<button on:click={() => favLeader(leader)}>
+								<FavoriteIcon class="w-8 h-8" />
+							</button>
+						{/if}
+						{#if Object.keys($userLeaders).includes(leader.binanceId)}
+							<button on:click={() => unfollowLeader(leader)}>
+								<CopyEnabledIcon class="w-8 h-8 text-warning-500" />
+							</button>
+						{:else}
+							<button on:click={() => followLeader(leader)}>
+								<CopyIcon class="w-8 h-8" />
+							</button>
+						{/if}
 					</div>
-				</a>
-
-				<div class="flex space-x-3">
-					{#if $userFavorites.includes(leader.binanceId)}
-						<button on:click={() => unfavLeader(leader)}>
-							<FavoriteEnabledIcon class="w-8 h-8 text-secondary-500" />
-						</button>
-					{:else}
-						<button on:click={() => favLeader(leader)}>
-							<FavoriteIcon class="w-8 h-8" />
-						</button>
-					{/if}
-					{#if Object.keys($userLeaders).includes(leader.binanceId)}
-						<button on:click={() => unfollowLeader(leader)}>
-							<CopyEnabledIcon class="w-8 h-8 text-warning-500" />
-						</button>
-					{:else}
-						<button on:click={() => followLeader(leader)}>
-							<CopyIcon class="w-8 h-8" />
-						</button>
-					{/if}
-				</div>
-			</header>
-			<section class="p-4 space-y-1 flex justify-between">
-				<div class="flex flex-col items-start space-y-1">
-					<span>
-						<span class="badge variant-ghost-secondary">Copiers</span>
-						<span class="">{leader.detail.currentCopyCount} / {leader.detail.maxCopyCount}</span>
-					</span>
-					<span class="flex">
-						<span class="badge variant-ghost-secondary">AUM</span>
-						<span class="flex space-x-1 items-center">
-							<span>{Math.round(leader.detail.aumAmount)}</span>
-							<span><USDTIcon /></span>
+				</header>
+				<section class="p-4 space-y-1 flex justify-between">
+					<div class="flex flex-col items-start space-y-1">
+						<span>
+							<span class="badge variant-ghost-secondary">Copiers</span>
+							<span class="">{leader.detail.currentCopyCount} / {leader.detail.maxCopyCount}</span>
 						</span>
-					</span>
-					<span class="flex">
-						<span class="badge variant-ghost-secondary">Balance</span>
-						<span class="flex space-x-1 items-center">
-							<span>{Math.round(leader.detail.marginBalance)}</span>
-							<span><USDTIcon /></span>
+						<span class="flex">
+							<span class="badge variant-ghost-secondary">AUM</span>
+							<span class="flex space-x-1 items-center">
+								<span>{Math.round(leader.detail.aumAmount)}</span>
+								<span><USDTIcon /></span>
+							</span>
 						</span>
-					</span>
-					<span>
-						<span class="badge variant-ghost-secondary">Levered</span>
-						<span class="">
-							<span>{Math.round(leader.account.levered_ratio * 100) / 100}</span>
+						<span class="flex">
+							<span class="badge variant-ghost-secondary">Balance</span>
+							<span class="flex space-x-1 items-center">
+								<span>{Math.round(leader.detail.marginBalance)}</span>
+								<span><USDTIcon /></span>
+							</span>
 						</span>
-					</span>
-					<span>
-						<span class="badge variant-ghost-secondary">Unlevered</span>
-						<span class="">
-							<span>{Math.round(leader.account.unlevered_ratio * 100) / 100}</span>
+						<span>
+							<span class="badge variant-ghost-secondary">Levered</span>
+							<span class="">
+								<span>{Math.round(leader.account.levered_ratio * 100) / 100}</span>
+							</span>
 						</span>
-					</span>
-				</div>
-				<div class="flex flex-col items-end space-y-1">
-					<span class="flex">
-						<span class="flex space-x-1 items-center">
-							<span>{Math.round(leader.performance.roi)} %</span>
+						<span>
+							<span class="badge variant-ghost-secondary">Unlevered</span>
+							<span class="">
+								<span>{Math.round(leader.account.unlevered_ratio * 100) / 100}</span>
+							</span>
 						</span>
-						<span class="badge variant-ghost-secondary">ROI</span>
-					</span>
-					<span class="flex">
-						<span class="flex space-x-1 items-center">
-							<span>{Math.round(leader.performance.pnl)}</span>
-							<span><USDTIcon /></span>
+					</div>
+					<div class="flex flex-col items-end space-y-1">
+						<span class="flex">
+							<span class="flex space-x-1 items-center">
+								<span>{Math.round(leader.performance.roi)} %</span>
+							</span>
+							<span class="badge variant-ghost-secondary">ROI</span>
 						</span>
-						<span class="badge variant-ghost-secondary">PNL</span>
-					</span>
-					<span>
-						<span class="">
-							<span>{Math.round(leader.performance.mdd * 100) / 100} %</span>
+						<span class="flex">
+							<span class="flex space-x-1 items-center">
+								<span>{Math.round(leader.performance.pnl)}</span>
+								<span><USDTIcon /></span>
+							</span>
+							<span class="badge variant-ghost-secondary">PNL</span>
 						</span>
-						<span class="badge variant-ghost-secondary">MDD</span>
-					</span>
-					<span>
-						<span class="">
-							<span>{Math.round(leader.performance.winRate * 100) / 100} %</span>
+						<span>
+							<span class="">
+								<span>{Math.round(leader.performance.mdd * 100) / 100} %</span>
+							</span>
+							<span class="badge variant-ghost-secondary">MDD</span>
 						</span>
-						<span class="badge variant-ghost-secondary">WinRate</span>
-					</span>
-					<span>
-						<span class="">{Math.round(leader.performance.sharpRatio * 100) / 100}</span>
-						<span class="badge variant-ghost-secondary">Sharpe</span>
-					</span>
-				</div>
-			</section>
-			<footer class="card-footer p-0">
-				{#if style}
-					<Line
-						data={{
-							labels: leader.chart.map((item) => new Date(item.dateTime)),
-							datasets: [
-								{
-									// label: 'My First dataset',
-									fill: true,
-									backgroundColor: `rgb(${style.getPropertyValue('--color-surface-600')})`,
-									lineTension: 0.5,
-									borderColor: `rgb(${data.user.account.active_leaders.includes(leader.binanceId) ? style.getPropertyValue('--color-warning-500') : Object.keys($userLeaders).includes(leader.binanceId) ? style.getPropertyValue('--color-primary-500') : style.getPropertyValue('--color-surface-200')})`,
-									borderCapStyle: 'butt',
-									borderDash: [],
-									borderDashOffset: 0.0,
-									borderJoinStyle: 'miter',
-									// pointBorderColor: 'rgb(205, 130,1 58)',
-									// pointBackgroundColor: 'rgb(255, 255, 255)',
-									// pointBorderWidth: 10,
-									// pointHoverRadius: 5,
-									pointHoverBackgroundColor: 'rgb(0, 0, 0)',
-									pointHoverBorderColor: 'rgba(220, 220, 220,1)',
-									pointHoverBorderWidth: 2,
-									pointRadius: 0,
-									pointHitRadius: 10,
-									data: leader.chart.map((item) => item.value)
-								}
-							]
-						}}
-						options={{
-							scales: {
-								x: {
-									display: false
+						<span>
+							<span class="">
+								<span>{Math.round(leader.performance.winRate * 100) / 100} %</span>
+							</span>
+							<span class="badge variant-ghost-secondary">WinRate</span>
+						</span>
+						<span>
+							<span class="">{Math.round(leader.performance.sharpRatio * 100) / 100}</span>
+							<span class="badge variant-ghost-secondary">Sharpe</span>
+						</span>
+					</div>
+				</section>
+				<footer class="card-footer p-0">
+					{#if style}
+						<Line
+							data={{
+								labels: leader.chart.map((item) => new Date(item.dateTime)),
+								datasets: [
+									{
+										// label: 'My First dataset',
+										fill: true,
+										backgroundColor: `rgb(${style.getPropertyValue('--color-surface-600')})`,
+										lineTension: 0.5,
+										borderColor: `rgb(${data.user.account.active_leaders.includes(leader.binanceId) ? style.getPropertyValue('--color-warning-500') : Object.keys($userLeaders).includes(leader.binanceId) ? style.getPropertyValue('--color-primary-500') : style.getPropertyValue('--color-surface-200')})`,
+										borderCapStyle: 'butt',
+										borderDash: [],
+										borderDashOffset: 0.0,
+										borderJoinStyle: 'miter',
+										// pointBorderColor: 'rgb(205, 130,1 58)',
+										// pointBackgroundColor: 'rgb(255, 255, 255)',
+										// pointBorderWidth: 10,
+										// pointHoverRadius: 5,
+										pointHoverBackgroundColor: 'rgb(0, 0, 0)',
+										pointHoverBorderColor: 'rgba(220, 220, 220,1)',
+										pointHoverBorderWidth: 2,
+										pointRadius: 0,
+										pointHitRadius: 10,
+										data: leader.chart.map((item) => item.value)
+									}
+								]
+							}}
+							options={{
+								scales: {
+									x: {
+										display: false
+									},
+									y: {
+										display: false
+									}
 								},
-								y: {
-									display: false
-								}
-							},
-							maintainAspectRatio: false
-						}}
-					/>
-				{/if}
+								maintainAspectRatio: false
+							}}
+						/>
+					{/if}
 
-				<!-- <ProgressRadial width="w-16" font={128} value={95}>95</ProgressRadial> -->
-			</footer>
-		</div>
-	{/each}
+					<!-- <ProgressRadial width="w-16" font={128} value={95}>95</ProgressRadial> -->
+				</footer>
+			</div>
+		{/each}
+	</section>
 </div>

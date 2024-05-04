@@ -2,7 +2,7 @@
 # telegram, sleeping leaders delay not working, opti portoflio en fonction de la perf, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 # inclure le type dans le mix que si il a engagé un minimum de son capital
 # V3 ==> PANDAS / NUMPY
-#todo: STOP LOSSES, SCRAP LEADERS LIST & CONNECT FRONT, ISOLATED
+#todo: STOP LOSSES, ISOLATED, fix excess pool
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -124,9 +124,12 @@ async def scrap_data(userId: str):
 @app.get('/scrapLeaders')
 async def scrap_data():
     bot = await app.db.bot.find_one()
-    response = await app.scrap.fetch_pages(bot, 'leaders', results_limit=0)
+    # response = await app.scrap.fetch_pages(bot, 'leaders', results_limit=100)
 
-    print(pd.DataFrame(response["data"]).head().to())
+    async for page in app.scrap.fetch_pages(bot, 'leaders', results_limit=100):
+        for leader in page:
+            leader = await app.scrap.get_leader(bot, leader['leadPortfolioId'])
+    # print(pd.DataFrame(response["data"]).head().to())
 
     # return response.json()
 
@@ -208,7 +211,7 @@ async def home():
 
 @app.get('/leaders/all', response_model=AllLeaders)
 async def all_leaders():
-    leaders_cursor = app.db.leaders.find()
+    leaders_cursor = app.db.leaders.find({"status": {"$ne": "INACTIVE"}})
     # leaders = await leaders_cursor.to_list(length=None)
     leaders = []
     async for leader in leaders_cursor:

@@ -58,7 +58,8 @@ class Bot:
                                         dropped_leaders.append(binance_id)
 
                                 except Exception as e:
-                                    print(e)
+                                    trace = traceback.format_exc()
+                                    print(trace)
                                     continue
 
                         user_mix = pd.DataFrame(user["mix"]["data"]).to_dict()
@@ -66,9 +67,13 @@ class Bot:
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed, excess_pool = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
-
+                        # print(user_account)
+                        # print(positions_closed.head())
+                        # print(positions_opened.head())
+                        # print(positions_changed.head())
+                        # print(excess_pool.head())
                         if user_account_update_success:
                             await self.close_positions(bot, user, positions_closed, user_mix_new)
                             await self.change_positions(bot, user, positions_changed, user_mix_new)
@@ -79,8 +84,8 @@ class Bot:
                             self.app.scrap.cleanup()
                             self.app.scrap.start()
                         
-                        else:
-                            await self.repay_debts(bot, excess_pool, user_mix_new)
+                        # else:
+                        #     await self.repay_debts(bot, excess_pool, user_mix_new)
 
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
                             await self.app.scrap.update_leaders(bot, user)
@@ -91,6 +96,7 @@ class Bot:
                 #! faire le transfer de TP
                 except Exception as e:
                     trace = traceback.format_exc()
+                    print(trace)
                     await self.app.log.create(bot, user, 'ERROR', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
 
                     continue
@@ -103,13 +109,14 @@ class Bot:
 
 
     async def repay_debts(self, bot, excess_pool, new_user_mix):
-        for symbol, position in excess_pool.iterrows():
-            print(position)
-            try:
-                await self.app.binance.repay_position(bot, symbol, position["free"], position["MIN_AMOUNT"], position["stepSize"])
-            except Exception as e:
-                await self.handle_exception(bot, bot, e, 'repay_debts', symbol, position.to_dict(), new_user_mix)
-                continue
+        if len(excess_pool) > 0:
+            for symbol, position in excess_pool.iterrows():
+                print(position)
+                try:
+                    await self.app.binance.repay_position(bot, symbol, position["free"], position["MIN_AMOUNT"], position["stepSize"])
+                except Exception as e:
+                    await self.handle_exception(bot, bot, e, 'repay_debts', symbol, position.to_dict(), new_user_mix)
+                    continue
 
 
     async def close_positions(self, bot, user, closed_positions, new_user_mix):
@@ -174,6 +181,7 @@ class Bot:
     
     async def handle_exception(self, bot, user, error, source, symbol, log, new_user_mix):
         trace = traceback.format_exc()
+        print(trace)
 
         if source != 'close_positions' and symbol in new_user_mix.keys():
             print(symbol)

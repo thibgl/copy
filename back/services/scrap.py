@@ -120,61 +120,106 @@ class Scrap:
             await self.handle_exception(bot, e, 'fetch_data', response)
 
 
-    async def fetch_pages(self, bot, endpointType, params=None, leaderId=None, result=None, results_limit=0, latest_item=None, reference=None, progress_bar=None):
-        response = None
+    async def fetch_pages(self, bot, endpointType, params=None, leaderId=None, results_limit=0, latest_item=None, reference=None, progress_bar=None):
         try:
-            if result is None:
-                result = []
+            total_n_results = 0
             if params is None:
                 params = endpoints[endpointType]["params"]
 
-            response = await self.fetch_data(bot, leaderId, endpointType)
+            while True:
+                response = await self.fetch_data(bot, leaderId, endpointType)
 
-            if response["code"] == '000000':
-                response_data = response["data"]
-                response_list = response_data["list"]
+                if response["code"] == '000000':
+                    response_data = response["data"]
+                    response_list = response_data["list"]
+                    total_n_results += len(response_list)
 
-                if latest_item and reference:
-                    response_list = sorted(response_list, key=lambda x: x[reference], reverse=True)
-                    item_index = 0
+                    if latest_item and reference:
+                        response_list = sorted(response_list, key=lambda x: x[reference], reverse=True)
+                        filtered_list = [item for item in response_list if item[reference] > latest_item[reference]]
 
-                    for item in response_list:
-                        if item[reference] > latest_item[reference]:
-                            result.append(item)
-                            item_index += 1
-
-                            if item_index == 10:
-                                params["pageNumber"] += 1
-                                return await self.fetch_pages(bot, endpointType, params, leaderId, result, latest_item=latest_item, reference=reference, progress_bar=progress_bar)
+                        if filtered_list:
+                            yield filtered_list
+                            params["pageNumber"] += 1
                         else:
-                            # print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
-                            return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
-                else:
-                    result += response_list
-                    total_n_results = response_data["total"]
-                    pages_length = total_n_results // 10
-
-                    if progress_bar is None:
-                        await self.app.log.create(bot, bot, 'INFO', 'scrap/fetch_pages', 'SCRAP/CREATE',f'Scraping {endpointType} for {leaderId}')
-                        progress_bar = tqdm(total=results_limit if results_limit else total_n_results)
-
-                    progress_bar.update(len(response_list))
-                    # If remainder, add another page
-                    if total_n_results % 10:
-                        pages_length += 1
-
-                    if params["pageNumber"] <= pages_length and total_n_results < results_limit:
-                        params["pageNumber"] +=1
-
-                        return await self.fetch_pages(bot, endpointType, params, leaderId, result, progress_bar=progress_bar)
+                            # No more items to fetch that are newer than the latest item
+                            break
                     else:
-                        return { "success": True, "reason": "full", "message": f"Fetched all pages of {endpointType}", "data": result }
-            
-            else:
-                return { "success": False, "message": f"Could not fetch page {params['pageNumber']}/{pages_length} of {endpointType}", "data": {} }
-            
+                        if progress_bar is None:
+                            progress_bar = tqdm(total=results_limit if results_limit else response_data["total"])
+
+                        progress_bar.update(len(response_list))
+                        yield response_list
+
+                        # Check if more pages should be fetched
+                        if params["pageNumber"] * params["pageSize"] >= response_data["total"] or (total_n_results >= results_limit):
+                            break
+                        params["pageNumber"] += 1
+                else:
+                    # Handle failed response code
+                    yield { "success": False, "message": f"Could not fetch page {params['pageNumber']} of {endpointType}", "data": {} }
+                    break
+
         except Exception as e:
             await self.handle_exception(bot, e, 'fetch_pages', response)
+            yield { "success": False, "message": f"Exception occurred: {str(e)}", "data": {} }
+
+
+    # async def fetch_pages(self, bot, endpointType, params=None, leaderId=None, result=None, results_limit=0, latest_item=None, reference=None, progress_bar=None):
+    #     response = None
+    #     try:
+    #         if result is None:
+    #             result = []
+    #         if params is None:
+    #             params = endpoints[endpointType]["params"]
+
+    #         response = await self.fetch_data(bot, leaderId, endpointType)
+
+    #         if response["code"] == '000000':
+    #             response_data = response["data"]
+    #             response_list = response_data["list"]
+
+    #             if latest_item and reference:
+    #                 response_list = sorted(response_list, key=lambda x: x[reference], reverse=True)
+    #                 item_index = 0
+
+    #                 for item in response_list:
+    #                     if item[reference] > latest_item[reference]:
+    #                         result.append(item)
+    #                         item_index += 1
+
+    #                         if item_index == 10:
+    #                             params["pageNumber"] += 1
+    #                             return await self.fetch_pages(bot, endpointType, params, leaderId, result, latest_item=latest_item, reference=reference, progress_bar=progress_bar)
+    #                     else:
+    #                         # print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
+    #                         return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
+    #             else:
+    #                 result += response_list
+    #                 total_n_results = response_data["total"]
+    #                 pages_length = total_n_results // 10
+
+    #                 if progress_bar is None:
+    #                     await self.app.log.create(bot, bot, 'INFO', 'scrap/fetch_pages', 'SCRAP/CREATE',f'Scraping {endpointType} for {leaderId}')
+    #                     progress_bar = tqdm(total=results_limit if results_limit else total_n_results)
+
+    #                 progress_bar.update(len(response_list))
+    #                 # If remainder, add another page
+    #                 if total_n_results % 10:
+    #                     pages_length += 1
+
+    #                 if params["pageNumber"] <= pages_length and total_n_results < results_limit:
+    #                     params["pageNumber"] +=1
+
+    #                     return await self.fetch_pages(bot, endpointType, params, leaderId, result, progress_bar=progress_bar)
+    #                 else:
+    #                     return { "success": True, "reason": "full", "message": f"Fetched all pages of {endpointType}", "data": result }
+            
+    #         else:
+    #             return { "success": False, "message": f"Could not fetch page {params['pageNumber']}/{pages_length} of {endpointType}", "data": {} }
+            
+    #     except Exception as e:
+    #         await self.handle_exception(bot, e, 'fetch_pages', response)
 
  
     #* UPDATE
@@ -183,7 +228,7 @@ class Scrap:
     async def leader_detail_update(self, bot, leader=None, binance_id:str=None):
         try:
             if leader:
-                binance_id = leader["detail"]["data"]["leadPortfolioId"]
+                binance_id = leader["binanceId"]
 
             print(f'[{utils.current_readable_time()}]: Updating Details for {binance_id}')
 
@@ -208,10 +253,9 @@ class Scrap:
             await self.handle_exception(bot, e, 'leader_detail_update', None)
 
 
-    async def leader_performance_update(self, bot, leader=None, binance_id:str=None):
+    async def leader_performance_update(self, bot, leader):
         try:
-            if leader:
-                binance_id = leader["detail"]["data"]["leadPortfolioId"]
+            binance_id = leader["binanceId"]
 
             print(f'[{utils.current_readable_time()}]: Updating Performance for {binance_id}')
 
@@ -234,10 +278,9 @@ class Scrap:
             await self.handle_exception(bot, e, 'leader_performance_update', None)
         
 
-    async def leader_chart_update(self, bot, leader=None, binance_id:str=None):
+    async def leader_chart_update(self, bot, leader):
         try:
-            if leader:
-                binance_id = leader["detail"]["data"]["leadPortfolioId"]
+            binance_id = leader["binanceId"]
 
             print(f'[{utils.current_readable_time()}]: Updating Chart for {binance_id}')
 
@@ -263,7 +306,7 @@ class Scrap:
 
     async def leader_positions_update(self, bot, leader, lifecycle):
         try:
-            binance_id = leader["detail"]["data"]["leadPortfolioId"]
+            binance_id = leader["binanceId"]
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
 
             if positions_response and 'data' in positions_response.keys():
@@ -358,52 +401,50 @@ class Scrap:
             if not leader:
                 update = {}
                 detail_update = await self.leader_detail_update(bot, binance_id=binance_id)
-                leader = {
-                    "binanceId": detail["detail"]["leadPortfolioId"],
-                    "detail":{
-                        "data":{}
-                    },
-                    "account":{
-                        "data":{
-                            "levered_ratio": 0,
-                            "unleverd_ratio": 0
-                        }
-                    },
-                    "positions":{
-                        "data":{}
-                    },
-                    "grouped_positions":{
-                        "data":{}
-                    },
-                    "mix":{
-                        "data":[]
-                    },
-                    "performance":{
-                        "data":{}
-                    },
-                    "chart":{
-                        "data":[]
-                    },
-                }
                 
                 if detail_update:
+                    update.update(detail_update)
                     detail = detail_update["detail"]
+
+                    leader = {
+                        "binanceId": detail["leadPortfolioId"],
+                        "detail":{
+                            "data":{}
+                        },
+                        "account":{
+                            "data":{
+                                "levered_ratio": 0,
+                                "unlevered_ratio": 0
+                            }
+                        },
+                        "positions":{
+                            "data":{}
+                        },
+                        "grouped_positions":{
+                            "data":{}
+                        },
+                        "mix":{
+                            "data":[]
+                        },
+                        "performance":{
+                            "data":{}
+                        },
+                        "chart":{
+                            "data":[]
+                        },
+                    }
 
                     if detail["positionShow"] and detail["status"] == "ACTIVE" and detail["initInvestAsset"] == "USDT":
                         status = 'ACTIVE'
+                        chart_update = await self.leader_chart_update(bot, leader=leader)
+                        performance_update = await self.leader_performance_update(bot, leader=leader)
+                        update.update(chart_update | performance_update)
                     else:
                         status = 'INACTIVE'
 
-                    chart_update = await self.leader_chart_update(bot, leader=leader)
-                    performance_update = await self.leader_performance_update(bot, leader=leader)
-                    update.update(detail_update | chart_update | performance_update)
+                    update["status"] = status
+                    await self.app.database.update(obj=leader, update=update, collection='leaders')
                 else:
-                    status = 'CLOSED'
-
-                update["status"] = status
-                await self.app.database.update(obj=leader, update=update, collection='leaders')
-
-                if status == 'CLOSED':
                     return None
                 
             return leader
@@ -447,13 +488,14 @@ class Scrap:
                         return None
                     
         except Exception as e:
-                await self.handle_exception(bot, e, 'update_leaders', None)
+            await self.handle_exception(bot, e, 'update_leaders', None)
 
     #* LIFECYCLE
 
 
     async def handle_exception(self, bot, error, source, details):
         trace = traceback.format_exc()
+        print(trace)
 
         await self.app.log.create(bot, bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details={"trace": trace, "log": details})
 
