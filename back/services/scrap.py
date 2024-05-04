@@ -352,7 +352,7 @@ class Scrap:
 
 
     async def get_leader(self, bot, binance_id):
-        # try:
+        try:
             leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
 
             if not leader:
@@ -408,12 +408,12 @@ class Scrap:
                 
             return leader
 
-        # except Exception as e:
-        #     await self.handle_exception(bot, e, 'get_leader', None)
+        except Exception as e:
+            await self.handle_exception(bot, e, 'get_leader', None)
 
 
     async def update_leaders(self, bot, user):
-        # try:
+        try:
             for binance_id in user["leaders"]["data"]["WEIGHT"].keys():
                 leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
 
@@ -446,8 +446,8 @@ class Scrap:
                     if status == 'CLOSED':
                         return None
                     
-        # except Exception as e:
-        #         await self.handle_exception(bot, e, 'update_leaders', None)
+        except Exception as e:
+                await self.handle_exception(bot, e, 'update_leaders', None)
 
     #* LIFECYCLE
 
