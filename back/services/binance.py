@@ -195,7 +195,7 @@ class Binance:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
 
 
-    async def user_account_close(self, bot, user, new_user_mix):
+    async def user_account_close(self, bot, user, new_user_mix, dropped_leaders):
         try:
             user_account_update = {
                 # "account": {
@@ -204,6 +204,14 @@ class Binance:
                 # },
                 "mix": new_user_mix
             }
+                      
+            if len(dropped_leaders) > 0:
+                user_leaders = user["leaders"]["data"]
+
+                for binance_id in dropped_leaders:
+                    user_leaders["WEIGHT"].pop(binance_id)
+
+                user_account_update.update({"leaders": user_leaders})
 
             return user_account_update
         

@@ -1,15 +1,11 @@
 from lib import utils
 from bson.objectid import ObjectId
 
-indexes = {
-    "users": {},
-
-}
-
 class Database:
     def __init__(self, app):
         self.app = app
         self.partial_update = ['auth', 'detail', 'account']
+        self.root_values = ['status']
 
     async def update(self, obj: object, update: object, collection: str) -> bool:
         current_time = utils.current_time()
@@ -18,20 +14,22 @@ class Database:
             update_format = {}
             update_format["updated"] = current_time
             update_format["updated_date"] = utils.current_readable_time()
-            for category_key in update.keys():
-                update_format[category_key] = {}
-                category_obj = obj[category_key]
+            for key, value in update.items():
+                update_format[key] = {}
+                category_obj = obj[key]
                 category_data = category_obj["data"]
                 
-                if category_key in self.partial_update:
-                    category_data.update(update[category_key])
-                    update_format[category_key]["data"] = category_data
+                if key in self.root_values:
+                    update_format[key] = value
+                elif key in self.partial_update:
+                    category_data.update(update[key])
+                    update_format[key]["data"] = category_data
                 else:
-                    obj[category_key]["data"] = update[category_key]
-                    update_format[category_key]["data"] = obj[category_key]["data"]
+                    obj[key]["data"] = update[key]
+                    update_format[key]["data"] = obj[key]["data"]
 
-                obj[category_key]["updated"] = current_time
-                update_format[category_key]["updated"] = current_time
+                obj[key]["updated"] = current_time
+                update_format[key]["updated"] = current_time
             
             if "_id" in obj.keys():
                 await self.app.db[collection].update_one({"_id": obj["_id"]}, {"$set": update_format})

@@ -188,17 +188,18 @@ class Scrap:
             print(f'[{utils.current_readable_time()}]: Updating Details for {binance_id}')
 
             detail_response = await self.fetch_data(bot, binance_id, 'detail')
-            
-            if detail_response and 'data' in detail_response.keys():
 
+            if detail_response["code"] == '000000':
                 detail = detail_response["data"]
-
                 detail_update = {
                     "detail":  detail
                 }
 
                 return detail_update
-        
+
+            elif detail_response["code"] == '11012028': # closed portfolio
+                return None
+            
             else:
                 await self.handle_exception(bot, 'e', f'leader_detail_update - NO FETCH for {binance_id}', None)
                 return {"detail": leader["detail"]["data"]}
@@ -217,13 +218,11 @@ class Scrap:
             performance_response = await self.fetch_data(bot, binance_id, 'performance')
 
             if performance_response and 'data' in performance_response.keys():
-
                 performance = performance_response["data"]
 
                 performance_update = {
                     "performance": performance
                 }
-
 
                 return performance_update
     
@@ -350,17 +349,14 @@ class Scrap:
             
         except Exception as e:
             await self.handle_exception(bot, e, 'leader_positions_update', None)
-    
 
-    async def get_leader(self, bot, user, lifecycle, leader_id=None, binance_id:str=None):
+
+    async def get_leader(self, bot, binance_id):
         try:
-            if leader_id:
-                leader = await self.app.db.leaders.find_one({"_id": ObjectId(leader_id)})
-            
-            if binance_id:
-                leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
+            leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
 
             if not leader:
+                update = {}
                 detail = await self.leader_detail_update(bot, binance_id=binance_id)
                 leader = {
                     "binanceId": detail["detail"]["leadPortfolioId"],
@@ -389,46 +385,65 @@ class Scrap:
                         "data":[]
                     },
                 }
-                await self.app.database.update(obj=leader, update=detail, collection='leaders')
+                
+                if detail:
+                    if detail["positionShow"] and detail["status"] == "ACTIVE" and detail["initInvestAsset"] == "USDT":
+                        status = 'ACTIVE'
+                    else:
+                        status = 'INACTIVE'
 
-            if leader["detail"]["data"]["positionShow"] and leader["detail"]["data"]["status"] == "ACTIVE" and leader["detail"]["data"]["initInvestAsset"] == "USDT":            
-                positions, grouped_positions = await self.leader_positions_update(bot, leader, lifecycle)
+                    chart = await self.leader_chart_update(bot, leader=leader)
+                    performance = await self.leader_performance_update(bot, leader=leader)
+                    update.update(detail | chart | performance)
+                else:
+                    status = 'CLOSED'
 
-                if len(grouped_positions) > 0:
-                    await self.app.database.update(obj=leader, update=positions, collection='leaders')
+                update["status"] = status
+                await self.app.database.update(obj=leader, update=update, collection='leaders')
 
-                # print(grouped_positions)
-                return leader, grouped_positions
-
-            else:
-                #* to be updated correctly
-                user["leaders"]["data"]["WEIGHT"].pop(str(leader["_id"]))
-
-                return leader, []
+                if status == 'CLOSED':
+                    return None
+                
+            return leader
 
         except Exception as e:
             await self.handle_exception(bot, e, 'get_leader', None)
 
+    async def update_leaders(self, bot, user):
+        try:
+            for binance_id in user["leaders"]["data"]["WEIGHT"].keys():
+                leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
 
-    async def update_leaders(self, bot, roster):
-        for binance_id in roster.index.values:
-            leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
-            update = {}
+                if utils.current_time() - leader["detail"]["updated"] > 3600000:
+                    update = {}
+                    detail = await self.leader_detail_update(bot, leader=leader)
 
-            if utils.current_time() - leader["detail"]["updated"] > 3600000 * 3:
-                detail = await self.leader_detail_update(bot, leader=leader)
-                update.update(detail)
+                    if detail:
+                        update.update(detail)
 
-            if utils.current_time() - leader["chart"]["updated"] > 3600000 * 3:
-                chart = await self.leader_chart_update(bot, leader=leader)
-                update.update(chart)
+                        if detail["positionShow"] and detail["status"] == "ACTIVE" and detail["initInvestAsset"] == "USDT":
+                            status = 'ACTIVE'
+                        else:
+                            status = 'INACTIVE'
 
-            if utils.current_time() - leader["performance"]["updated"] > 3600000:
-                performance = await self.leader_performance_update(bot, leader=leader)
-                update.update(performance)
+                        if utils.current_time() - leader["chart"]["updated"] > 3600000 * 3:
+                            chart = await self.leader_chart_update(bot, leader=leader)
+                            update.update(chart)
 
-            await self.app.database.update(obj=leader, update=update, collection='leaders')
+                        if utils.current_time() - leader["performance"]["updated"] > 3600000 * 3:
+                            performance = await self.leader_performance_update(bot, leader=leader)
+                            update.update(performance)
+                    else:
+                        status = 'CLOSED'
 
+                    update["status"] = status
+                    await self.app.database.update(obj=leader, update=update, collection='leaders')
+                    
+                    if status == 'CLOSED':
+                        return None
+                    
+        except Exception as e:
+                await self.handle_exception(bot, e, 'update_leaders', None)
 
     #* LIFECYCLE
 

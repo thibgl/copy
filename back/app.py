@@ -223,12 +223,12 @@ async def all_leaders():
 async def follow(binanceId: str):
     bot = await app.db.bot.find_one()
     user = await app.db.users.find_one()
-    leader, _ = await app.scrap.get_leader(bot, user, binance_id=binanceId)
+    leader = await app.scrap.get_leader(bot, binanceId)
 
     if leader:
         followed_leaders = pd.DataFrame(user["leaders"]["data"])
 
-        if str(binanceId) not in followed_leaders.index.values:
+        if binanceId not in followed_leaders.index.values:
             followed_leaders.loc[binanceId] = 1
 
             update = {
@@ -238,15 +238,16 @@ async def follow(binanceId: str):
 
 @app.get('/leaders/unfollow/{binanceId}')
 async def unfollow(binanceId: str):
-    bot = await app.db.bot.find_one()
     user = await app.db.users.find_one()
-    leader = await app.db.leaders.find_one({"binanceId": binanceId})
-    print(leader["_id"])
-    # if str(leader["_id"]) not in user["leaders"]["data"].keys():
-    #     update = {
-    #         "leaders": user["leaders"]["data"].pop(leader["_id"])
-    #     }
-    #     await app.database.update(user, update, 'users')
+    followed_leaders = pd.DataFrame(user["leaders"]["data"])
+
+    if binanceId in followed_leaders.index:
+        followed_leaders = followed_leaders.drop(binanceId)
+
+        update = {
+            "leaders": followed_leaders.to_dict()
+        }
+        await app.database.update(user, update, 'users')
 
 @app.get('/api/data')
 async def handle_data_get():

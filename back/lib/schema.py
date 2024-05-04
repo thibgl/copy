@@ -167,6 +167,7 @@ class LeaderChartItem(BaseModel):
 
 class Leader(MongoModel):
     binanceId: str
+    status: str
     detail: LeaderDetailData
     account: LeaderAccountData
     # grouped_positions: LeaderGroupedPositionsData

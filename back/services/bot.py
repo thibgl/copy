@@ -27,6 +27,7 @@ class Bot:
 
             roster = pd.DataFrame(columns=["ID"])
             leader_mixes = pd.DataFrame()
+            dropped_leaders = []
 
             async for user in users:
                 try:
@@ -38,14 +39,24 @@ class Bot:
                         for binance_id, leader_weight in user_leaders.iterrows():
                             if binance_id not in roster.index.unique():
                                 try:
-                                    _, leader_grouped_positions = await self.app.scrap.get_leader(bot, user, lifecycle, binance_id=binance_id)
+                                    leader = await self.app.scrap.get_leader(bot, binance_id)
 
-                                    if len(leader_grouped_positions) > 0:
-                                        roster = pd.concat([roster, leader_grouped_positions]) if len(roster) > 0 else leader_grouped_positions
-                                        leader_mix = leader_grouped_positions[["symbol", "positionAmount"]].rename(columns={"positionAmount": "BAG"})
-                                        leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
-                                        leader_mixes = pd.concat([leader_mixes, leader_mix]) if len(leader_mixes) > 0 else leader_mix
-                                
+                                    if leader:
+                                        positions_update, leader_grouped_positions = await self.app.scrap.leader_positions_update(bot, leader, lifecycle)
+
+                                        if len(leader_grouped_positions) > 0:
+                                            positions_update_success = await self.app.database.update(obj=leader, update=positions_update, collection='leaders')
+
+                                            if positions_update_success:
+                                                roster = pd.concat([roster, leader_grouped_positions]) if len(roster) > 0 else leader_grouped_positions
+
+                                                leader_mix = leader_grouped_positions[["symbol", "positionAmount"]].rename(columns={"positionAmount": "BAG"})
+                                                leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
+
+                                                leader_mixes = pd.concat([leader_mixes, leader_mix]) if len(leader_mixes) > 0 else leader_mix
+                                    else:
+                                        dropped_leaders.append(binance_id)
+
                                 except Exception as e:
                                     print(e)
                                     continue
@@ -72,11 +83,11 @@ class Bot:
                             await self.repay_debts(bot, excess_pool, user_mix_new)
 
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
-                            await self.app.scrap.update_leaders(bot, roster)
-
-                        user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new)
+                            await self.app.scrap.update_leaders(bot, user)
+                
+                        user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new, dropped_leaders)
                         user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
-
+            
                 #! faire le transfer de TP
                 except Exception as e:
                     trace = traceback.format_exc()

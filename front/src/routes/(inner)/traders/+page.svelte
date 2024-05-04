@@ -79,7 +79,7 @@
 	}
 
 	async function followLeader(leader) {
-		const response = await fetch(`api/unfollow?binanceId=${leader.binanceId}`);
+		const response = await fetch(`api/follow?binanceId=${leader.binanceId}`);
 		if (response.ok) {
 			$userLeaders[leader.binanceId] = 1;
 		} else {
@@ -112,7 +112,7 @@
 		</footer>
 	</form> -->
 	{#each $page.data.leaders as leader}
-		<div class="card w-96 aspect-video space-y-3">
+		<div class="card w-96 aspect-video space-y-3" class:opacity-50={leader.status === 'CLOSED'}>
 			<header class="card-header flex justify-between items-center">
 				<a
 					class="flex space-x-3 items-center"
@@ -235,7 +235,7 @@
 									fill: true,
 									backgroundColor: `rgb(${style.getPropertyValue('--color-surface-600')})`,
 									lineTension: 0.5,
-									borderColor: `rgb(${data.user.account.active_leaders.includes(leader.binanceId) ? style.getPropertyValue('--color-warning-500') : style.getPropertyValue('--color-primary-500')})`,
+									borderColor: `rgb(${data.user.account.active_leaders.includes(leader.binanceId) ? style.getPropertyValue('--color-warning-500') : Object.keys($userLeaders).includes(leader.binanceId) ? style.getPropertyValue('--color-primary-500') : style.getPropertyValue('--color-surface-200')})`,
 									borderCapStyle: 'butt',
 									borderDash: [],
 									borderDashOffset: 0.0,
