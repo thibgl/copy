@@ -67,7 +67,7 @@ class Bot:
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed, excess_pool = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
                         # print(user_account)
                         # print(positions_closed.head())
@@ -84,8 +84,8 @@ class Bot:
                             self.app.scrap.cleanup()
                             self.app.scrap.start()
                         
-                        # else:
-                        #     await self.repay_debts(bot, excess_pool, user_mix_new)
+                        else:
+                            await self.repay_debts(bot, excess_pool, user_mix_new)
 
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
                             await self.app.scrap.update_leaders(bot, user)

@@ -71,6 +71,13 @@ class Binance:
                 live_pool = live_pool.merge(user_leaders.add_prefix("user_"), left_on="leader_ID", right_index=True, how='left')
                 live_pool = await self.get_precisions(bot, live_pool)
 
+                excess_pool = live_pool.copy()[(live_pool["borrowed"] != 0) & (live_pool["borrowed"] > live_pool["netAsset"].abs())]
+                excess_pool = excess_pool.groupby('symbol').first()
+                excess_pool["FREE_VALUE"] = excess_pool["free"] * excess_pool["leader_markPrice"]
+                excess_pool = self.validate_amounts(excess_pool, "free", "FREE_VALUE", "leader_markPrice")
+                excess_pool = excess_pool.loc[excess_pool["FREE_VALUE"] > 2]
+                # print(excess_pool)
+                
                 active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
 
@@ -85,13 +92,14 @@ class Binance:
                 positions_opened_changed = live_pool.copy()[~live_pool["leader_symbol"].isna()]
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
+                    user_cap = user["detail"]["data"]["TARGET_RATIO"] * user["detail"]["data"]["LEADER_CAP"] / 2
 
-                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] > user_leverage,"SCALED_LEVERAGE"] = 2 - (user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"])
-                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] <= user_leverage,"SCALED_LEVERAGE"] = user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"]
+                    # positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] > user_leverage,"SCALED_LEVERAGE"] = 2 - (user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"])
+                    # positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] <= user_leverage,"SCALED_LEVERAGE"] = user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"]
 
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["leader_INVESTED_RATIO"] * positions_opened_changed["SCALED_LEVERAGE"] * positions_opened_changed["user_WEIGHT"] * user["detail"]["data"]["LEADER_CAP"] / 2
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["leader_INVESTED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"] * positions_opened_changed["user_WEIGHT"] * user_cap
                     positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_SHARE"] *= -1
-
+                    
                     # print(positions_opened_changed)
 
                     positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
@@ -121,14 +129,8 @@ class Binance:
                     positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user_leverage
                     positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_VALUE"] *= -1
 
-                    print(positions_opened_changed)
+                    # print(positions_opened_changed)
                     
-                    # excess_pool = live_pool.copy()[(live_pool["borrowed"] != 0) & (live_pool["borrowed"] > live_pool["netAsset"].abs())]
-                    # excess_pool = excess_pool.groupby('symbol').first()
-                    # excess_pool["FREE_VALUE"] = excess_pool["free"] * excess_pool["leader_markPrice"]
-                    # excess_pool = self.validate_amounts(excess_pool, "free", "FREE_VALUE", "leader_markPrice")
-                    # excess_pool = excess_pool.loc[excess_pool["FREE_VALUE"] > 2]
-
                     if collateral_margin_level > 1.15:
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
                     
@@ -158,7 +160,7 @@ class Binance:
                     positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
 
 
-                if any([len(positions_closed) > 0, len(positions_closed) > 0, len(positions_changed) > 0]): #, len(excess_pool) > 0
+                if any([len(positions_closed) > 0, len(positions_closed) > 0, len(positions_changed) > 0, len(excess_pool) > 0]):
                     lifecycle["tick_boost"] = True
                     
             else:
@@ -172,7 +174,7 @@ class Binance:
                 positions_changed = []
                 n_leaders = 0
                 active_leaders = []
-                # excess_pool = []
+                excess_pool = []
                 
             user_account_update = {
                 "account": {
@@ -189,7 +191,7 @@ class Binance:
                 # "mix": new_user_mix
             }
 
-            return user_account_update, positions_closed, positions_opened, positions_changed#, excess_pool
+            return user_account_update, positions_closed, positions_opened, positions_changed, excess_pool
 
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
@@ -221,17 +223,18 @@ class Binance:
 
     async def repay_position(self, bot, symbol, amount:float, min_amount:float, stepSize:str):
         # weight = 6
-        # try:
-        amount = self.truncate_amount(abs(amount), stepSize)
-        min_amount = self.truncate_amount(abs(min_amount), stepSize)
-        await self.open_position(bot, symbol, min_amount, min_amount, False)
-        await self.close_position(bot, symbol, -amount - min_amount, min_amount, False)
-        # response = self.client.borrow_repay(asset='USDT', symbol=symbol, amount=, type='REPAY', isIsolated='FALSE')
+        try:
+            response = self.client.borrow_repay(asset='USDT', symbol=symbol, amount=amount, type='REPAY', isIsolated='FALSE')
 
-        # return response
-
-        # except Exception as e:
-        #     print(e)
+            return response
+        except Exception as e:
+            trace = traceback.format_exc()
+            print(trace)
+            
+            amount = self.truncate_amount(abs(amount), stepSize)
+            min_amount = self.truncate_amount(abs(min_amount), stepSize)
+            await self.open_position(bot, symbol, min_amount, min_amount, False)
+            await self.close_position(bot, symbol, -amount - min_amount, min_amount, False)
 
     
     async def open_position(self, bot, symbol:str, amount:float, min_amount:float, retry=True):
@@ -248,7 +251,7 @@ class Binance:
         except Exception as e:
             if e.args[2] == 'Account has insufficient balance for requested action.' and retry:
                 await self.close_position(bot, symbol, -min_amount if side == 'BUY' else min_amount, min_amount, False)
-                await self.open_position(bot, symbol, amount + min_amount, min_amount, False)
+                await self.open_position(bot, symbol, amount + min_amount if side == 'BUY' else amount - min_amount, min_amount, False)
                 await self.handle_exception(bot, bot, e, 'close_position - insufficient balance', None, notify=False)
 
                 # response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
@@ -271,8 +274,8 @@ class Binance:
         
         except Exception as e:
             if e.args[2] == 'Account has insufficient balance for requested action.' and retry:
-                await self.open_position(bot, symbol, min_amount if side == 'SELL' else -min_amount, min_amount, False)
-                await self.close_position(bot, symbol, amount + min_amount, min_amount, False)
+                await self.open_position(bot, symbol, -min_amount if side == 'BUY' else min_amount, min_amount, False)
+                await self.close_position(bot, symbol, amount + min_amount if side == 'BUY' else amount - min_amount, min_amount, False)
                 await self.handle_exception(bot, bot, e, 'close_position - insufficient balance', None, notify=False)
 
                 # response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='AUTO_BORROW_REPAY')
