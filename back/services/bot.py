@@ -67,13 +67,13 @@ class Bot:
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed, excess_pool = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed, positions_excess = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
                         # print(user_account)
                         # print(positions_closed.head())
                         # print(positions_opened.head())
                         # print(positions_changed.head())
-                        # print(excess_pool.head())
+                        # print(positions_excess.head())
                         if user_account_update_success:
                             await self.close_positions(bot, user, positions_closed, user_mix_new)
                             await self.change_positions(bot, user, positions_changed, user_mix_new)
@@ -85,7 +85,7 @@ class Bot:
                             self.app.scrap.start()
                         
                         else:
-                            await self.repay_debts(bot, excess_pool, user_mix_new)
+                            await self.repay_debts(bot, positions_excess, user_mix_new)
 
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
                             await self.app.scrap.update_leaders(bot, user)
@@ -108,9 +108,9 @@ class Bot:
             await self.tick()
 
 
-    async def repay_debts(self, bot, excess_pool, new_user_mix):
-        if len(excess_pool) > 0:
-            for symbol, position in excess_pool.iterrows():
+    async def repay_debts(self, bot, positions_excess, new_user_mix):
+        if len(positions_excess) > 0:
+            for symbol, position in positions_excess.iterrows():
                 print(position)
                 try:
                     await self.app.binance.repay_position(bot, symbol, position["free"], position["MIN_AMOUNT"], position["stepSize"])
