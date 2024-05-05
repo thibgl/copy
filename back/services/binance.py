@@ -159,7 +159,6 @@ class Binance:
                     positions_changed["OPEN"] = ((positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["TARGET_AMOUNT"] > 0)) | ((positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["TARGET_AMOUNT"] < 0))
                     positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
 
-
                 if any([len(positions_closed) > 0, len(positions_closed) > 0, len(positions_changed) > 0, len(excess_pool) > 0]):
                     lifecycle["tick_boost"] = True
                     
