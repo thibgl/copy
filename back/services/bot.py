@@ -85,7 +85,7 @@ class Bot:
                             self.app.scrap.start()
                         
                         else:
-                            await self.repay_debts(bot, positions_excess, user_mix_new)
+                            await self.repay_debts(bot, user, positions_excess, user_mix_new)
 
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
                             await self.app.scrap.update_leaders(bot, user)
@@ -108,12 +108,12 @@ class Bot:
             await self.tick()
 
 
-    async def repay_debts(self, bot, positions_excess, new_user_mix):
+    async def repay_debts(self, bot, user, positions_excess, new_user_mix):
         if len(positions_excess) > 0:
             for symbol, position in positions_excess.iterrows():
-                print(position)
                 try:
                     await self.app.binance.repay_position(bot, symbol, position["free"], position["MIN_AMOUNT"], position["stepSize"])
+                    await self.app.log.create(bot, user, 'INFO', 'bot/repay_debts', 'TRADE/REPAY',f'Repayed Position: {symbol} - {position["free"]}', details=position.to_dict())
                 except Exception as e:
                     await self.handle_exception(bot, bot, e, 'repay_debts', symbol, position.to_dict(), new_user_mix)
                     continue

@@ -142,8 +142,8 @@ class Binance:
                         positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
 
                         positions_excess = positions_closed_excess.copy()[(positions_closed_excess["borrowed"] != 0) & (positions_closed_excess["borrowed"] > positions_closed_excess["netAsset"].abs())]
-                        positions_excess["FREE_VALUE"] = positions_excess["free"] * positions_excess["leader_markPrice"]
-                        positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE", "leader_markPrice")
+                        positions_excess["FREE_VALUE"] = positions_excess["free"] * positions_excess["SYMBOL_PRICE"]
+                        positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE", "SYMBOL_PRICE")
                         positions_excess = positions_excess.loc[positions_excess["FREE_VALUE"] > 2].set_index("symbol")
 
                     if collateral_margin_level > 1.15:
@@ -167,7 +167,6 @@ class Binance:
                     positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice"]
                     positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
                     positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
-
                     positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE", "leader_markPrice")
                     positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE", "leader_markPrice")
 
