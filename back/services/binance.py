@@ -38,7 +38,7 @@ class Binance:
         return dataframe
     
     async def get_symbol_prices(self, bot, dataframe):
-        dataframe["SYMBOL_PRICE"] = dataframe.apply(lambda row: float(self.app.binance.client.ticker_price(row["symbol"])["price"]), axis=1)
+        dataframe["SYMBOL_PRICE"] = dataframe["symbol"].apply(lambda symbol: float(self.app.binance.client.ticker_price(symbol)["price"]))
         dataframe["CURRENT_VALUE"] = dataframe["netAsset"] * dataframe["SYMBOL_PRICE"]
 
         return dataframe
