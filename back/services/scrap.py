@@ -308,7 +308,7 @@ class Scrap:
         try:
             binance_id = leader["binanceId"]
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
-
+            
             if positions_response and 'data' in positions_response.keys():
                 positions = pd.DataFrame(positions_response["data"])
 
@@ -502,8 +502,8 @@ class Scrap:
 
         await self.app.log.create(bot, bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details={"trace": trace, "log": details})
 
-        # self.cleanup()
-        # self.start()
+        self.cleanup()
+        self.start()
 
         # pass
     
