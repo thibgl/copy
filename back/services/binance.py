@@ -121,7 +121,7 @@ class Binance:
                     positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user_leverage
                     positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_VALUE"] *= -1
 
-                    print(positions_opened_changed)
+                    # print(positions_opened_changed)
                     
                     positions_closed_excess = live_pool.copy()[(~live_pool["symbol"].isin(positions_opened_changed["final_symbol"])) | (live_pool["borrowed"] != 0) & (live_pool["borrowed"] > live_pool["netAsset"].abs())]
                     if len(positions_closed_excess) > 0:

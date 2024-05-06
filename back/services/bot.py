@@ -75,6 +75,7 @@ class Bot:
                         # print(positions_changed.head())
                         # print(positions_excess.head())
                         if user_account_update_success:
+                            await self.repay_debts(bot, user, positions_excess, user_mix_new)
                             await self.close_positions(bot, user, positions_closed, user_mix_new)
                             await self.change_positions(bot, user, positions_changed, user_mix_new)
                             await self.open_positions(bot, user, positions_opened, user_mix_new)
@@ -84,9 +85,6 @@ class Bot:
                             self.app.scrap.cleanup()
                             self.app.scrap.start()
                         
-                        else:
-                            await self.repay_debts(bot, user, positions_excess, user_mix_new)
-
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
                             await self.app.scrap.update_leaders(bot, user)
                 
