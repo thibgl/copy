@@ -50,7 +50,6 @@ class Binance:
     def handle_positions(self, dataframe):
         dataframe['TOTAL_TARGET_SHARE'] = dataframe.groupby('final_symbol')['TARGET_SHARE'].transform('sum')
         dataframe["POSITION_WEIGHT"] = dataframe["TARGET_SHARE"] / dataframe["TOTAL_TARGET_SHARE"]
-        dataframe["WEIGHTED_SHARE"] = dataframe['TARGET_SHARE'] * dataframe["POSITION_WEIGHT"]
         dataframe["WEIGHTED_PERFORMANCE"] = dataframe['leader_PERFORMANCE'] * dataframe["POSITION_WEIGHT"]
         dataframe = dataframe.groupby("final_symbol").agg({
             "symbol": 'first',
@@ -65,8 +64,7 @@ class Binance:
             "WEIGHTED_PERFORMANCE": 'sum',
             "leader_positionAmount": 'sum',
             "leader_markPrice": 'mean',
-            "WEIGHTED_SHARE": 'sum',
-            'TOTAL_TARGET_SHARE': 'first'
+            "TARGET_SHARE": 'sum',
             }).reset_index()
         
         return dataframe
@@ -108,47 +106,45 @@ class Binance:
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
 
-                    # positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] > user_leverage,"SCALED_LEVERAGE"] = 2 - (user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"])
-                    # positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] <= user_leverage,"SCALED_LEVERAGE"] = user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"]
-
-
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["leader_INVESTED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"] * positions_opened_changed["user_WEIGHT"] * user["detail"]["data"]["LEADER_CAP"]
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["leader_INVESTED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"] * positions_opened_changed["user_WEIGHT"] * (1 / len(user["leaders"]["data"]["WEIGHT"])) * user["detail"]["data"]["TARGET_RATIO"]
 
                     # print(positions_opened_changed)
                     positions_short = positions_opened_changed.copy().loc[positions_opened_changed["leader_positionAmount"] < 0]
+                    # print(positions_short)
                     positions_short = self.handle_positions(positions_short)
                     # print(positions_short)
                     positions_long = positions_opened_changed.copy().loc[positions_opened_changed["leader_positionAmount"] > 0]
                     positions_long = self.handle_positions(positions_long)
                     # print(positions_long)
 
-                    # positions_opened_changed2 = pd.concat([positions_short, positions_long])
-                    # positions_opened_changed2 = positions_opened_changed2.sort_values(by=['final_symbol', 'Share'], ascending=[True, False])
-                    # combined_df = combined_df.drop_duplicates(subset='final_symbol', keep='first')
+                    positions_opened_changed = pd.concat([positions_short, positions_long])
+                    positions_opened_changed = positions_opened_changed.sort_values(by=['final_symbol', 'TARGET_SHARE'], ascending=[True, False])
+                    positions_opened_changed = positions_opened_changed.drop_duplicates(subset='final_symbol', keep='first')
 
-                    positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_SHARE"] *= -1
+                    # positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_SHARE"] *= -1
 
-                    positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
-                        "symbol": 'first',
-                        "leader_symbol": 'first',
-                        "netAsset": 'first',
-                        "borrowed": 'first',
-                        "free": 'first',
-                        "stepSize": 'first',
-                        "minQty": 'first',
-                        "minNotional": 'first',
-                        "leader_ID": 'unique',
-                        "leader_PERFORMANCE": 'mean',
-                        "leader_positionAmount": 'sum',
-                        "leader_markPrice": 'mean',
-                        "TARGET_SHARE": 'mean',
-                        }).reset_index()
+                    # positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
+                    #     "symbol": 'first',
+                    #     "leader_symbol": 'first',
+                    #     "netAsset": 'first',
+                    #     "borrowed": 'first',
+                    #     "free": 'first',
+                    #     "stepSize": 'first',
+                    #     "minQty": 'first',
+                    #     "minNotional": 'first',
+                    #     "leader_ID": 'unique',
+                    #     "leader_PERFORMANCE": 'mean',
+                    #     "leader_positionAmount": 'sum',
+                    #     "leader_markPrice": 'mean',
+                    #     "TARGET_SHARE": 'mean',
+                    #     }).reset_index()
 
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["TARGET_SHARE"].abs()
-                    positions_opened_changed = positions_opened_changed.sort_values(by=["leader_PERFORMANCE", "TARGET_SHARE"], ascending=False)
+                    # positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["TARGET_SHARE"].abs()
+                    positions_opened_changed = positions_opened_changed.sort_values(by=["WEIGHTED_PERFORMANCE", "TARGET_SHARE"], ascending=False)
                     positions_opened_changed["CUMULATIVE_SHARE"] = positions_opened_changed["TARGET_SHARE"].cumsum()
                     positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user_leverage
 
+                    print(positions_opened_changed)
                     last_position = positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].iloc[0] if not positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].empty else pd.Series([])
 
                     positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <=  user["detail"]["data"]["TARGET_RATIO"]]
@@ -211,7 +207,6 @@ class Binance:
                             print(last_position)
 
                     positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice"]
-
                     print(positions_opened_changed)
                     positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE", "leader_markPrice")
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
