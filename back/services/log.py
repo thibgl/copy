@@ -1,6 +1,8 @@
 import os
 import logging
 from lib import utils
+import uuid
+import bson
 
 # ! https://sematext.com/blog/logging-levels/
 
@@ -14,7 +16,9 @@ class Log:
         self.token_url = f'https://api.telegram.org/bot{TOKEN}/getUpdates'
 
     async def create(self, bot, user, level, source, category, message, details='', notify=True, insert=True, collection=None, itemId=None):
+        log_id = uuid.uuid4()
         log = {
+            "id": bson.Binary(log_id.bytes, subtype=bson.binary.UUID_SUBTYPE),
             "userId": user["_id"],
             "createdAt": utils.current_time(),
             "level": level,
@@ -31,7 +35,7 @@ class Log:
         if insert:
             self.app.db.log.insert_one(log)
 
-        content = f'[{utils.current_readable_time()}]: {level} <{source}> {category}: {message}'
+        content = f'[{utils.current_readable_time()}]: {level} <{source}> {category}: {message} ({log_id})'
         
         print(content)
 

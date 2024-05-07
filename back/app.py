@@ -317,9 +317,9 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     if server_mode:
-        app.mongodb_client.close()
         app.scrap.cleanup()
         await app.telegram.cleanup()
+        app.mongodb_client.close()
 
 
 if __name__ == '__main__':

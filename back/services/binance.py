@@ -247,7 +247,7 @@ class Binance:
                             positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE", "SYMBOL_PRICE")
                             positions_excess = positions_excess.loc[positions_excess["FREE_VALUE"] > 2].set_index("symbol")
 
-                    print(positions_opened_changed)
+                    # print(positions_opened_changed)
                     # print(last_position)
 
                     if collateral_margin_level > 1.15:
@@ -263,7 +263,7 @@ class Binance:
                         if (len(positions_opened_changed) > 0 or last_position["symbol"] in mix_diff) and last_diff_pass:
                             last_position["CUMULATIVE_SHARE"] = user["detail"]["data"]["TARGET_RATIO"]
                             positions_opened_changed.loc[len(positions_opened_changed)] = last_position
-                            print(last_position)
+                            # print(last_position)
 
                     positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice"]
 
@@ -420,7 +420,7 @@ class Binance:
 
     async def handle_exception(self, bot, user, error, source, symbol, notify=True):
         trace = traceback.format_exc()
-        print(trace)
+        # print(trace)
 
         await self.app.log.create(bot, user, 'ERROR', f'client/{source}', 'TRADE', f'Error in Binance API: {symbol} - {error}', details=trace)
         pass
