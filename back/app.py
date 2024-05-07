@@ -11,7 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.hash import bcrypt
 from starlette.middleware.cors import CORSMiddleware
 from datetime import timedelta
-from services import Binance, Auth, Scrap, Bot, Log, Database #, Telegram
+from services import Binance, Auth, Scrap, Bot, Log, Database, Telegram
 from lib import *
 import uvicorn
 import asyncio
@@ -49,7 +49,7 @@ if server_mode:
     app.scrap = Scrap(app)
     app.bot = Bot(app)
     app.log = Log(app)
-
+    app.telegram = Telegram(app)
 # try:
     # response = app.binance.client.margin_max_transferable(asset='USDT')
     # print(response)
@@ -310,14 +310,16 @@ async def startup():
     # )
     if server_mode:
         asyncio.create_task(app.bot.tick())
+        await app.telegram.initialize()
 
     # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
     if server_mode:
-        app.scrap.cleanup()
         app.mongodb_client.close()
+        app.scrap.cleanup()
+        await app.telegram.cleanup()
 
 
 if __name__ == '__main__':

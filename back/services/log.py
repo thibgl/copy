@@ -1,7 +1,6 @@
 import os
 import logging
 from lib import utils
-from telegram import Bot
 
 # ! https://sematext.com/blog/logging-levels/
 
@@ -12,7 +11,6 @@ class Log:
         TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 
         self.app = app
-        self.bot = Bot(token=TOKEN)
         self.token_url = f'https://api.telegram.org/bot{TOKEN}/getUpdates'
 
     async def create(self, bot, user, level, source, category, message, details='', notify=True, insert=True, collection=None, itemId=None):
@@ -43,7 +41,7 @@ class Log:
     
     async def notify(self, user, content):
         try:
-            await self.bot.send_message(chat_id=user["detail"]["data"]["chat_id"], text=content)
+            await self.app.telegram.bot.send_message(chat_id=user["detail"]["data"]["chat_id"], text=content)
         except Exception as e:
             pass
 

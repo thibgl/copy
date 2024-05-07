@@ -247,7 +247,7 @@ class Binance:
                             positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE", "SYMBOL_PRICE")
                             positions_excess = positions_excess.loc[positions_excess["FREE_VALUE"] > 2].set_index("symbol")
 
-                    # print(positions_opened_changed)
+                    print(positions_opened_changed)
                     # print(last_position)
 
                     if collateral_margin_level > 1.15:
