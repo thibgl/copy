@@ -309,8 +309,8 @@ async def startup():
     #     }
     # )
     if server_mode:
-        asyncio.create_task(app.bot.tick())
         await app.telegram.initialize()
+        asyncio.create_task(app.bot.tick())
 
     # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
 
