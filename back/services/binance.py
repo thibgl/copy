@@ -8,7 +8,6 @@ import numpy as np
 import math
 from decimal import Decimal, ROUND_DOWN
 import uuid
-import time
 
 class Binance:
     def __init__(self, app):
@@ -16,7 +15,7 @@ class Binance:
         self.BINANCE_SECRET_KEY = os.environ.get("BINANCE_SECRET_KEY")
 
         self.app = app
-        self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY, base_url='https://api1.binance.com')
+        self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY, base_url='https://api.binance.com')
     
     async def get_precision(self, bot, symbol):
         try:
@@ -119,18 +118,13 @@ class Binance:
         # print(final_amount)
         return final_amount
 
-    def validate_amounts(self, dataframe, amount_column, value_column, price_column):
+    def validate_amounts(self, dataframe, amount_column, value_column):
         truncated_amount_column = amount_column + "_TRUNCATED"
         dataframe[truncated_amount_column] = dataframe.apply(lambda row: self.truncate_amount(row[amount_column], row["stepSize"]), axis=1)
         dataframe[amount_column + "_PASS"] = (dataframe[value_column].abs() > dataframe["minNotional"] * 1.05) & (dataframe[truncated_amount_column].abs() > dataframe["minQty"])
-        dataframe["MIN_AMOUNT"] = np.maximum(
-            dataframe["minNotional"] / dataframe[price_column], 
-            dataframe["minQty"] * (dataframe["minNotional"] / dataframe[price_column])
-            ) * 1.05
-        dataframe["MIN_AMOUNT"] = dataframe.apply(lambda row: self.truncate_amount(row["MIN_AMOUNT"], row["stepSize"]), axis=1)
 
         return dataframe
-    
+
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, lifecycle): #self, user
         weigth = 10
         try:
@@ -146,6 +140,7 @@ class Binance:
                     user_positions[column] = user_positions[column].astype(float)
             user_positions = user_positions.loc[(user_positions["netAsset"] != 0)]
             user_positions["symbol"] = user_positions["asset"] + 'USDT'
+            user_ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
             
             pool = user_positions[['asset', 'symbol', 'netAsset', 'borrowed', 'free', 'interest']]
             live_pool = pool.copy().loc[pool["asset"] != 'USDT']
@@ -157,6 +152,9 @@ class Binance:
                 live_pool = live_pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
                 live_pool["final_symbol"] = live_pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
                 live_pool = live_pool.merge(user_leaders.add_prefix("user_"), left_on="leader_ID", right_index=True, how='left')
+                live_pool = live_pool.merge(user_ignored_symbols, left_on='final_symbol', right_index=True, how='left')
+                live_pool["time"] = live_pool["time"].fillna(utils.current_time() + 3600000)
+                live_pool = live_pool.loc[live_pool["time"] - utils.current_time() > 3600000 / 2]
                 live_pool = await self.get_precisions(bot, live_pool)
                 active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
@@ -213,13 +211,13 @@ class Binance:
                         positions_closed = positions_closed_excess.copy()[(~positions_closed_excess["symbol"].isin(positions_opened_changed["final_symbol"])) & (positions_closed_excess["symbol"] != last_symbol)]
                         if len(positions_closed) > 0:
                             # print(positions_closed)
-                            positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE", "SYMBOL_PRICE")
+                            positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
                             positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
 
                         positions_excess = positions_closed_excess.copy()[(positions_closed_excess["borrowed"] != 0) & (positions_closed_excess["borrowed"] > positions_closed_excess["netAsset"].abs())]
                         if len(positions_excess) > 0:
                             positions_excess["FREE_VALUE"] = positions_excess["free"] * positions_excess["SYMBOL_PRICE"]
-                            positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE", "SYMBOL_PRICE")
+                            positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE")
                             positions_excess = positions_excess.loc[positions_excess["FREE_VALUE"] > 2].set_index("symbol")
 
 
@@ -239,7 +237,7 @@ class Binance:
 
                     positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice"]
 
-                    positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE", "leader_markPrice")
+                    positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
                     positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
 
@@ -251,8 +249,8 @@ class Binance:
                     positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice"]
                     positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
                     positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
-                    positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE", "leader_markPrice")
-                    positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE", "leader_markPrice")
+                    positions_changed = self.validate_amounts(positions_changed, "netAsset", "CURRENT_VALUE")
+                    positions_changed = self.validate_amounts(positions_changed, "DIFF_AMOUNT", "DIFF_VALUE")
 
                     positions_changed = positions_changed[positions_changed["DIFF_AMOUNT_PASS"]].set_index("final_symbol")
 
@@ -270,13 +268,13 @@ class Binance:
 
                 positions_closed = live_pool.copy()
                 positions_closed = await self.get_prices(bot, positions_closed)
-                positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE", "SYMBOL_PRICE")
+                positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
                 positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
 
                 positions_excess = positions_closed.copy()[(positions_closed["borrowed"] != 0) & (positions_closed["borrowed"] > positions_closed["netAsset"].abs())]
                 positions_excess["FREE_VALUE"] = positions_excess["free"] * positions_excess["SYMBOL_PRICE"]
-                positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE", "SYMBOL_PRICE")
-                positions_excess = positions_excess.loc[positions_excess["FREE_VALUE"] > 2]
+                positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE")
+                # positions_excess = positions_excess.loc[positions_excess["FREE_VALUE"] > 2]
 
                 positions_opened = []
                 positions_changed = []
@@ -310,7 +308,10 @@ class Binance:
                     # "levered_ratio": levered_ratio,
                     # "unlevered_ratio": unlevered_ratio,
                 # },
-                "mix": new_user_mix
+                "mix": new_user_mix,
+                "account": {
+                    "reset_mix": False
+                }
             }
                       
             if len(dropped_leaders) > 0:
@@ -327,20 +328,15 @@ class Binance:
     
 
     async def repay_position(self, bot, user, symbol, amount:float, position):
-        # weight = 6
+        # weight = 3000
         try:
-            self.client.borrow_repay(asset='USDT', symbol=symbol, amount=amount, type='REPAY', isIsolated='FALSE')
-            await self.app.log.create(bot, user, 'INFO', 'bot/repay_debts', 'TRADE/REPAY', f'Repayed Position: {symbol} - {amount}', details=position.to_dict())
-        except Exception as e:
-            await self.handle_exception(bot, bot, e, f'repay_position {symbol} - {amount}', symbol, position=position)
-            
-            # amount = self.truncate_amount(abs(amount), position["stepSize"])
-            # min_amount = self.truncate_amount(abs(min_amount), position["stepSize"])
-            # await self.open_position(bot, user, symbol, min_amount, position, new_user_mix, retry=-1)
-            # await self.close_position(bot, user, symbol, -amount - min_amount, position, new_user_mix, retry=-1)
+            self.client.borrow_repay(asset=symbol.replace('USDT', ''), symbol=symbol, amount=amount, type='REPAY', isIsolated='FALSE')
+            await self.app.log.create(bot, user, 'INFO', 'REPAY', 'TRADE', f'Repayed Position: {symbol} - {amount}', details=position.to_dict())
+        except Exception as error:
+            await self.handle_exception(bot, user, error, f'repay_position {symbol} - {amount}', symbol, position=position)
 
     
-    async def open_position(self, bot, user, symbol:str, amount, position, new_user_mix, reverse=False, retry=0):
+    async def open_position(self, bot, user, symbol:str, amount, position, user_mix, source, reverse=False, full=False):
         # weight = 6
         try:
             if reverse:
@@ -350,38 +346,20 @@ class Binance:
             if amount < 0:
                 side = 'SELL'
 
-            response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType='MARGIN_BUY')
-            await self.app.log.create(bot, user, 'INFO', 'bot/open_position', 'TRADE/FULL',f'Opened Position: {symbol} - {amount}', details=position.to_dict())
+            side_effect = 'AUTO_BORROW_REPAY' if full else 'MARGIN_BUY'
 
-            return response
-        except Exception as e:
-            time.sleep(0.2)
-            if e.args[2] == 'Account has insufficient balance for requested action.' and retry:
-                # if retry == 0:
-                #     await self.handle_exception(bot, bot, '', f'open_position - insufficient balance - RETRY {retry}', symbol, notify=False)
-                #     price = 999999999 if side == 'BUY' else 0.000000001
-                #     order_id = str(uuid.uuid4())
-                #     self.client.new_margin_order(symbol=symbol, quantity=min_amount, side=side, type='TAKE_PROFIT', price=price, newClientOrderId=order_id)
-                #     self.client.cancel_margin_order(origClientOrderId=order_id)
-                #     time.sleep(0.2)
-                #     await self.app.binance.open_position(bot, user, symbol, amount, position, new_user_mix, reverse, retry=1)
-                #     await self.app.log.create(bot, user, f'INFO', f'bot/open_position - TRY {retry}', 'TRADE/FULL', f'Closed Position: {symbol} - {amount}', details=position.to_dict())
-
-                if retry == 0:
-                    await self.handle_exception(bot, bot, e, f'open_position {symbol} - {amount} - insufficient balance - RETRY {retry}', symbol, notify=False)
-                    min_amount = position["MIN_AMOUNT"]
-                    await self.close_position(bot, symbol, -min_amount if side == 'BUY' else min_amount, position, new_user_mix, reverse, retry= -1)
-                    time.sleep(0.2)
-                    await self.open_position(bot, symbol, amount + min_amount if side == 'BUY' else amount - min_amount, position, new_user_mix, reverse, retry= 2)
-                    await self.app.log.create(bot, user, f'INFO', f'bot/open_position {symbol} - {amount} - TRY {retry}', 'TRADE/FULL', f'Closed Position: {symbol} - {amount}', details=position.to_dict())
+            self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
+            await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Opened Position: {symbol} - {amount}', details=str(position.to_dict()))
+        except Exception as error:
+            if error.args[1] == -2010:
+                await self.app.binance.open_position(bot, user, symbol, amount, position, user_mix, f'{source} /auto', full=True)
             else:
-                await self.handle_exception(bot, bot, e, f'open_position {symbol} - {amount} - insufficient balance - FINAL', symbol, new_user_mix, position)
+                await self.handle_exception(bot, user, error, f'{source}: {symbol} - {amount}', symbol, user_mix=user_mix, position=position)
 
 
-    async def close_position(self, bot, user, symbol, amount, position, new_user_mix, reverse=False, full=False, retry=0):
+    async def close_position(self, bot, user, symbol, amount, position, user_mix, source, reverse=False, full=False):
         # weight = 6
         try:
-            # print(position)
             if reverse:
                 amount *= -1
 
@@ -392,57 +370,18 @@ class Binance:
             side_effect = 'AUTO_BORROW_REPAY' if full else 'AUTO_REPAY'
 
             self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
-            await self.app.log.create(bot, user, 'INFO', 'bot/close_position', 'TRADE/FULL',f'Closed Position: {symbol} - {amount}', details=position.to_dict())
-        except Exception as e:
-            if e.args[2] == 'Account has insufficient balance for requested action.':
-                min_amount = position["MIN_AMOUNT"]
-                time.sleep(0.2)
-                # if retry == 0:
-                #     try:
-                #         print(position)
-                #         await self.handle_exception(bot, bot, e, f'close_position - insufficient balance - RETRY {retry}', symbol, notify=False)
-                #         order_id = str(uuid.uuid4())
-                #         response = self.client.new_margin_order(symbol=symbol, quantity=min_amount, side='BUY', type='LIMIT', price=round(position["SYMBOL_PRICE"] * 2), newClientOrderId=order_id, timeInForce='GTC')
-                #         print(response)
-                #         response = self.client.cancel_margin_order(symbol=symbol, origClientOrderId=order_id)
-                #         print(response)
-                #         time.sleep(0.2)
-                #         await self.app.binance.close_position(bot, user, symbol, amount, position, new_user_mix, reverse, retry=1)
-                #         await self.app.log.create(bot, user, f'INFO', f'bot/close_position - TRY {retry}', 'TRADE/FULL', f'Closed Position: {symbol} - {amount}', details=position.to_dict())
-                #     except Exception:
-                #         await self.app.binance.close_position(bot, user, symbol, amount, position, new_user_mix, reverse, retry=1)
-
-                if retry == 0:
-                    try:
-                        await self.handle_exception(bot, bot, e, f'close_position {symbol} - {amount} - insufficient balance - RETRY {retry}', symbol, notify=False)
-                        await self.open_position(bot, user, symbol, -min_amount if side == 'BUY' else min_amount, position, new_user_mix, reverse, retry=-1)
-                        time.sleep(0.2)
-                        await self.close_position(bot, user, symbol, amount + min_amount if side == 'BUY' else amount - min_amount, position, new_user_mix, reverse, retry=2)
-                        await self.app.log.create(bot, user, f'INFO', f'bot/close_position {symbol} - {amount} - TRY {retry}', 'TRADE/FULL', f'Closed Position: {symbol} - {amount}', details=position.to_dict())
-                    except Exception:
-                        await self.app.binance.close_position(bot, user, symbol, amount, position, new_user_mix, reverse, retry=2)
-
-                # if retry == 2:
-                #     try:
-                #         await self.handle_exception(bot, bot, '', f'close_position - insufficient balance - RETRY {retry}', symbol, notify=False)
-                #         await self.close_position(bot, symbol, -min_amount if side == 'BUY' else min_amount, position, new_user_mix, reverse, retry= -1)
-                #         time.sleep(0.2)
-                #         await self.open_position(bot, symbol, amount + min_amount if side == 'BUY' else amount - min_amount, position, new_user_mix, reverse, retry=3)
-                #         await self.app.log.create(bot, user, f'INFO', f'bot/close_position - TRY {retry}', 'TRADE/FULL', f'Closed Position: {symbol} - {amount}', details=position.to_dict())
-                #     except Exception:
-                #         await self.app.binance.close_position(bot, user, symbol, amount, position, new_user_mix, reverse, retry=3)
-                # if retry == 3:
-                #     await self.handle_exception(bot, bot, '', f'close_position - insufficient balance - RETRY {retry}', symbol, notify=False)
-                #     await self.app.binance.close_position(bot, user, symbol, amount, position, new_user_mix, reverse, full=True, retry=4)
-                else:
-                    await self.handle_exception(bot, bot, e, f'close_position {symbol} - {amount} - insufficient balance - FINAL', symbol, new_user_mix, position)
+            await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Closed Position: {symbol} - {amount}', str(position.to_dict()))
+        except Exception as error:
+            if error.args[1] == -2010:
+                await self.app.binance.close_position(bot, user, symbol, amount, position, user_mix, f'{source} /auto', full=True)
+            else:
+                await self.handle_exception(bot, user, error, f'{source}: {symbol} - {amount}', symbol, user_mix=user_mix, position=position)
 
 
-    async def handle_exception(self, bot, user, error, source, symbol, new_user_mix=None, position=None, notify=True):
-        print(position)
+    async def handle_exception(self, bot, user, error, source, symbol, user_mix=None, position=None, notify=True):
         trace = traceback.format_exc()
         # print(trace)
-        if new_user_mix and symbol in new_user_mix.keys():
-            new_user_mix["BAG"].pop(symbol)
-
-        await self.app.log.create(bot, user, 'ERROR', f'client/{source}', 'TRADE', f'Error in Binance API: {symbol} - {error}', details=trace, error=error, notify=notify)
+        if user_mix and symbol in user_mix.keys():
+            user_mix["BAG"].pop(symbol)
+        
+        await self.app.log.create(bot, user, 'ERROR', source, 'TRADE', message=f'Error in Binance API: {symbol} - {error}', details=position, error=trace, notify=notify)

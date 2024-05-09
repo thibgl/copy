@@ -59,8 +59,11 @@ class Bot:
                                     print(trace)
                                     continue
 
+                        if len(leader_mixes) > 0 and not user["account"]["data"]["reset_mix"]:
+                            user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict()  
+                        else:
+                            user_mix_new = {"BAG": {}}
                         user_mix = pd.DataFrame(user["mix"]["data"]).to_dict()
-                        user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict() if len(leader_mixes) > 0 else {"BAG": {}}
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
@@ -74,9 +77,9 @@ class Bot:
                             await self.open_positions(bot, user, positions_opened, user_mix_new)
                             await self.set_stop_losses(bot, user, positions_opened, positions_changed)
 
-                        if lifecycle["reset_rotate"]:
-                            self.app.scrap.cleanup()
-                            self.app.scrap.start()
+                        # if lifecycle["reset_rotate"]:
+                        #     self.app.scrap.cleanup()
+                        #     self.app.scrap.start()
                         
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
                             await self.app.scrap.update_leaders(bot, user)
@@ -101,12 +104,12 @@ class Bot:
 
     async def repay_debts(self, bot, user, positions_excess):
         if len(positions_excess) > 0:
-            print('positions_excess')
-            print(positions_excess)
+            # print('positions_excess')
+            # print(positions_excess)
             for symbol, position in positions_excess.iterrows():
                 try:
-                    await self.app.binance.repay_position(bot, symbol, position["free"], position)
-                except Exception:
+                    await self.app.binance.repay_position(bot, user, symbol, position["free"], position)
+                except:
                     continue
 
 
@@ -116,9 +119,9 @@ class Bot:
             # print(closed_positions)
             for symbol, position in closed_positions.iterrows():
                 try:
-                    await self.app.binance.close_position(bot, user, symbol, position["netAsset_TRUNCATED"], position, new_user_mix, reverse=True)
+                    await self.app.binance.close_position(bot, user, symbol, position["netAsset_TRUNCATED"], position, new_user_mix, 'FULL CLOSE', reverse=True)
                     time.sleep(0.2)
-                except Exception:
+                except:
                     continue
 
     async def open_positions(self, bot, user, opened_positions, new_user_mix):
@@ -127,9 +130,9 @@ class Bot:
             # print(opened_positions)
             for symbol, position in opened_positions.iterrows():
                 try:
-                    await self.app.binance.open_position(bot, user, symbol, position["TARGET_AMOUNT_TRUNCATED"], position, new_user_mix)
+                    await self.app.binance.open_position(bot, user, symbol, position["TARGET_AMOUNT_TRUNCATED"], position, new_user_mix, 'FULL OPEN')
                     time.sleep(0.2)
-                except Exception:
+                except:
                     continue
 
     async def change_positions(self, bot, user, changed_positions, new_user_mix):
@@ -140,20 +143,18 @@ class Bot:
                 try:
                     if position["SWITCH_DIRECTION"]:
                         if position["netAsset_PASS"] and position["TARGET_AMOUNT_PASS"]:
-                            print('FULL SWITCH')
-                            await self.app.binance.close_position(bot, user, symbol, position["netAsset_TRUNCATED"], position, new_user_mix, reverse=True)
+                            await self.app.binance.close_position(bot, user, symbol, position["netAsset_TRUNCATED"], position, new_user_mix, 'FULL SWITCH CLOSE', reverse=True)
                             time.sleep(0.2)
-                            await self.app.binance.open_position(bot, user, symbol, position["TARGET_AMOUNT_TRUNCATED"], position, new_user_mix)
+                            await self.app.binance.open_position(bot, user, symbol, position["TARGET_AMOUNT_TRUNCATED"], position, new_user_mix, 'FULL SWITCH OPEN')
                         else:
-                            print('SIMPLE SWITCH')
-                            await self.app.binance.open_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix)
+                            await self.app.binance.open_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix, 'PARTIAL SWITCH OPEN')
                     else:
                         if position["OPEN"]:
-                            await self.app.binance.open_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix)
+                            await self.app.binance.open_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix, 'PARTIAL OPEN')
                         else:
-                            await self.app.binance.close_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix)
+                            await self.app.binance.close_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix, 'PARTIAL CLOSE')
                     time.sleep(0.2)
-                except Exception:
+                except:
                     continue
     
     async def set_stop_losses(self, bot, user, changed_positions, opened_positions):

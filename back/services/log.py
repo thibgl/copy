@@ -27,17 +27,14 @@ class Log:
             "message": message,
             "details": details
         }
-
         if error:
-            log.update(
-                {"error": error}
-            )
+            log.update({"error": error})
 
         if collection and itemId:
-            log = log | {"collection": collection, "itemId": itemId}
+            log.update({"collection": collection, "itemId": itemId})
 
         if insert:
-            self.app.db.log.insert_one(log)
+            await self.app.db.log.insert_one(log)
 
         content = f'[{utils.current_readable_time()}]: {level} <{source}> {category}: {message} ({log_id})'
         

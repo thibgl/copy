@@ -118,6 +118,9 @@ class Scrap:
         
         except Exception as e:
             await self.handle_exception(bot, e, 'fetch_data', response)
+            self.cleanup()
+            self.start()
+            return {"code": "-1"}
 
 
     async def fetch_pages(self, bot, endpointType, params=None, leaderId=None, results_limit=0, latest_item=None, reference=None, progress_bar=None):
@@ -309,7 +312,7 @@ class Scrap:
             binance_id = leader["binanceId"]
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
             
-            if positions_response and 'data' in positions_response.keys():
+            if positions_response["code"] == '000000':
                 positions = pd.DataFrame(positions_response["data"])
 
                 positions["ID"] = binance_id
@@ -502,8 +505,8 @@ class Scrap:
 
         await self.app.log.create(bot, bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details={"trace": trace, "log": details})
 
-        self.cleanup()
-        self.start()
+        # self.cleanup()
+        # self.start()
 
         # pass
     

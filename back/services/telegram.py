@@ -16,6 +16,7 @@ class Telegram:
         self.telegram_app.add_handler(CommandHandler("start", self.start))
         self.telegram_app.add_handler(CommandHandler("stop", self.stop))
         self.telegram_app.add_handler(CommandHandler("log_level", self.log_level))
+        self.telegram_app.add_handler(CommandHandler("reset_mix", self.reset_mix))
         await self.telegram_app.initialize()
         await self.telegram_app.start()
         await self.telegram_app.updater.start_polling()
@@ -69,6 +70,18 @@ class Telegram:
             }
             await self.app.database.update(bot, bot_update, 'bot')
             await update.message.reply_text('Log Level: ERROR')
+
+    async def reset_mix(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = await self.app.db.users.find_one()
+        user_update = {
+            "account": {
+                "reset_mix": True
+            }
+        }
+        await self.app.database.update(user, user_update, 'users')
+        # Get the chat ID of the user who sent the command
+        # Send a help message to the user
+        await update.message.reply_text(f'User Mix Reset')
 
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Get the chat ID of the user who sent the command
