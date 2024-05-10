@@ -96,11 +96,13 @@ class Bot:
                         tick["last_tick"] = last_tick
                 #! faire le transfer de TP
                 except Exception as e:
-                    trace = traceback.format_exc()
-                    print(trace)
-                    await self.app.log.create(bot, user, 'ERROR', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
-
-                    continue
+                    try:
+                        trace = traceback.format_exc()
+                        print(trace)
+                        await self.app.log.create(bot, user, 'FATAL', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
+                        raise SystemExit()
+                    except:
+                        raise SystemExit()
 
         if not API:
             end_time = (utils.current_time() - start_time) / 1000
@@ -111,8 +113,8 @@ class Bot:
 
     async def repay_debts(self, bot, user, positions_excess):
         if len(positions_excess) > 0:
-            # print('positions_excess')
-            # print(positions_excess)
+            print('positions_excess')
+            print(positions_excess)
             for symbol, position in positions_excess.iterrows():
                 try:
                     await self.app.binance.repay_position(bot, user, symbol, position["free"], position)
@@ -123,36 +125,33 @@ class Bot:
 
     async def close_positions(self, bot, user, closed_positions, new_user_mix):
         if len(closed_positions) > 0:
-            # print('closed_positions')
-            # print(closed_positions)
+            print('closed_positions')
+            print(closed_positions)
             for asset, position in closed_positions.iterrows():
                 try:
                     await self.app.binance.close_position(bot, user, asset, position["netAsset_TRUNCATED"], position, new_user_mix, 'FULL CLOSE', reverse=True)
-                    time.sleep(0.2)
                 except:
                     continue
 
     async def open_positions(self, bot, user, opened_positions, new_user_mix):
         if len(opened_positions) > 0:
-            # print('opened_positions')
-            # print(opened_positions)
+            print('opened_positions')
+            print(opened_positions)
             for symbol, position in opened_positions.iterrows():
                 try:
                     await self.app.binance.open_position(bot, user, symbol, position["TARGET_AMOUNT_TRUNCATED"], position, new_user_mix, 'FULL OPEN')
-                    time.sleep(0.2)
                 except:
                     continue
 
     async def change_positions(self, bot, user, changed_positions, new_user_mix):
         if len(changed_positions) > 0:
-            # print('changed_positions')
-            # print(changed_positions)
+            print('changed_positions')
+            print(changed_positions)
             for symbol, position in changed_positions.iterrows():
                 try:
                     if position["SWITCH_DIRECTION"]:
                         if position["netAsset_PASS"] and position["TARGET_AMOUNT_PASS"]:
                             await self.app.binance.close_position(bot, user, symbol, position["netAsset_TRUNCATED"], position, new_user_mix, 'FULL SWITCH CLOSE', reverse=True)
-                            time.sleep(0.2)
                             await self.app.binance.open_position(bot, user, symbol, position["TARGET_AMOUNT_TRUNCATED"], position, new_user_mix, 'FULL SWITCH OPEN')
                         else:
                             await self.app.binance.open_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix, 'PARTIAL SWITCH OPEN')
@@ -161,7 +160,6 @@ class Bot:
                             await self.app.binance.open_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix, 'PARTIAL OPEN')
                         else:
                             await self.app.binance.close_position(bot, user, symbol, position["DIFF_AMOUNT_TRUNCATED"], position, new_user_mix, 'PARTIAL CLOSE')
-                    time.sleep(0.2)
                 except:
                     continue
     

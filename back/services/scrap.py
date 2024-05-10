@@ -254,85 +254,82 @@ class Scrap:
         try:
             binance_id = leader["binanceId"]
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
-            
+
             if positions_response["code"] == '000000':
                 positions = pd.DataFrame(positions_response["data"])
+ 
+                if len(positions) > 0:
+                    positions["ID"] = binance_id
+                    positions = positions.set_index("ID")
+                    positions = positions.apply(lambda column: column.astype(float) if column.name in ["markPrice", "positionAmount", "notionalValue", "leverage", "unrealizedProfit"] else column)
+                   
+                    filtered_positions = positions.copy().loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
+                    if len(filtered_positions) > 0:
+                        filtered_positions["UNLEVERED_VALUE"] = filtered_positions["notionalValue"] / filtered_positions["leverage"]
+                        filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"].abs() / filtered_positions["notionalValue"].abs().sum()
+                        filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"]
+            
+                        grouped_positions = filtered_positions.groupby("symbol").agg({
+                            "markPrice": 'mean',
+                            "positionAmount": 'sum',
+                            "notionalValue": 'sum',
+                            "UNLEVERED_VALUE": 'sum',
+                            "unrealizedProfit": 'sum',
+                            "POSITION_SHARE": 'sum',
+                            "leverage_WEIGHTED": 'mean'
+                            }).reset_index()
 
-                positions["ID"] = binance_id
-                positions = positions.set_index("ID")
-                positions = positions.apply(lambda column: column.astype(float) if column.name in ["markPrice", "positionAmount", "notionalValue", "leverage", "unrealizedProfit"] else column)
-        
-                filtered_positions = positions.copy().loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
+                        grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
+                        grouped_positions["ID"] = str(binance_id)
+                        grouped_positions = grouped_positions.set_index("ID")
 
-                if len(filtered_positions) > 0:
-                    filtered_positions["UNLEVERED_VALUE"] = filtered_positions["notionalValue"] / filtered_positions["leverage"]
-                    filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"].abs() / filtered_positions["notionalValue"].abs().sum()
-                    filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"]
-        
-                    grouped_positions = filtered_positions.groupby("symbol").agg({
-                        "markPrice": 'mean',
-                        "positionAmount": 'sum',
-                        "notionalValue": 'sum',
-                        "UNLEVERED_VALUE": 'sum',
-                        "unrealizedProfit": 'sum',
-                        "POSITION_SHARE": 'sum',
-                        "leverage_WEIGHTED": 'mean'
-                        }).reset_index()
+                        total_levered_value = grouped_positions["notionalValue"].abs().sum()
+                        total_unlevered_value = grouped_positions["UNLEVERED_VALUE"].abs().sum()
 
-                    grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
-                    grouped_positions["ID"] = str(binance_id)
-                    grouped_positions = grouped_positions.set_index("ID")
+                        total_balance = float(leader["detail"]["data"]["marginBalance"])
+                        levered_ratio = total_levered_value / total_balance
+                        unlevered_ratio = total_unlevered_value / total_balance
+                        
+                        average_leverage = levered_ratio / unlevered_ratio
+                        scaled_unlevered_ratio = 4 / ((1 + unlevered_ratio) ** 2) * unlevered_ratio
 
-                    total_levered_value = grouped_positions["notionalValue"].abs().sum()
-                    total_unlevered_value = grouped_positions["UNLEVERED_VALUE"].abs().sum()
+                        if "ticks" in leader["account"]["data"].keys():
+                            ticks = leader["account"]["data"]["ticks"] + 1
+                        else:
+                            ticks = 1
 
-                    total_balance = float(leader["detail"]["data"]["marginBalance"])
-                    levered_ratio = total_levered_value / total_balance
-                    unlevered_ratio = total_unlevered_value / total_balance
+                        if "average_levered_ratio" not in leader["account"]["data"].keys():
+                            average_levered_ratio = levered_ratio
+                        else:
+                            average_levered_ratio = leader["account"]["data"]["average_levered_ratio"] + (levered_ratio - leader["account"]["data"]["average_levered_ratio"]) / ticks
+
+                        if "average_unlevered_ratio" not in leader["account"]["data"].keys():
+                            average_unlevered_ratio = unlevered_ratio
+                        else:
+                            average_unlevered_ratio = leader["account"]["data"]["average_unlevered_ratio"] + (unlevered_ratio - leader["account"]["data"]["average_unlevered_ratio"]) / ticks
+
+                        grouped_positions["PROFIT"] = -grouped_positions["unrealizedProfit"] / (grouped_positions["positionAmount"] * grouped_positions["markPrice"]) * 1000
+                        grouped_positions["TICKS"] = ticks
+                        grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
+                        # print(leader["performance"]["data"])
+                        grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
+                        grouped_positions["LEVERED_RATIO"] = levered_ratio
+
+                        positions_update = {
+                            "account": {
+                                "ticks": ticks,
+                                "levered_ratio": levered_ratio,
+                                "unlevered_ratio": unlevered_ratio,
+                                "average_levered_ratio": average_levered_ratio,
+                                "average_unlevered_ratio": average_unlevered_ratio,
+                            },
+                            "positions": filtered_positions.to_dict(),
+                            "grouped_positions": grouped_positions.to_dict(),
+                        }
+
+                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "PROFIT", "SHARP", "ROI", "LEVERED_RATIO", "POSITION_SHARE"]]
                     
-                    average_leverage = levered_ratio / unlevered_ratio
-                    scaled_unlevered_ratio = 4 / ((1 + unlevered_ratio) ** 2) * unlevered_ratio
-
-                    if "ticks" in leader["account"]["data"].keys():
-                        ticks = leader["account"]["data"]["ticks"] + 1
-                    else:
-                        ticks = 1
-
-                    if "average_levered_ratio" not in leader["account"]["data"].keys():
-                        average_levered_ratio = levered_ratio
-                    else:
-                        average_levered_ratio = leader["account"]["data"]["average_levered_ratio"] + (levered_ratio - leader["account"]["data"]["average_levered_ratio"]) / ticks
-
-                    if "average_unlevered_ratio" not in leader["account"]["data"].keys():
-                        average_unlevered_ratio = unlevered_ratio
-                    else:
-                        average_unlevered_ratio = leader["account"]["data"]["average_unlevered_ratio"] + (unlevered_ratio - leader["account"]["data"]["average_unlevered_ratio"]) / ticks
-
-                    grouped_positions["PROFIT"] = -grouped_positions["unrealizedProfit"] / (grouped_positions["positionAmount"] * grouped_positions["markPrice"]) * 1000
-                    grouped_positions["TICKS"] = ticks
-                    grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
-                    # print(leader["performance"]["data"])
-                    grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
-                    grouped_positions["AVERAGE_LEVERAGE"] = average_leverage
-                    grouped_positions["INVESTED_RATIO"] = unlevered_ratio
-
-                    positions_update = {
-                        "account": {
-                            "ticks": ticks,
-                            "levered_ratio": levered_ratio,
-                            "unlevered_ratio": unlevered_ratio,
-                            "average_levered_ratio": average_levered_ratio,
-                            "average_unlevered_ratio": average_unlevered_ratio,
-                        },
-                        "positions": filtered_positions.to_dict(),
-                        "grouped_positions": grouped_positions.to_dict(),
-                    }
-# , "SHARP"
-                    return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "PROFIT", "SHARP", "ROI", "AVERAGE_LEVERAGE", "INVESTED_RATIO", "POSITION_SHARE"]]
-                
-                else:
-                    return {}, []
-                    
+                return {}, []
             else:
                 await self.handle_exception(bot, 'e', f'leader_positions_update - NO FETCH for {binance_id}', None)
                 lifecycle["tick_boost"], lifecycle["reset_rotate"] = True, True
@@ -342,6 +339,8 @@ class Scrap:
                     return {}, []
             
         except Exception as e:
+            print(positions_response)
+            # print(positions)
             await self.handle_exception(bot, e, 'leader_positions_update', None)
 
 
@@ -441,7 +440,7 @@ class Scrap:
                 await self.update_leader(bot, leader)
 
             limit = 20 - len(active_leaders)
-            unactive_leaders = self.app.db.leaders.find({'status': 'ACTIVE', 'updated': {'$lt': utils.current_time() - 3600000 * 12}}).limit(limit)
+            unactive_leaders = self.app.db.leaders.find({'status': 'ACTIVE', 'updated': {'$lt': utils.current_time() - 3600000 * 8}}).limit(limit)
             async for leader in unactive_leaders:
                 await self.update_leader(bot, leader)
 
