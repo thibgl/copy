@@ -224,7 +224,7 @@ class UserAccountData(BaseModel):
     leverage: int
     value_USDT: float
     value_BTC: float
-    levered_ratio: int
+    levered_ratio: float
     unlevered_ratio: float
     collateral_margin_level: float
     collateral_value_USDT: float

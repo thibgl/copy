@@ -167,63 +167,6 @@ class Scrap:
             await self.handle_exception(bot, e, 'fetch_pages', response)
             yield { "success": False, "message": f"Exception occurred: {str(e)}", "data": {} }
 
-
-    # async def fetch_pages(self, bot, endpointType, params=None, leaderId=None, result=None, results_limit=0, latest_item=None, reference=None, progress_bar=None):
-    #     response = None
-    #     try:
-    #         if result is None:
-    #             result = []
-    #         if params is None:
-    #             params = endpoints[endpointType]["params"]
-
-    #         response = await self.fetch_data(bot, leaderId, endpointType)
-
-    #         if response["code"] == '000000':
-    #             response_data = response["data"]
-    #             response_list = response_data["list"]
-
-    #             if latest_item and reference:
-    #                 response_list = sorted(response_list, key=lambda x: x[reference], reverse=True)
-    #                 item_index = 0
-
-    #                 for item in response_list:
-    #                     if item[reference] > latest_item[reference]:
-    #                         result.append(item)
-    #                         item_index += 1
-
-    #                         if item_index == 10:
-    #                             params["pageNumber"] += 1
-    #                             return await self.fetch_pages(bot, endpointType, params, leaderId, result, latest_item=latest_item, reference=reference, progress_bar=progress_bar)
-    #                     else:
-    #                         # print({ "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result })
-    #                         return { "success": True, "reason": "partial", "message": f"Fetched pages {endpointType} - finished by update", "data": result }
-    #             else:
-    #                 result += response_list
-    #                 total_n_results = response_data["total"]
-    #                 pages_length = total_n_results // 10
-
-    #                 if progress_bar is None:
-    #                     await self.app.log.create(bot, bot, 'INFO', 'scrap/fetch_pages', 'SCRAP/CREATE',f'Scraping {endpointType} for {leaderId}')
-    #                     progress_bar = tqdm(total=results_limit if results_limit else total_n_results)
-
-    #                 progress_bar.update(len(response_list))
-    #                 # If remainder, add another page
-    #                 if total_n_results % 10:
-    #                     pages_length += 1
-
-    #                 if params["pageNumber"] <= pages_length and total_n_results < results_limit:
-    #                     params["pageNumber"] +=1
-
-    #                     return await self.fetch_pages(bot, endpointType, params, leaderId, result, progress_bar=progress_bar)
-    #                 else:
-    #                     return { "success": True, "reason": "full", "message": f"Fetched all pages of {endpointType}", "data": result }
-            
-    #         else:
-    #             return { "success": False, "message": f"Could not fetch page {params['pageNumber']}/{pages_length} of {endpointType}", "data": {} }
-            
-    #     except Exception as e:
-    #         await self.handle_exception(bot, e, 'fetch_pages', response)
-
  
     #* UPDATE
 
@@ -367,7 +310,9 @@ class Scrap:
 
                     grouped_positions["PROFIT"] = -grouped_positions["unrealizedProfit"] / (grouped_positions["positionAmount"] * grouped_positions["markPrice"]) * 1000
                     grouped_positions["TICKS"] = ticks
-                    grouped_positions["PERFORMANCE"] = leader["performance"]["data"]["roi"]
+                    grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
+                    # print(leader["performance"]["data"])
+                    grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
                     grouped_positions["AVERAGE_LEVERAGE"] = average_leverage
                     grouped_positions["INVESTED_RATIO"] = unlevered_ratio
 
@@ -382,8 +327,8 @@ class Scrap:
                         "positions": filtered_positions.to_dict(),
                         "grouped_positions": grouped_positions.to_dict(),
                     }
-
-                    return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "PROFIT", "PERFORMANCE", "AVERAGE_LEVERAGE", "INVESTED_RATIO", "POSITION_SHARE"]]
+# , "SHARP"
+                    return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "PROFIT", "SHARP", "ROI", "AVERAGE_LEVERAGE", "INVESTED_RATIO", "POSITION_SHARE"]]
                 
                 else:
                     return {}, []
@@ -458,41 +403,48 @@ class Scrap:
         except Exception as e:
             await self.handle_exception(bot, e, 'get_leader', None)
 
+    async def update_leader(self, bot, leader):
+        if utils.current_time() - leader["detail"]["updated"] > 3600000:
+            update = {}
+            detail_update = await self.leader_detail_update(bot, leader=leader)
 
+            if detail_update:
+                update.update(detail_update)
+                detail = detail_update["detail"]
+
+                if detail["positionShow"] and detail["status"] == "ACTIVE" and detail["initInvestAsset"] == "USDT":
+                    status = 'ACTIVE'
+                else:
+                    status = 'INACTIVE'
+
+                if utils.current_time() - leader["chart"]["updated"] > 3600000 * 3:
+                    chart_update = await self.leader_chart_update(bot, leader=leader)
+                    update.update(chart_update)
+
+                if utils.current_time() - leader["performance"]["updated"] > 3600000 * 3:
+                    performance_update = await self.leader_performance_update(bot, leader=leader)
+                    update.update(performance_update)
+            else:
+                status = 'CLOSED'
+
+            update["status"] = status
+            await self.app.database.update(obj=leader, update=update, collection='leaders')
+            
+            # if status == 'CLOSED':
+            #     return None
+                    
     async def update_leaders(self, bot, user):
         try:
-            for binance_id in user["leaders"]["data"]["WEIGHT"].keys():
+            active_leaders = user["leaders"]["data"]["WEIGHT"].keys()
+            for binance_id in active_leaders:
                 leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
+                await self.update_leader(bot, leader)
 
-                if utils.current_time() - leader["detail"]["updated"] > 3600000:
-                    update = {}
-                    detail_update = await self.leader_detail_update(bot, leader=leader)
+            limit = 20 - len(active_leaders)
+            unactive_leaders = self.app.db.leaders.find({'status': 'ACTIVE', 'updated': {'$lt': utils.current_time() - 3600000 * 12}}).limit(limit)
+            async for leader in unactive_leaders:
+                await self.update_leader(bot, leader)
 
-                    if detail_update:
-                        update.update(detail_update)
-                        detail = detail_update["detail"]
-
-                        if detail["positionShow"] and detail["status"] == "ACTIVE" and detail["initInvestAsset"] == "USDT":
-                            status = 'ACTIVE'
-                        else:
-                            status = 'INACTIVE'
-
-                        if utils.current_time() - leader["chart"]["updated"] > 3600000 * 3:
-                            chart_update = await self.leader_chart_update(bot, leader=leader)
-                            update.update(chart_update)
-
-                        if utils.current_time() - leader["performance"]["updated"] > 3600000 * 3:
-                            performance_update = await self.leader_performance_update(bot, leader=leader)
-                            update.update(performance_update)
-                    else:
-                        status = 'CLOSED'
-
-                    update["status"] = status
-                    await self.app.database.update(obj=leader, update=update, collection='leaders')
-                    
-                    if status == 'CLOSED':
-                        return None
-                    
         except Exception as e:
             await self.handle_exception(bot, e, 'update_leaders', None)
 
@@ -504,12 +456,6 @@ class Scrap:
         print(trace)
 
         await self.app.log.create(bot, bot, 'ERROR', f'scrap/{source}', 'SCRAP', f'Error in {source} - {error}', details={"trace": trace, "log": details})
-
-        # self.cleanup()
-        # self.start()
-
-        # pass
-    
     
     def start(self):
         self.gateway = ApiGateway(self.GATEWAY_HOST, regions=["eu-west-1", "eu-west-2"], access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'), access_key_secret=os.environ.get('AWS_SECRET_ACCESS_KEY'))

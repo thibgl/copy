@@ -2,7 +2,7 @@
 # telegram, sleeping leaders delay not working, opti portoflio en fonction de la perf, close ALL from bot, REORGANIZE qpi paths, implement schedule for maintenance, get user, socket pour le front
 # inclure le type dans le mix que si il a engagé un minimum de son capital
 # V3 ==> PANDAS / NUMPY
-#todo: STOP LOSSES, ISOLATED, fix excess pool, wighted perf dans opened_changed
+#todo: STOP LOSSES, ISOLATED, suivi des positions (id, time ouverture, plus value)
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, Body
@@ -17,6 +17,8 @@ import uvicorn
 import asyncio
 import schedule
 import pandas as pd
+import threading
+
 # import logging
 # import sys
 load_dotenv()
@@ -50,6 +52,7 @@ if server_mode:
     app.bot = Bot(app)
     app.log = Log(app)
     app.telegram = Telegram(app)
+
 # try:
     # response = app.binance.client.margin_max_transferable(asset='USDT')
     # print(response)
@@ -270,8 +273,15 @@ async def register_user(user: RegisterUser):
     return {"message": "User registered successfully", "id": str(result.inserted_id)}
 
 
-
-
+async def loop_watchdog(tick):
+    while True:
+        await asyncio.sleep(10)
+        print(tick["last_tick"])
+        # bot = await app.db.bot.find_one()
+        # if utils.current_time() - bot["account"]["data"]["last_tick"] > 60000 * 3:
+        #     print(f'[{utils.current_readable_time()}]: Stuck Tick Detected - Exiting')
+        #     raise SystemExit()
+        
 @app.on_event("startup")
 async def startup():
     # await db_startup(app.db)
@@ -309,14 +319,26 @@ async def startup():
     #     }
     # )
     if server_mode:
+        tick = {
+            "last_tick": 0
+        }
         await app.telegram.initialize()
-        asyncio.create_task(app.bot.tick())
 
+        app.tick_task = asyncio.create_task(app.bot.tick(tick))
+        # app.watchdog_task = asyncio.create_task(loop_watchdog(tick))
+        # await asyncio.gather(app.tick_task, app.watchdog_task, return_exceptions=True)  
+        # watchdog_thread = threading.Thread(target=await loop_watchdog)
+        # watchdog_thread.daemon = True
+        # watchdog_thread.start()
     # await app.telegram.bot.send_message(chat_id=user["chatId"], text='Hello, this is a notification!')
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
     if server_mode:
+        # app.tick_task.cancel()
+        # app.watchdog_task.cancel()
+        # await asyncio.gather(app.tick_task, app.watchdog_task, return_exceptions=True)
+
         app.scrap.cleanup()
         await app.telegram.cleanup()
         app.mongodb_client.close()

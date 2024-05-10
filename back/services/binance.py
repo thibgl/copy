@@ -17,6 +17,38 @@ class Binance:
         self.app = app
         self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY, base_url='https://api.binance.com')
     
+
+    async def user_account_open(self, bot, user):
+        try:
+            margin_account_data = self.client.margin_account()
+
+            assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
+            valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
+            account_data = {
+                    "value_BTC": assetBTC,
+                    "value_USDT": valueUSDT,
+                    "collateral_margin_level": float(margin_account_data["collateralMarginLevel"]),
+                    "collateral_value_USDT": float(margin_account_data["totalCollateralValueInUSDT"]),
+            }
+
+            user_positions = pd.DataFrame(margin_account_data["userAssets"])
+            for column in user_positions.columns:
+                if column != 'asset':
+                    user_positions[column] = user_positions[column].astype(float)
+
+            positions_excess = user_positions.copy()[(user_positions["borrowed"] != 0) & (user_positions["borrowed"] > user_positions["netAsset"].abs())].set_index('asset')
+
+            user_positions = user_positions.loc[(user_positions["netAsset"] != 0)]
+            user_positions["symbol"] = user_positions["asset"] + 'USDT'
+            
+            pool = user_positions[['asset', 'symbol', 'netAsset', 'borrowed', 'free', 'interest']]
+            live_pool = pool.copy().loc[pool["asset"] != 'USDT']
+
+            return account_data, live_pool, user_positions, positions_excess
+        except Exception as e:
+            await self.handle_exception(bot, user, e, 'user_account_open', None)
+
+
     async def get_precision(self, bot, symbol):
         try:
             symbol_precisions = pd.DataFrame(bot["precisions"]["data"])
@@ -79,7 +111,8 @@ class Binance:
     def handle_positions(self, dataframe):
         dataframe['TOTAL_TARGET_SHARE'] = dataframe.groupby('final_symbol')['TARGET_SHARE'].transform('sum')
         dataframe["POSITION_WEIGHT"] = dataframe["TARGET_SHARE"] / dataframe["TOTAL_TARGET_SHARE"]
-        dataframe["WEIGHTED_PERFORMANCE"] = dataframe['leader_PERFORMANCE'] * dataframe["POSITION_WEIGHT"]
+        dataframe["WEIGHTED_SHARP"] = dataframe['leader_SHARP'] * dataframe["POSITION_WEIGHT"]
+        dataframe["WEIGHTED_ROI"] = dataframe['leader_ROI'] * dataframe["POSITION_WEIGHT"]
         dataframe = dataframe.groupby("final_symbol").agg({
             "symbol": 'first',
             "leader_symbol": 'first',
@@ -91,7 +124,8 @@ class Binance:
             "minQty": 'first',
             "minNotional": 'first',
             "leader_ID": 'unique',
-            "WEIGHTED_PERFORMANCE": 'sum',
+            "WEIGHTED_SHARP": 'sum',
+            "WEIGHTED_ROI": 'sum',
             "leader_positionAmount": 'sum',
             "leader_markPrice": 'mean',
             "TARGET_SHARE": 'sum',
@@ -125,26 +159,11 @@ class Binance:
 
         return dataframe
 
-    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, lifecycle): #self, user
+    async def user_account_update(self, bot, user, account_data, live_pool, user_positions, positions_excess, new_positions, user_leaders, mix_diff, lifecycle):
         weigth = 10
         try:
-            margin_account_data = self.client.margin_account()
-
-            assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
-            valueUSDT = float(self.client.ticker_price("BTCUSDT")["price"]) * assetBTC
-            collateral_margin_level = float(margin_account_data["totalCollateralValueInUSDT"])
-
-            user_positions = pd.DataFrame(margin_account_data["userAssets"])
-            for column in user_positions.columns:
-                if column != 'asset':
-                    user_positions[column] = user_positions[column].astype(float)
-            user_positions = user_positions.loc[(user_positions["netAsset"] != 0)]
-            user_positions["symbol"] = user_positions["asset"] + 'USDT'
-            user_ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
+            ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
             
-            pool = user_positions[['asset', 'symbol', 'netAsset', 'borrowed', 'free', 'interest']]
-            live_pool = pool.copy().loc[pool["asset"] != 'USDT']
-
             if len(new_positions) > 0:
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
                 new_positions.loc[new_positions["thousand"], "markPrice"] /= 1000
@@ -152,9 +171,10 @@ class Binance:
                 live_pool = live_pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
                 live_pool["final_symbol"] = live_pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
                 live_pool = live_pool.merge(user_leaders.add_prefix("user_"), left_on="leader_ID", right_index=True, how='left')
-                live_pool = live_pool.merge(user_ignored_symbols, left_on='final_symbol', right_index=True, how='left')
-                live_pool["time"] = live_pool["time"].fillna(utils.current_time() + 3600000)
-                live_pool = live_pool.loc[live_pool["time"] - utils.current_time() > 3600000 / 2]
+                # live_pool = live_pool.merge(user_ignored_symbols, left_on='final_symbol', right_index=True, how='left')
+                # live_pool["time"] = live_pool["time"].fillna(utils.current_time() + 3600000 * 3)
+                # live_pool = live_pool.loc[live_pool["time"] - utils.current_time() > 3600000 * 2]
+                live_pool = live_pool.loc[~live_pool["final_symbol"].isin(ignored_symbols.index)]
                 live_pool = await self.get_precisions(bot, live_pool)
                 active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
@@ -162,41 +182,61 @@ class Binance:
                 print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} leaders')
 
                 positions_opened_changed = live_pool.copy()[~live_pool["leader_symbol"].isna()]
+                # positions_opened_changed2 = positions_opened_changed.copy()
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
-                    positions_closed, positions_excess = [], []
+                    positions_closed = []
 
-                    # positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] > user_leverage, "leader_AVERAGE_LEVERAGE"] = user_leverage * 2
+                    # positions_opened_changed2.loc[positions_opened_changed2["leader_AVERAGE_LEVERAGE"] > user_leverage, "leader_AVERAGE_LEVERAGE"] = user_leverage * 2
+                    positions_opened_changed["leader_AVERAGE_LEVERAGE"] = positions_opened_changed["leader_AVERAGE_LEVERAGE"] / 2
+                    # print(positions_opened_changed2)
+
                     positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["leader_INVESTED_RATIO"] * positions_opened_changed["leader_AVERAGE_LEVERAGE"] * positions_opened_changed["user_WEIGHT"] * (1 / len(user["leaders"]["data"]["WEIGHT"])) * user["detail"]["data"]["TARGET_RATIO"]
+                    # positions_opened_changed2["TARGET_SHARE"] = positions_opened_changed2["leader_POSITION_SHARE"] * positions_opened_changed2["leader_INVESTED_RATIO"] * positions_opened_changed2["leader_AVERAGE_LEVERAGE"] * positions_opened_changed2["user_WEIGHT"] * (1 / len(user["leaders"]["data"]["WEIGHT"])) * user["detail"]["data"]["TARGET_RATIO"]
 
                     positions_short = positions_opened_changed.copy().loc[positions_opened_changed["leader_positionAmount"] < 0]
                     positions_short = self.handle_positions(positions_short)
                     positions_long = positions_opened_changed.copy().loc[positions_opened_changed["leader_positionAmount"] > 0]
                     positions_long = self.handle_positions(positions_long)
 
+                    # positions_short2 = positions_opened_changed2.copy().loc[positions_opened_changed2["leader_positionAmount"] < 0]
+                    # positions_short2 = self.handle_positions(positions_short2)
+                    # positions_long2 = positions_opened_changed2.copy().loc[positions_opened_changed2["leader_positionAmount"] > 0]
+                    # positions_long2 = self.handle_positions(positions_long2)
+
                     positions_opened_changed = pd.concat([positions_short, positions_long])
                     positions_opened_changed = positions_opened_changed.sort_values(by=['final_symbol', 'TARGET_SHARE'], ascending=[True, False])
                     positions_opened_changed = positions_opened_changed.drop_duplicates(subset='final_symbol', keep='first')
 
-                    positions_opened_changed = positions_opened_changed.sort_values(by=["WEIGHTED_PERFORMANCE", "TARGET_SHARE"], ascending=False)
+                    # positions_opened_changed2 = pd.concat([positions_short2, positions_long2])
+                    # positions_opened_changed2 = positions_opened_changed2.sort_values(by=['final_symbol', 'TARGET_SHARE'], ascending=[True, False])
+                    # positions_opened_changed2 = positions_opened_changed2.drop_duplicates(subset='final_symbol', keep='first')
+
+                    positions_opened_changed = positions_opened_changed.sort_values(by=["WEIGHTED_SHARP", "WEIGHTED_ROI", "TARGET_SHARE"], ascending=False)
                     positions_opened_changed["CUMULATIVE_SHARE"] = positions_opened_changed["TARGET_SHARE"].cumsum()
-                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user_leverage
+                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
+
+                    # positions_opened_changed2 = positions_opened_changed2.sort_values(by=["WEIGHTED_SHARP", "WEIGHTED_ROI", "TARGET_SHARE"], ascending=False)
+                    # positions_opened_changed2["CUMULATIVE_SHARE"] = positions_opened_changed2["TARGET_SHARE"].cumsum()
+                    # positions_opened_changed2["TARGET_VALUE"] = positions_opened_changed2["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
+
+                    # print(positions_opened_changed2)
 
                     last_position = positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].iloc[0] if not positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].empty else pd.Series([])
-
+                    last_symbol = last_position["symbol"] if not last_position.empty else ''
+   
                     positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <=  user["detail"]["data"]["TARGET_RATIO"]]
+                    user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
 
-                    truncated_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
-
-                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * valueUSDT * user_leverage
+                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
                     positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_VALUE"] *= -1
 
-                    last_symbol = last_position["symbol"] if not last_position.empty else ''
+                    debug_positions_opened_changed = positions_opened_changed.copy()
 
-                    positions_closed_excess = live_pool.copy().dropna(subset='symbol')
-                    positions_closed_excess = positions_closed_excess.loc[((~live_pool["symbol"].isin(positions_opened_changed["final_symbol"])) & (live_pool["symbol"] != last_symbol)) | (live_pool["borrowed"] != 0) & (live_pool["borrowed"] > live_pool["netAsset"].abs())]
-                    if len(positions_closed_excess) > 0:
-                        positions_closed_excess = positions_closed_excess.groupby('symbol').agg({
+                    positions_closed = live_pool.copy().dropna(subset='asset')
+                    positions_closed = positions_closed.loc[((~positions_closed["symbol"].isin(positions_opened_changed["final_symbol"])) & (positions_closed["symbol"] != last_symbol))]
+                    if len(positions_closed) > 0:
+                        positions_closed = positions_closed.groupby('symbol').agg({
                             "netAsset": 'first',
                             "borrowed": 'first',
                             "free": 'first',
@@ -205,35 +245,29 @@ class Binance:
                             "minNotional": 'first',
                         }).reset_index()
 
-                        positions_closed_excess = positions_closed_excess.merge(positions_opened_changed[['final_symbol', 'leader_markPrice']], left_on='symbol', right_on='final_symbol', how='left')
-                        positions_closed_excess = await self.get_prices(bot, positions_closed_excess, 'leader_markPrice')
-            
-                        positions_closed = positions_closed_excess.copy()[(~positions_closed_excess["symbol"].isin(positions_opened_changed["final_symbol"])) & (positions_closed_excess["symbol"] != last_symbol)]
-                        if len(positions_closed) > 0:
-                            # print(positions_closed)
-                            positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
-                            positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
+                        positions_closed = positions_closed.merge(positions_opened_changed[['final_symbol', 'leader_markPrice']], left_on='symbol', right_on='final_symbol', how='left')
+                        positions_closed = await self.get_prices(bot, positions_closed, 'leader_markPrice')
+                        positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
+                        positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
 
-                        positions_excess = positions_closed_excess.copy()[(positions_closed_excess["borrowed"] != 0) & (positions_closed_excess["borrowed"] > positions_closed_excess["netAsset"].abs())]
-                        if len(positions_excess) > 0:
-                            positions_excess["FREE_VALUE"] = positions_excess["free"] * positions_excess["SYMBOL_PRICE"]
-                            positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE")
-                            positions_excess = positions_excess.loc[positions_excess["FREE_VALUE"] > 2].set_index("symbol")
-
-
-                    if collateral_margin_level > 1.15:
+                    if account_data["collateral_margin_level"] > 1.15:
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
                     if not last_position.empty:
                         last_diff_pass = False
-                        last_position["TARGET_SHARE"] = user["detail"]["data"]["TARGET_RATIO"] - truncated_invested_ratio
-                        last_position["TARGET_VALUE"] = last_position["TARGET_SHARE"] * valueUSDT * user_leverage
+                        last_position["TARGET_SHARE"] = user["detail"]["data"]["TARGET_RATIO"] - user_invested_ratio
+                        last_position["TARGET_VALUE"] = last_position["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
                         last_position["TARGET_VALUE"] = last_position["TARGET_VALUE"] * -1 if last_position["leader_positionAmount"] < 0 else last_position["TARGET_VALUE"]
                         last_diff_pass = abs(last_position["TARGET_VALUE"] / last_position["leader_markPrice"] - last_position["netAsset"]) / abs(last_position["netAsset"]) > 0.1 if last_position["netAsset"] else True
 
-                        if (len(positions_opened_changed) > 0 or last_position["symbol"] in mix_diff) and last_diff_pass:
-                            last_position["CUMULATIVE_SHARE"] = user["detail"]["data"]["TARGET_RATIO"]
+                        debug_positions_opened_changed.loc[len(debug_positions_opened_changed)] = last_position
+
+                        if last_position["symbol"] == None or (last_position["final_symbol"] in mix_diff or len(positions_opened_changed) > 0) and last_diff_pass:
+                            user_invested_ratio = user["detail"]["data"]["TARGET_RATIO"]
+                            last_position["CUMULATIVE_SHARE"] = user_invested_ratio
                             positions_opened_changed.loc[len(positions_opened_changed)] = last_position
+
+                    # print(debug_positions_opened_changed)
 
                     positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice"]
 
@@ -241,9 +275,8 @@ class Binance:
                     positions_opened_changed = positions_opened_changed[positions_opened_changed["TARGET_AMOUNT_PASS"]]
                     positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
 
-
                 positions_opened = positions_opened_changed.copy()[positions_opened_changed["symbol"].isna()].set_index("final_symbol")
-                    
+
                 positions_changed = positions_opened_changed.copy()[~positions_opened_changed["symbol"].isna()]
                 if len(positions_changed) > 0:
                     positions_changed["CURRENT_VALUE"] = positions_changed["netAsset"] * positions_changed["leader_markPrice"]
@@ -260,9 +293,17 @@ class Binance:
                     positions_changed["OPEN"] = ((positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["TARGET_AMOUNT"] > 0)) | ((positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["TARGET_AMOUNT"] < 0))
                     positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
                     
-                if any([len(positions_opened) > 0, len(positions_closed) > 0, len(positions_changed) > 0, len(positions_excess) > 0]):
+                if any([len(positions_opened) > 0, len(positions_closed) > 0, len(positions_changed) > 0]):
                     lifecycle["tick_boost"] = True
-                    
+
+                    levered_ratio = user_invested_ratio * user_leverage
+
+                    print(f'[{utils.current_readable_time()}]: Updated Positions - Invested: {round(user_invested_ratio * 100) / 100} - Levered: {round(levered_ratio * 100) / 100}')
+
+                    account_data.update({
+                        "levered_ratio": levered_ratio,
+                        "unlevered_ratio": user_invested_ratio,
+                    })
             else:
                 print(f'[{utils.current_readable_time()}]: Updating Positions')
 
@@ -271,29 +312,18 @@ class Binance:
                 positions_closed = self.validate_amounts(positions_closed, "netAsset", "CURRENT_VALUE")
                 positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
 
-                positions_excess = positions_closed.copy()[(positions_closed["borrowed"] != 0) & (positions_closed["borrowed"] > positions_closed["netAsset"].abs())]
-                positions_excess["FREE_VALUE"] = positions_excess["free"] * positions_excess["SYMBOL_PRICE"]
-                positions_excess = self.validate_amounts(positions_excess, "free", "FREE_VALUE")
-                # positions_excess = positions_excess.loc[positions_excess["FREE_VALUE"] > 2]
-
                 positions_opened = []
                 positions_changed = []
                 n_leaders = 0
                 active_leaders = []
-                
+            
+            account_data.update({
+                "n_leaders": n_leaders,
+                "active_leaders": list(active_leaders)
+            })
             user_account_update = {
-                "account": {
-                    "value_BTC": assetBTC,
-                    "value_USDT": valueUSDT,
-                    # "levered_ratio": levered_ratio,
-                    # "unlevered_ratio": unlevered_ratio,
-                    "collateral_margin_level": collateral_margin_level,
-                    "collateral_value_USDT": float(margin_account_data["collateralMarginLevel"]),
-                    "n_leaders": n_leaders,
-                    "active_leaders": list(active_leaders)
-                },
+                "account": account_data,
                 "positions": user_positions.set_index("asset").to_dict(),
-                # "mix": new_user_mix
             }
 
             return user_account_update, positions_closed, positions_opened, positions_changed, positions_excess
@@ -304,10 +334,6 @@ class Binance:
     async def user_account_close(self, bot, user, new_user_mix, dropped_leaders):
         try:
             user_account_update = {
-                # "account": {
-                    # "levered_ratio": levered_ratio,
-                    # "unlevered_ratio": unlevered_ratio,
-                # },
                 "mix": new_user_mix,
                 "account": {
                     "reset_mix": False
@@ -327,32 +353,39 @@ class Binance:
             await self.handle_exception(bot, user, e, 'user_account_close', None)
     
 
-    async def repay_position(self, bot, user, symbol, amount:float, position):
+    async def repay_position(self, bot, user, asset, amount:float, position):
         # weight = 3000
         try:
-            self.client.borrow_repay(asset=symbol.replace('USDT', ''), symbol=symbol, amount=amount, type='REPAY', isIsolated='FALSE')
-            await self.app.log.create(bot, user, 'INFO', 'REPAY', 'TRADE', f'Repayed Position: {symbol} - {amount}', details=position.to_dict())
+            self.client.borrow_repay(asset=asset, symbol=asset + 'USDT', amount=amount, type='REPAY', isIsolated='FALSE')
+            await self.app.log.create(bot, user, 'INFO', 'REPAY', 'TRADE', f'Repayed Position: {asset} - {amount}', details=position.to_dict())
         except Exception as error:
-            await self.handle_exception(bot, user, error, f'repay_position {symbol} - {amount}', symbol, position=position)
+            await self.handle_exception(bot, user, error, f'repay_position {asset} - {amount}', asset, position=position)
 
     
     async def open_position(self, bot, user, symbol:str, amount, position, user_mix, source, reverse=False, full=False):
         # weight = 6
         try:
-            if reverse:
-                amount *= -1
-
-            side = 'BUY'
-            if amount < 0:
-                side = 'SELL'
-
+            amount = amount * -1 if reverse else amount
+            side = 'SELL' if amount < 0 else 'BUY'
             side_effect = 'AUTO_BORROW_REPAY' if full else 'MARGIN_BUY'
 
             self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Opened Position: {symbol} - {amount}', details=str(position.to_dict()))
         except Exception as error:
             if error.args[1] == -2010:
-                await self.app.binance.open_position(bot, user, symbol, amount, position, user_mix, f'{source} /auto', full=True)
+                await self.app.binance.open_position(bot, user, symbol, amount, position, user_mix, f'{source} - AUTO', full=True)
+            if error.args[1] == -3045:
+                if "ignored_symbols" in user["account"]["data"].keys():
+                    ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
+                else:
+                    ignored_symbols = pd.DataFrame(columns=["symbol", "time"]).set_index("symbol")
+                ignored_symbols.loc[symbol] = utils.current_time()
+                user_update = {
+                    "account": {
+                        "ignored_symbols": ignored_symbols.to_dict()
+                    }
+                }
+                await self.app.database.update(user, user_update, 'users')
             else:
                 await self.handle_exception(bot, user, error, f'{source}: {symbol} - {amount}', symbol, user_mix=user_mix, position=position)
 
@@ -360,20 +393,15 @@ class Binance:
     async def close_position(self, bot, user, symbol, amount, position, user_mix, source, reverse=False, full=False):
         # weight = 6
         try:
-            if reverse:
-                amount *= -1
-
-            side = 'BUY'
-            if amount < 0:
-                side = 'SELL'
-
+            amount = amount * -1 if reverse else amount
+            side = 'SELL' if amount < 0 else 'BUY'
             side_effect = 'AUTO_BORROW_REPAY' if full else 'AUTO_REPAY'
 
             self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Closed Position: {symbol} - {amount}', str(position.to_dict()))
         except Exception as error:
             if error.args[1] == -2010:
-                await self.app.binance.close_position(bot, user, symbol, amount, position, user_mix, f'{source} /auto', full=True)
+                await self.app.binance.close_position(bot, user, symbol, amount, position, user_mix, f'{source} - AUTO', full=True)
             else:
                 await self.handle_exception(bot, user, error, f'{source}: {symbol} - {amount}', symbol, user_mix=user_mix, position=position)
 

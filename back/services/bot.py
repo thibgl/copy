@@ -5,12 +5,11 @@ import traceback
 import time
 import pandas as pd
 
-
 class Bot:
     def __init__(self, app):
         self.app = app
 
-    async def tick(self, API=False):
+    async def tick(self, tick, API=False):
         bot = await self.app.db.bot.find_one()
 
         start_time = utils.current_time()
@@ -20,6 +19,7 @@ class Bot:
         }
 
         if bot["account"]["data"]["active"]:
+            # print(tick["last_tick"])
             users = self.app.db.users.find()
 
             roster = pd.DataFrame(columns=["ID"])
@@ -28,6 +28,9 @@ class Bot:
 
             async for user in users:
                 try:
+                    account_data, live_pool, user_positions, positions_excess = await self.app.binance.user_account_open(bot, user)
+                    await self.repay_debts(bot, user, positions_excess)
+
                     user_leaders = pd.DataFrame(user["leaders"]["data"])
                     
                     if user_leaders.size > 0:
@@ -67,26 +70,30 @@ class Bot:
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed, positions_excess = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed, positions_excess = await self.app.binance.user_account_update(bot, user, account_data, live_pool, user_positions, positions_excess, user_positions_new, user_leaders, user_mix_diff, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
                         if user_account_update_success:
-                            await self.repay_debts(bot, user, positions_excess)
                             await self.close_positions(bot, user, positions_closed, user_mix_new)
                             await self.change_positions(bot, user, positions_changed, user_mix_new)
                             await self.open_positions(bot, user, positions_opened, user_mix_new)
                             await self.set_stop_losses(bot, user, positions_opened, positions_changed)
-
-                        # if lifecycle["reset_rotate"]:
-                        #     self.app.scrap.cleanup()
-                        #     self.app.scrap.start()
                         
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
                             await self.app.scrap.update_leaders(bot, user)
                 
                         user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new, dropped_leaders)
                         user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
-            
+                        
+                        last_tick = utils.current_time()
+                        bot_update = {
+                            "account": {
+                                "last_tick": last_tick,
+                                "ticks": bot["account"]["data"]["ticks"] + 1
+                            }
+                        }
+                        await self.app.database.update(bot, bot_update, 'bot')
+                        tick["last_tick"] = last_tick
                 #! faire le transfer de TP
                 except Exception as e:
                     trace = traceback.format_exc()
@@ -99,7 +106,7 @@ class Bot:
             end_time = (utils.current_time() - start_time) / 1000
             interval = bot["account"]["data"]["tick_boost"] if lifecycle["tick_boost"] else bot["account"]["data"]["tick_interval"]
             await asyncio.sleep(interval - end_time)
-            await self.tick()
+            await self.tick(tick)
 
 
     async def repay_debts(self, bot, user, positions_excess):
@@ -109,7 +116,8 @@ class Bot:
             for symbol, position in positions_excess.iterrows():
                 try:
                     await self.app.binance.repay_position(bot, user, symbol, position["free"], position)
-                except:
+                except Exception as e:
+                    print(e)
                     continue
 
 
@@ -117,9 +125,9 @@ class Bot:
         if len(closed_positions) > 0:
             # print('closed_positions')
             # print(closed_positions)
-            for symbol, position in closed_positions.iterrows():
+            for asset, position in closed_positions.iterrows():
                 try:
-                    await self.app.binance.close_position(bot, user, symbol, position["netAsset_TRUNCATED"], position, new_user_mix, 'FULL CLOSE', reverse=True)
+                    await self.app.binance.close_position(bot, user, asset, position["netAsset_TRUNCATED"], position, new_user_mix, 'FULL CLOSE', reverse=True)
                     time.sleep(0.2)
                 except:
                     continue
