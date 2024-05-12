@@ -45,10 +45,10 @@ app.db = app.mongodb_client.db
 
 app.auth = Auth(app)
 app.database = Database(app)
+app.scrap = Scrap(app)
 
 if server_mode:
     app.binance = Binance(app)
-    app.scrap = Scrap(app)
     app.bot = Bot(app)
     app.log = Log(app)
     app.telegram = Telegram(app)

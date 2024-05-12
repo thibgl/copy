@@ -106,7 +106,7 @@ class Bot:
 
         if not API:
             end_time = (utils.current_time() - start_time) / 1000
-            interval = bot["account"]["data"]["tick_boost"] if lifecycle["tick_boost"] else bot["account"]["data"]["tick_interval"]
+            interval = bot["account"]["data"]["tick_boost"] if (lifecycle["tick_boost"] or len(positions_excess) > 0) else bot["account"]["data"]["tick_interval"]
             await asyncio.sleep(interval - end_time)
             await self.tick(tick)
 
@@ -118,6 +118,7 @@ class Bot:
             for symbol, position in positions_excess.iterrows():
                 try:
                     await self.app.binance.repay_position(bot, user, symbol, position["free"], position)
+                    time.sleep(0.2)
                 except Exception as e:
                     print(e)
                     continue
