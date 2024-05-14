@@ -28,9 +28,6 @@ class Bot:
 
             async for user in users:
                 try:
-                    account_data, live_pool, user_positions, positions_excess = await self.app.binance.user_account_open(bot, user)
-                    await self.repay_debts(bot, user, positions_excess)
-
                     user_leaders = pd.DataFrame(user["leaders"]["data"])
                     
                     if user_leaders.size > 0:
@@ -70,13 +67,14 @@ class Bot:
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed, positions_excess = await self.app.binance.user_account_update(bot, user, account_data, live_pool, user_positions, positions_excess, user_positions_new, user_leaders, user_mix_diff, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed, positions_excess = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
                         if user_account_update_success:
                             await self.close_positions(bot, user, positions_closed, user_mix_new)
                             await self.change_positions(bot, user, positions_changed, user_mix_new)
                             await self.open_positions(bot, user, positions_opened, user_mix_new)
+                            await self.repay_debts(bot, user, positions_excess)
                             await self.set_stop_losses(bot, user, positions_opened, positions_changed)
                         
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
@@ -99,6 +97,7 @@ class Bot:
                     try:
                         trace = traceback.format_exc()
                         print(trace)
+                        print(user_account, positions_closed, positions_opened, positions_changed, positions_excess)
                         await self.app.log.create(bot, user, 'FATAL', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
                         raise SystemExit()
                     except:
