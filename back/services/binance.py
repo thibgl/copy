@@ -210,7 +210,8 @@ class Binance:
 
                     debug_positions_opened_changed = positions_opened_changed.copy()
 
-                    positions_closed = live_pool.copy().loc[((~live_pool["symbol"].isin(positions_opened_changed["final_symbol"])) & (live_pool["symbol"] != last_symbol))]
+                    positions_closed = live_pool.copy().loc[(~live_pool["symbol"].isna()) & (~live_pool["symbol"].isin(positions_opened_changed["final_symbol"])) & (live_pool["symbol"] != last_symbol)]
+
                     if len(positions_closed) > 0:
                         positions_closed = positions_closed.groupby('symbol').agg({
                             "netAsset": 'first',
@@ -303,16 +304,7 @@ class Binance:
                 "account": account_data,
                 "positions": user_positions.set_index("asset").to_dict(),
             }
-            if type(user_account_update) != pd.DataFrame and user_account_update == None:
-                print("NO user_account_update")
-            if type(positions_closed) != pd.DataFrame and positions_closed == None:
-                print("NO positions_closed")
-            if type(positions_opened) != pd.DataFrame and positions_opened == None:
-                print("NO positions_opened")
-            if type(positions_changed) != pd.DataFrame and positions_changed == None:
-                print("NO positions_changed")
-            if type(positions_excess) != pd.DataFrame and positions_excess == None:
-                print("NO positions_excess")
+
             return user_account_update, positions_closed, positions_opened, positions_changed, positions_excess
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
