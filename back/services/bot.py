@@ -97,7 +97,6 @@ class Bot:
                     try:
                         trace = traceback.format_exc()
                         print(trace)
-                        print(user_account, positions_closed, positions_opened, positions_changed, positions_excess)
                         await self.app.log.create(bot, user, 'FATAL', f'bot/tick', 'TICK', f'Error During Tick: {e}', details={"trace": trace})
                         raise SystemExit()
                     except:
