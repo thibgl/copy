@@ -237,14 +237,12 @@ class Binance:
                         last_position["TARGET_VALUE"] = last_position["TARGET_VALUE"] * -1 if last_position["leader_positionAmount"] < 0 else last_position["TARGET_VALUE"]
                         last_diff_pass = abs(last_position["TARGET_VALUE"] / last_position["leader_markPrice"] - last_position["netAsset"]) / abs(last_position["netAsset"]) > 0.1 if last_position["netAsset"] else True
 
-                        debug_positions_opened_changed.loc[len(debug_positions_opened_changed)] = last_position
+                        debug_positions_opened_changed.loc[len(debug_positions_opened_changed) + 1] = last_position
 
                         if last_position["symbol"] == None or (last_position["final_symbol"] in mix_diff or len(positions_opened_changed) > 0) and last_diff_pass:
                             user_invested_ratio = user["detail"]["data"]["TARGET_RATIO"]
                             last_position["CUMULATIVE_SHARE"] = user_invested_ratio
-                            print(positions_opened_changed)
-                            print(last_position)
-                            positions_opened_changed.loc[len(positions_opened_changed)] = last_position
+                            positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
 
                     print(debug_positions_opened_changed)
 
