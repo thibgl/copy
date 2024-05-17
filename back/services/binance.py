@@ -153,7 +153,7 @@ class Binance:
             
             pool = user_positions[['asset', 'symbol', 'netAsset', 'borrowed', 'free', 'interest']]
             live_pool = pool.copy().loc[pool["asset"] != 'USDT']
-        
+
             ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
             
             if len(new_positions) > 0:
@@ -166,14 +166,14 @@ class Binance:
                 # live_pool = live_pool.merge(user_ignored_symbols, left_on='final_symbol', right_index=True, how='left')
                 # live_pool["time"] = live_pool["time"].fillna(utils.current_time() + 3600000 * 3)
                 # live_pool = live_pool.loc[live_pool["time"] - utils.current_time() > 3600000 * 2]
-                live_pool = live_pool.loc[~live_pool["final_symbol"].isin(ignored_symbols.index)]
+                # live_pool = live_pool.loc[]
                 live_pool = await self.get_precisions(bot, live_pool)
                 active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
 
                 print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} leaders')
 
-                positions_opened_changed = live_pool.copy()[~live_pool["leader_symbol"].isna()]
+                positions_opened_changed = live_pool.copy()[(~live_pool["leader_symbol"].isna()) & (~live_pool["final_symbol"].isin(ignored_symbols.index))]
                 # positions_opened_changed2 = positions_opened_changed.copy()
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
@@ -211,7 +211,7 @@ class Binance:
                     debug_positions_opened_changed = positions_opened_changed.copy()
 
                     positions_closed = live_pool.copy().loc[(~live_pool["symbol"].isna()) & (~live_pool["symbol"].isin(positions_opened_changed["final_symbol"])) & (live_pool["symbol"] != last_symbol)]
-
+                    
                     if len(positions_closed) > 0:
                         positions_closed = positions_closed.groupby('symbol').agg({
                             "netAsset": 'first',
