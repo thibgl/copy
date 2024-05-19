@@ -347,7 +347,10 @@ class Binance:
             side_effect = 'AUTO_BORROW_REPAY' if retry else 'MARGIN_BUY'
 
             response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
-            # print(response)
+            print(response)
+            if float(response["executedQty"]) / abs(amount) < 0.9:
+                user_mix["BAG"].pop(symbol)
+
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Opened Position: {symbol} - {amount}', details=str(position.to_dict()))
         except Exception as error:
             if error.args[1] == -2010 and not retry:
@@ -376,7 +379,10 @@ class Binance:
             side_effect = 'AUTO_BORROW_REPAY' if retry else 'AUTO_REPAY'
 
             response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
-            # print(response)
+            print(response)
+            if float(response["executedQty"]) / abs(amount) < 0.9:
+                user_mix["BAG"].pop(symbol)
+
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Closed Position: {symbol} - {amount}', str(position.to_dict()))
         except Exception as error:
             if error.args[1] == -2010 and not retry:
