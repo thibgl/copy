@@ -286,7 +286,7 @@ class Scrap:
                         total_levered_value = grouped_positions["notionalValue"].abs().sum()
                         total_unlevered_value = grouped_positions["UNLEVERED_VALUE"].abs().sum()
 
-                        total_balance = float(leader["detail"]["data"]["marginBalance"])
+                        total_balance = float(leader["detail"]["data"]["marginBalance"]) + total_unlevered_value
                         levered_ratio = total_levered_value / total_balance
                         unlevered_ratio = total_unlevered_value / total_balance
                         
@@ -314,6 +314,7 @@ class Scrap:
                         # print(leader["performance"]["data"])
                         grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
                         grouped_positions["LEVERED_RATIO"] = levered_ratio
+                        grouped_positions["TOTAL_BALANCE"] = total_balance
 
                         positions_update = {
                             "account": {
@@ -327,7 +328,7 @@ class Scrap:
                             "grouped_positions": grouped_positions.to_dict(),
                         }
 
-                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "PROFIT", "SHARP", "ROI", "LEVERED_RATIO", "POSITION_SHARE"]]
+                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "TOTAL_BALANCE", "PROFIT", "SHARP", "ROI", "LEVERED_RATIO", "POSITION_SHARE"]]
                     
                 return {}, []
             else:
