@@ -76,31 +76,6 @@ class Binance:
 
         return dataframe
 
-    def handle_positions(self, dataframe):
-        dataframe['TOTAL_TARGET_SHARE'] = dataframe.groupby('final_symbol')['TARGET_SHARE'].transform('sum')
-        dataframe["POSITION_WEIGHT"] = dataframe["TARGET_SHARE"] / dataframe["TOTAL_TARGET_SHARE"]
-        dataframe["WEIGHTED_SHARP"] = dataframe['leader_SHARP'] * dataframe["POSITION_WEIGHT"]
-        dataframe["WEIGHTED_ROI"] = dataframe['leader_ROI'] * dataframe["POSITION_WEIGHT"]
-        dataframe = dataframe.groupby("final_symbol").agg({
-            "symbol": 'first',
-            "leader_symbol": 'first',
-            "netAsset": 'first',
-            "borrowed": 'first',
-            "free": 'first',
-            "interest": 'first',
-            "stepSize": 'first',
-            "minQty": 'first',
-            "minNotional": 'first',
-            "leader_ID": 'unique',
-            "WEIGHTED_SHARP": 'mean',
-            "WEIGHTED_ROI": 'mean',
-            "leader_positionAmount": 'sum',
-            "leader_markPrice": 'mean',
-            "TARGET_SHARE": 'sum',
-            }).reset_index()
-        
-        return dataframe
-
     def truncate_amount(self, amount, stepSize):
         # print(amount, stepSize)
         # if amount and stepSize:
@@ -178,10 +153,7 @@ class Binance:
                 live_pool = live_pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
                 live_pool["final_symbol"] = live_pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
                 live_pool = live_pool.merge(user_leaders.add_prefix("user_"), left_on="leader_ID", right_index=True, how='left')
-                # live_pool = live_pool.merge(user_ignored_symbols, left_on='final_symbol', right_index=True, how='left')
-                # live_pool["time"] = live_pool["time"].fillna(utils.current_time() + 3600000 * 3)
-                # live_pool = live_pool.loc[live_pool["time"] - utils.current_time() > 3600000 * 2]
-                # live_pool = live_pool.loc[]
+
                 live_pool = await self.get_precisions(bot, live_pool)
                 active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
@@ -197,16 +169,9 @@ class Binance:
 
                     positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap
 
-                    # positions_short = positions_opened_changed.copy().loc[positions_opened_changed["leader_positionAmount"] < 0]
-                    # positions_short = self.handle_positions(positions_short)
-                    # positions_long = positions_opened_changed.copy().loc[positions_opened_changed["leader_positionAmount"] > 0]
-                    # positions_long = self.handle_positions(positions_long)
-
-                    # positions_opened_changed = pd.concat([positions_short, positions_long])
-                    # positions_opened_changed = positions_opened_changed.sort_values(by=['final_symbol', 'TARGET_SHARE'], ascending=[True, False])
-                    # positions_opened_changed = positions_opened_changed.drop_duplicates(subset='final_symbol', keep='first')
-                    positions_opened_changed['TOTAL_TARGET_SHARE'] = positions_opened_changed.groupby('final_symbol')['TARGET_SHARE'].transform('sum')
-                    positions_opened_changed["POSITION_WEIGHT"] = positions_opened_changed["TARGET_SHARE"] / positions_opened_changed["TOTAL_TARGET_SHARE"]
+                    positions_opened_changed['ABSOLUTE_SHARE'] = positions_opened_changed["TARGET_SHARE"].abs()
+                    positions_opened_changed['TOTAL_TARGET_SHARE'] = positions_opened_changed.groupby('final_symbol')['ABSOLUTE_SHARE'].transform('sum')
+                    positions_opened_changed["POSITION_WEIGHT"] = positions_opened_changed["ABSOLUTE_SHARE"] / positions_opened_changed["TOTAL_TARGET_SHARE"]
                     positions_opened_changed["WEIGHTED_SHARP"] = positions_opened_changed['leader_SHARP'] * positions_opened_changed["POSITION_WEIGHT"]
                     positions_opened_changed["WEIGHTED_ROI"] = positions_opened_changed['leader_ROI'] * positions_opened_changed["POSITION_WEIGHT"]
 
@@ -242,7 +207,6 @@ class Binance:
                     user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
 
                     positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
-                    # positions_opened_changed.loc[positions_opened_changed["leader_positionAmount"] < 0, "TARGET_VALUE"] *= -1
 
                     positions_closed = live_pool.copy().loc[(~live_pool["symbol"].isna()) & (~live_pool["symbol"].isin(positions_opened_changed["final_symbol"])) & (live_pool["symbol"] != last_symbol)]
                     
