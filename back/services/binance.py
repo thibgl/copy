@@ -257,7 +257,12 @@ class Binance:
                     print(all_positions_open_changed)
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]
-                    print(leader_entries)
+                    total_balances = new_positions.groupby('ID')['TOTAL_BALANCE'].first()
+
+                    for leader_id in opened_changed_leaders:
+                        if leader_id not in leader_entries.index:
+                            leader_entries.loc[leader_id] = total_balances.loc[leader_id]
+
                     positions_opened_changed["CURRENT_VALUE"] = positions_opened_changed["netAsset"] * positions_opened_changed["leader_markPrice"]
                     positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice"]
 
@@ -266,12 +271,6 @@ class Binance:
                     positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
 
                 positions_opened = positions_opened_changed.copy()[(positions_opened_changed["symbol"].isna()) & (~positions_opened_changed["netAsset_PASS"])].set_index("final_symbol")
-                if len(positions_opened) > 0:
-                    total_balances = new_positions.groupby('ID')['TOTAL_BALANCE'].first()
-
-                    for leader_id in opened_changed_leaders:
-                        if leader_id not in leader_entries.index:
-                            leader_entries.loc[leader_id] = total_balances.loc[leader_id]
 
                 positions_changed = positions_opened_changed.copy()[positions_opened_changed["TARGET_AMOUNT_PASS"] & (positions_opened_changed["netAsset_PASS"])]
                 if len(positions_changed) > 0:
