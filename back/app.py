@@ -129,7 +129,7 @@ async def scrap_data():
     bot = await app.db.bot.find_one()
     # response = await app.scrap.fetch_pages(bot, 'leaders', results_limit=100)
 
-    async for page in app.scrap.fetch_pages(bot, 'leaders', results_limit=200):
+    async for page in app.scrap.fetch_pages(bot, 'leaders', results_limit=300):
         for leader in page:
             leader = await app.scrap.get_leader(bot, leader['leadPortfolioId'])
     # print(pd.DataFrame(response["data"]).head().to())

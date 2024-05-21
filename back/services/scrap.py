@@ -277,7 +277,7 @@ class Scrap:
                         scaled_unlevered_ratio = 4 / ((1 + unlevered_ratio) ** 2) * unlevered_ratio
 
                         filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
-                        filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"]
+                        filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"].abs()
             
                         grouped_positions = filtered_positions.groupby("symbol").agg({
                             "markPrice": 'mean',
@@ -291,11 +291,9 @@ class Scrap:
 
                         average_leverage = grouped_positions["leverage_WEIGHTED"].mean()
 
-                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / average_leverage / total_balance
-
                         grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
                         grouped_positions["ID"] = str(binance_id)
-                        grouped_positions["POSITION_SHARE"] = grouped_positions["POSITION_SHARE"].abs()
+                        grouped_positions["POSITION_SHARE"] = abs(grouped_positions["notionalValue"] / average_leverage / total_balance)
                         grouped_positions = grouped_positions.set_index("ID")
 
                         if "ticks" in leader["account"]["data"].keys():
