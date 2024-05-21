@@ -293,7 +293,7 @@ class Scrap:
 
                         grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
                         grouped_positions["ID"] = str(binance_id)
-                        grouped_positions["POSITION_SHARE"] = abs(grouped_positions["notionalValue"] / average_leverage / total_balance)
+                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / average_leverage / total_balance
                         grouped_positions = grouped_positions.set_index("ID")
 
                         if "ticks" in leader["account"]["data"].keys():
