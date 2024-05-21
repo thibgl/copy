@@ -171,7 +171,7 @@ class Binance:
                         if drifter not in dropped_leaders:
                             dropped_leaders.append(drifter)
 
-                new_positions = new_positions.loc[new_positions["LAST_ROI"] >= 0.8]                
+                new_positions = new_positions.loc[new_positions["LAST_ROI"] >= 0.8]  
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
                 new_positions.loc[new_positions["thousand"], "markPrice"] /= 1000
 
@@ -199,7 +199,7 @@ class Binance:
 
                     positions_opened_changed.loc[positions_opened_changed["leader_LEVERED_RATIO"] > max_levered_ratio, "leader_LEVERED_RATIO"] = max_levered_ratio
 
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["leader_LEVERED_RATIO"] * positions_opened_changed["user_WEIGHT"] * leader_cap * boost
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * 4
 
                     positions_short = positions_opened_changed.copy().loc[positions_opened_changed["leader_positionAmount"] < 0]
                     positions_short = self.handle_positions(positions_short)
@@ -275,7 +275,6 @@ class Binance:
                         if leader_id not in leader_entries.index:
                             leader_entries.loc[leader_id] = new_positions.loc[leader_id]["ROI"]
 
-                print(leader_entries)
                 positions_changed = positions_opened_changed.copy()[positions_opened_changed["TARGET_AMOUNT_PASS"] & (positions_opened_changed["netAsset_PASS"])]
                 if len(positions_changed) > 0:
                     positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]

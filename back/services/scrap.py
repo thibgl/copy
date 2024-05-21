@@ -262,11 +262,21 @@ class Scrap:
                     positions["ID"] = binance_id
                     positions = positions.set_index("ID")
                     positions = positions.apply(lambda column: column.astype(float) if column.name in ["markPrice", "positionAmount", "notionalValue", "leverage", "unrealizedProfit"] else column)
-                   
+
                     filtered_positions = positions.copy().loc[(positions["positionAmount"] != 0) & (positions["collateral"] == "USDT")]
                     if len(filtered_positions) > 0:
                         filtered_positions["UNLEVERED_VALUE"] = filtered_positions["notionalValue"] / filtered_positions["leverage"]
-                        filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"].abs() / filtered_positions["notionalValue"].abs().sum()
+
+                        total_levered_value = abs(filtered_positions["notionalValue"].sum())
+                        total_unlevered_value = abs(filtered_positions["UNLEVERED_VALUE"].sum())
+
+                        total_balance = float(leader["detail"]["data"]["marginBalance"]) + total_unlevered_value
+                        levered_ratio = total_levered_value / total_balance
+                        unlevered_ratio = total_unlevered_value / total_balance
+                        
+                        scaled_unlevered_ratio = 4 / ((1 + unlevered_ratio) ** 2) * unlevered_ratio
+
+                        filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
                         filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"]
             
                         grouped_positions = filtered_positions.groupby("symbol").agg({
@@ -279,19 +289,14 @@ class Scrap:
                             "leverage_WEIGHTED": 'mean'
                             }).reset_index()
 
+                        average_leverage = grouped_positions["leverage_WEIGHTED"].mean()
+
+                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / average_leverage / total_balance
+
                         grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
                         grouped_positions["ID"] = str(binance_id)
+                        grouped_positions["POSITION_SHARE"] = grouped_positions["POSITION_SHARE"].abs()
                         grouped_positions = grouped_positions.set_index("ID")
-
-                        total_levered_value = grouped_positions["notionalValue"].abs().sum()
-                        total_unlevered_value = grouped_positions["UNLEVERED_VALUE"].abs().sum()
-
-                        total_balance = float(leader["detail"]["data"]["marginBalance"]) + total_unlevered_value
-                        levered_ratio = total_levered_value / total_balance
-                        unlevered_ratio = total_unlevered_value / total_balance
-                        
-                        average_leverage = levered_ratio / unlevered_ratio
-                        scaled_unlevered_ratio = 4 / ((1 + unlevered_ratio) ** 2) * unlevered_ratio
 
                         if "ticks" in leader["account"]["data"].keys():
                             ticks = leader["account"]["data"]["ticks"] + 1
