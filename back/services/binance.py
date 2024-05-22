@@ -105,6 +105,7 @@ class Binance:
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, mean_unlevered_ratio, lifecycle):
         weigth = 10
         try:
+            # print(new_positions['POSITION_SHARE'].sum())
             reset_mix = False
             # leader_entries = new_positions.groupby("ID").agg({"TOTAL_BALANCE": 'first'})
             leader_entries = pd.DataFrame(user["entries"]["data"])
@@ -168,7 +169,7 @@ class Binance:
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
                     positions_closed = []
-                    leader_cap = user["detail"]["data"]["TARGET_RATIO"] / mean_unlevered_ratio / 2
+                    leader_cap = user["detail"]["data"]["TARGET_RATIO"] / mean_unlevered_ratio / user["account"]["data"]["leverage"]
 
                     positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap
 
@@ -194,7 +195,7 @@ class Binance:
                         "WEIGHTED_ROI": 'mean',
                         "leader_positionAmount": 'sum',
                         "leader_markPrice": 'mean',
-                        "TARGET_SHARE": 'mean',
+                        "TARGET_SHARE": 'sum',
                         }).reset_index()
                     # print(positions_opened_changed)
                     positions_opened_changed = positions_opened_changed.sort_values(by=["WEIGHTED_SHARP", "WEIGHTED_ROI", "TARGET_SHARE"], ascending=False)
@@ -278,7 +279,7 @@ class Binance:
                     positions_changed["OPEN"] = ((positions_changed["DIFF_AMOUNT"] > 0) & (positions_changed["TARGET_AMOUNT"] > 0)) | ((positions_changed["DIFF_AMOUNT"] < 0) & (positions_changed["TARGET_AMOUNT"] < 0))
                     positions_changed["SWITCH_DIRECTION"] = ((positions_changed["netAsset"] > 0) & (positions_changed["TARGET_AMOUNT"] < 0)) | ((positions_changed["netAsset"] < 0) & (positions_changed["TARGET_AMOUNT"] > 0))
                     
-                if any([len(positions_opened) > 0, len(positions_closed) > 0, len(positions_changed) > 0, len(positions_excess) > 0]):
+                if any([len(positions_opened) > 0, len(positions_closed) > 0, len(positions_changed) > 0]): #, len(positions_excess) > 0
                     lifecycle["tick_boost"] = True
 
                     levered_ratio = user_invested_ratio * user_leverage
@@ -342,8 +343,9 @@ class Binance:
     async def repay_position(self, bot, user, asset, amount:float, position):
         # weight = 3000
         try:
-            self.client.borrow_repay(asset=asset, symbol=asset + 'USDT', amount=amount, type='REPAY', isIsolated='FALSE')
-            await self.app.log.create(bot, user, 'INFO', 'REPAY', 'TRADE', f'Repayed Position: {asset} - {amount}', details=position.to_dict())
+            if asset == 'USDT' and amount > 5 or asset != 'USDT':
+                self.client.borrow_repay(asset=asset, symbol=asset + 'USDT', amount=amount, type='REPAY', isIsolated='FALSE')
+                await self.app.log.create(bot, user, 'INFO', 'REPAY', 'TRADE', f'Repayed Position: {asset} - {amount}', details=position.to_dict())
         except Exception as error:
             await self.handle_exception(bot, user, error, f'repay_position {asset} - {amount}', asset, position=str(position), notify=False)
 
@@ -357,7 +359,7 @@ class Binance:
 
             response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
             # print(response)
-            if float(response["executedQty"]) / abs(amount) < 0.9:
+            if float(response["executedQty"]) / abs(amount) < 0.8:
                 user_mix["BAG"].pop(symbol)
 
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Opened Position: {symbol} - {amount} / {round(position["TARGET_VALUE"], 2)}', details=str(position.to_dict()))

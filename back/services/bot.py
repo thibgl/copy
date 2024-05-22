@@ -39,6 +39,7 @@ class Bot:
                                 try:
                                     leader = await self.app.scrap.get_leader(bot, binance_id)
                                     mean_unlevered_ratio += leader["account"]["data"]["average_unlevered_ratio"]
+
                                     if leader:
                                         positions_update, leader_grouped_positions = await self.app.scrap.leader_positions_update(bot, leader, lifecycle)
 
@@ -105,7 +106,7 @@ class Bot:
 
         if not API:
             end_time = (utils.current_time() - start_time) / 1000
-            interval = bot["account"]["data"]["tick_boost"] if (lifecycle["tick_boost"] or len(positions_excess) > 0) else bot["account"]["data"]["tick_interval"]
+            interval = bot["account"]["data"]["tick_boost"] if lifecycle["tick_boost"] else bot["account"]["data"]["tick_interval"]
             await asyncio.sleep(interval - end_time)
             await self.tick(tick)
 
@@ -145,8 +146,8 @@ class Bot:
 
     async def change_positions(self, bot, user, changed_positions, new_user_mix):
         if len(changed_positions) > 0:
-            print('changed_positions')
-            print(changed_positions)
+            # print('changed_positions')
+            # print(changed_positions)
             for symbol, position in changed_positions.iterrows():
                 try:
                     if position["SWITCH_DIRECTION"]:
