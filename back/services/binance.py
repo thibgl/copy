@@ -161,7 +161,6 @@ class Binance:
                 print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} leaders')
 
                 positions_opened_changed = live_pool.copy()[((~live_pool["leader_symbol"].isna()) | (live_pool["symbol"].isna())) & (~live_pool["final_symbol"].isin(ignored_symbols.index))]
-                # positions_opened_changed2 = positions_opened_changed.copy()
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
                     positions_closed = []
@@ -226,6 +225,7 @@ class Binance:
                         positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
 
                     all_positions_open_changed = positions_opened_changed.copy()
+
                     if account_data["collateral_margin_level"] > 1.15:
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
@@ -257,9 +257,8 @@ class Binance:
 
                     positions_opened_changed = self.validate_amounts(positions_opened_changed, "netAsset", "CURRENT_VALUE")
                     positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
-                    positions_opened_changed['leader_ID'] = positions_opened_changed['leader_ID'].astype(str)
 
-                positions_opened = positions_opened_changed.copy()[(positions_opened_changed["symbol"].isna()) & (~positions_opened_changed["netAsset_PASS"])].set_index("final_symbol")
+                positions_opened = positions_opened_changed.copy()[(positions_opened_changed["symbol"].isna()) | (~positions_opened_changed["netAsset_PASS"])].set_index("final_symbol")
 
                 positions_changed = positions_opened_changed.copy()[positions_opened_changed["TARGET_AMOUNT_PASS"] & (positions_opened_changed["netAsset_PASS"])]
                 if len(positions_changed) > 0:
