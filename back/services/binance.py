@@ -258,9 +258,9 @@ class Binance:
                     positions_opened_changed = self.validate_amounts(positions_opened_changed, "netAsset", "CURRENT_VALUE")
                     positions_opened_changed = self.validate_amounts(positions_opened_changed, "TARGET_AMOUNT", "TARGET_VALUE")
 
-                positions_opened = positions_opened_changed.copy()[(positions_opened_changed["symbol"].isna()) | (~positions_opened_changed["netAsset_PASS"])].set_index("final_symbol")
+                positions_opened = positions_opened_changed.copy()[(positions_opened_changed["TARGET_AMOUNT_PASS"]) & ((positions_opened_changed["symbol"].isna()) | (~positions_opened_changed["netAsset_PASS"]))].set_index("final_symbol")
 
-                positions_changed = positions_opened_changed.copy()[positions_opened_changed["TARGET_AMOUNT_PASS"] & (positions_opened_changed["netAsset_PASS"])]
+                positions_changed = positions_opened_changed.copy()[(positions_opened_changed["TARGET_AMOUNT_PASS"]) & (~positions_opened_changed["symbol"].isna()) & (positions_opened_changed["netAsset_PASS"])]
                 if len(positions_changed) > 0:
                     positions_changed["DIFF_AMOUNT"] = positions_changed["TARGET_AMOUNT"] - positions_changed["netAsset"]
                     positions_changed["DIFF_VALUE"] = positions_changed["TARGET_VALUE"] - positions_changed["CURRENT_VALUE"]
