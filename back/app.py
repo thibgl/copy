@@ -214,7 +214,8 @@ async def home():
 
 @app.get('/leaders/all', response_model=AllLeaders)
 async def all_leaders():
-    leaders_cursor = app.db.leaders.find({"status": {"$ne": "INACTIVE"}})
+    # leaders_cursor = app.db.leaders.find({"status": {"$ne": "INACTIVE", "$ne": "CLOSED"}})
+    leaders_cursor = app.db.leaders.find({"status": {"$nin": ["INACTIVE", "CLOSED"]}})
     # leaders = await leaders_cursor.to_list(length=None)
     leaders = []
     async for leader in leaders_cursor:
@@ -233,14 +234,19 @@ async def follow(binanceId: str):
 
     if leader:
         followed_leaders = pd.DataFrame(user["leaders"]["data"])
+        fav_leaders = user["account"]["data"]["fav_leaders"]
 
         if binanceId not in followed_leaders.index.values:
             followed_leaders.loc[binanceId] = 1
 
-            update = {
-                "leaders": followed_leaders.to_dict()
-            }
-            await app.database.update(user, update, 'users')
+        if binanceId not in fav_leaders:
+            fav_leaders.append(binanceId)
+
+        update = {
+            "leaders": followed_leaders.to_dict(),
+            "account": {"fav_leaders": fav_leaders}
+        }
+        await app.database.update(user, update, 'users')
 
 @app.get('/leaders/unfollow/{binanceId}')
 async def unfollow(binanceId: str):
@@ -252,6 +258,33 @@ async def unfollow(binanceId: str):
 
         update = {
             "leaders": followed_leaders.to_dict()
+        }
+        await app.database.update(user, update, 'users')
+
+@app.get('/leaders/fav/{binanceId}')
+async def follow(binanceId: str):
+    user = await app.db.users.find_one()
+
+    fav_leaders = user["account"]["data"]["fav_leaders"]
+
+    if binanceId not in fav_leaders:
+        fav_leaders.append(binanceId)
+
+        update = {
+            "account": {"fav_leaders": fav_leaders}
+        }
+        await app.database.update(user, update, 'users')
+
+@app.get('/leaders/unfav/{binanceId}')
+async def unfollow(binanceId: str):
+    user = await app.db.users.find_one()
+    fav_leaders = user["account"]["data"]["fav_leaders"]
+
+    if binanceId in fav_leaders:
+        fav_leaders.remove(binanceId)
+
+        update = {
+            "account": {"fav_leaders": fav_leaders}
         }
         await app.database.update(user, update, 'users')
 

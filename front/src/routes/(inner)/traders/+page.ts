@@ -8,6 +8,6 @@ export const load: PageLoad = async ({ data }) => {
     return {
         ...data,
         userLeaders: writable(data.user.leaders.WEIGHT),
-        userFavorites: writable(data.user.detail.favorite_leaders)
+        userFavorites: writable(data.user.account.fav_leaders)
     }
 }

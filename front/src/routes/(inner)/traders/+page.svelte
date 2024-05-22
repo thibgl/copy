@@ -55,7 +55,7 @@
 	// console.log($userLeaders);
 
 	async function favLeader(leader) {
-		const response = await fetch(`api/unfollow?binanceId=${leader.binanceId}`);
+		const response = await fetch(`api/fav?binanceId=${leader.binanceId}`);
 		if (response.ok) {
 			$userFavorites.push(leader.binanceId);
 			$userFavorites = $userFavorites;
@@ -65,7 +65,7 @@
 	}
 
 	async function unfavLeader(leader) {
-		const response = await fetch(`api/unfollow?binanceId=${leader.binanceId}`);
+		const response = await fetch(`api/unfav?binanceId=${leader.binanceId}`);
 		if (response.ok) {
 			const index = $userFavorites.indexOf(leader.binanceId);
 			if (index > -1) {
@@ -97,11 +97,18 @@
 		}
 	}
 
-	$page.data.leaders.sort(
-		(a, b) =>
-			+Object.keys($userLeaders).includes(b.binanceId) -
-			+Object.keys($userLeaders).includes(a.binanceId)
-	);
+	$page.data.leaders.sort((a, b) => {
+		const aIsUserLeader = Object.keys($userLeaders).includes(a.binanceId);
+		const bIsUserLeader = Object.keys($userLeaders).includes(b.binanceId);
+		const aIsUserFavorite = $userFavorites.includes(a.binanceId);
+		const bIsUserFavorite = $userFavorites.includes(b.binanceId);
+
+		if (aIsUserLeader && !bIsUserLeader) return -1;
+		if (!aIsUserLeader && bIsUserLeader) return 1;
+		if (aIsUserFavorite && !bIsUserFavorite) return -1;
+		if (!aIsUserFavorite && bIsUserFavorite) return 1;
+		return 0;
+	});
 </script>
 
 <div class="flex flex-col space-y-3">

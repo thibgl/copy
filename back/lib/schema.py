@@ -218,7 +218,6 @@ class UserDetailData(BaseModel):
     TARGET_RATIO: float
     active: bool
     chat_id: int
-    favorite_leaders: List[str]
 
 class UserAccountData(BaseModel):
     leverage: int
@@ -230,6 +229,7 @@ class UserAccountData(BaseModel):
     collateral_value_USDT: float
     n_leaders: int
     active_leaders: List[str]
+    fav_leaders: List[str]
 
 class UserLeadersData(BaseModel):
     WEIGHT: Dict[str, int]

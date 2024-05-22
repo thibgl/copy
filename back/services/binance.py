@@ -137,8 +137,8 @@ class Binance:
             if len(new_positions) > 0:
                 new_positions = new_positions.merge(leader_entries.add_prefix("previous_"), left_index=True, right_index=True, how='left')
                 new_positions["LAST_ROI"] = new_positions["TOTAL_BALANCE"] / new_positions["previous_TOTAL_BALANCE"]
-                # print(new_positions)
-                drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.8]
+                print(new_positions)
+                drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
                 if len(drifters) > 0:
                     drifters = drifters.index.unique()
 
@@ -146,7 +146,7 @@ class Binance:
                         if drifter not in dropped_leaders:
                             dropped_leaders.append(drifter)
 
-                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.8) | (new_positions["LAST_ROI"].isna())]  
+                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.9) | (new_positions["LAST_ROI"].isna())]  
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
                 new_positions.loc[new_positions["thousand"], "markPrice"] /= 1000
 
@@ -174,6 +174,7 @@ class Binance:
                     positions_opened_changed["WEIGHTED_SHARP"] = positions_opened_changed['leader_SHARP'] * positions_opened_changed["POSITION_WEIGHT"]
                     positions_opened_changed["WEIGHTED_ROI"] = positions_opened_changed['leader_ROI'] * positions_opened_changed["POSITION_WEIGHT"]
 
+                    # print(positions_opened_changed)
                     positions_opened_changed = positions_opened_changed.groupby("final_symbol").agg({
                         "symbol": 'first',
                         "leader_symbol": 'first',
@@ -189,13 +190,11 @@ class Binance:
                         "WEIGHTED_ROI": 'mean',
                         "leader_positionAmount": 'sum',
                         "leader_markPrice": 'mean',
-                        "TARGET_SHARE": 'sum',
+                        "TARGET_SHARE": 'mean',
                         }).reset_index()
-                    
+                    # print(positions_opened_changed)
                     positions_opened_changed = positions_opened_changed.sort_values(by=["WEIGHTED_SHARP", "WEIGHTED_ROI", "TARGET_SHARE"], ascending=False)
 
-                    positions_opened_changed["n_leaders"] = positions_opened_changed["leader_ID"].apply(len)
-                    positions_opened_changed['TARGET_SHARE'] = positions_opened_changed['TARGET_SHARE'] / positions_opened_changed["n_leaders"]
                     positions_opened_changed["CUMULATIVE_SHARE"] = positions_opened_changed["TARGET_SHARE"].abs().cumsum()
                     positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
 
@@ -225,7 +224,7 @@ class Binance:
                         positions_closed = positions_closed[positions_closed["netAsset_PASS"]].set_index("symbol")
 
                     all_positions_open_changed = positions_opened_changed.copy()
-
+                    # print(all_positions_open_changed)
                     if account_data["collateral_margin_level"] > 1.15:
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
@@ -237,8 +236,10 @@ class Binance:
                         last_diff_pass = abs(last_position["TARGET_VALUE"] / last_position["leader_markPrice"] - last_position["netAsset"]) / abs(last_position["netAsset"]) > 0.1 if last_position["netAsset"] else True
                         user_invested_ratio = user["detail"]["data"]["TARGET_RATIO"]
                         last_position["CUMULATIVE_SHARE"] = user_invested_ratio
-
+                        last_position['leader_ID'] = last_position['leader_ID'].tolist()
+                        # print(last_position)
                         all_positions_open_changed.loc[len(all_positions_open_changed) + 1] = last_position
+                        # print(all_positions_open_changed)
 
                         if last_position["symbol"] == None or (last_position["final_symbol"] in mix_diff or len(positions_opened_changed) > 0) and last_diff_pass:
                             positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
