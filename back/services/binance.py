@@ -102,7 +102,7 @@ class Binance:
 
         return dataframe
 
-    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, lifecycle):
+    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, mean_unlevered_ratio, lifecycle):
         weigth = 10
         try:
             reset_mix = False
@@ -168,7 +168,7 @@ class Binance:
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
                     positions_closed = []
-                    leader_cap = 20 / len(user_leaders)
+                    leader_cap = user["detail"]["data"]["TARGET_RATIO"] / mean_unlevered_ratio / 2
 
                     positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap
 
@@ -204,7 +204,7 @@ class Binance:
 
                     last_position = positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].iloc[0] if not positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].empty else pd.Series([])
                     last_symbol = last_position["symbol"] if not last_position.empty else ''
-   
+                    # print(positions_opened_changed)
                     positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <=  user["detail"]["data"]["TARGET_RATIO"]]
                     user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
 
@@ -248,7 +248,7 @@ class Binance:
                         if last_position["symbol"] == None or (last_position["final_symbol"] in mix_diff or len(positions_opened_changed) > 0) and last_diff_pass:
                             positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
 
-                    # print(all_positions_open_changed)
+                    print(all_positions_open_changed)
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]
                     total_balances = new_positions.groupby('ID')['TOTAL_BALANCE'].first()

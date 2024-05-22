@@ -32,12 +32,13 @@ class Bot:
                     
                     if user_leaders.size > 0:
                         leader_mixes = pd.DataFrame()
+                        mean_unlevered_ratio = 0
 
                         for binance_id, leader_weight in user_leaders.iterrows():
                             if binance_id not in roster.index.unique():
                                 try:
                                     leader = await self.app.scrap.get_leader(bot, binance_id)
-
+                                    mean_unlevered_ratio += leader["account"]["data"]["average_unlevered_ratio"]
                                     if leader:
                                         positions_update, leader_grouped_positions = await self.app.scrap.leader_positions_update(bot, leader, lifecycle)
 
@@ -67,7 +68,7 @@ class Bot:
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders, reset_mix = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, dropped_leaders, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders, reset_mix = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, dropped_leaders, mean_unlevered_ratio, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
                         if user_account_update_success:
