@@ -160,7 +160,7 @@ class Binance:
 
                 print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} leaders')
 
-                positions_opened_changed = live_pool.copy()[(~live_pool["leader_symbol"].isna()) & (~live_pool["final_symbol"].isin(ignored_symbols.index))]
+                positions_opened_changed = live_pool.copy()[((~live_pool["leader_symbol"].isna()) | (live_pool["symbol"].isna())) & (~live_pool["final_symbol"].isin(ignored_symbols.index))]
                 # positions_opened_changed2 = positions_opened_changed.copy()
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
