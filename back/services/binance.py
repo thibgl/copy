@@ -140,11 +140,13 @@ class Binance:
                 print(new_positions)
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
                 if len(drifters) > 0:
-                    drifters = drifters.index.unique()
+                    drifters_ids = drifters.index.unique()
 
-                    for drifter in drifters:
-                        if drifter not in dropped_leaders:
-                            dropped_leaders.append(drifter)
+                    for drifter_id in drifters_ids:
+                        if drifter_id not in dropped_leaders:
+                            dropped_leaders.append(drifter_id)
+                            await self.app.log.create(bot, user, 'INFO', 'user_account_update', 'MANAGE', f'Removed Drifter: {drifter_id}', details=str(drifters.to_dict()))
+
 
                 new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.9) | (new_positions["LAST_ROI"].isna())]  
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
