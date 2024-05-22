@@ -105,6 +105,7 @@ class Binance:
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, lifecycle):
         weigth = 10
         try:
+            reset_mix = False
             # leader_entries = new_positions.groupby("ID").agg({"TOTAL_BALANCE": 'first'})
             leader_entries = pd.DataFrame(user["entries"]["data"])
             previous_user_positions = pd.DataFrame(user["positions"]["data"])
@@ -137,7 +138,7 @@ class Binance:
             if len(new_positions) > 0:
                 new_positions = new_positions.merge(leader_entries.add_prefix("previous_"), left_index=True, right_index=True, how='left')
                 new_positions["LAST_ROI"] = new_positions["TOTAL_BALANCE"] / new_positions["previous_TOTAL_BALANCE"]
-                print(new_positions)
+                # print(new_positions)
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
                 if len(drifters) > 0:
                     drifters_ids = drifters.index.unique()
@@ -146,6 +147,7 @@ class Binance:
                         if drifter_id not in dropped_leaders:
                             dropped_leaders.append(drifter_id)
                             await self.app.log.create(bot, user, 'INFO', 'user_account_update', 'MANAGE', f'Removed Drifter: {drifter_id}', details=str(drifters.to_dict()))
+                            reset_mix = True
 
 
                 new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.9) | (new_positions["LAST_ROI"].isna())]  
@@ -246,7 +248,7 @@ class Binance:
                         if last_position["symbol"] == None or (last_position["final_symbol"] in mix_diff or len(positions_opened_changed) > 0) and last_diff_pass:
                             positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
 
-                    print(all_positions_open_changed)
+                    # print(all_positions_open_changed)
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]
                     total_balances = new_positions.groupby('ID')['TOTAL_BALANCE'].first()
@@ -310,17 +312,17 @@ class Binance:
                 "entries": leader_entries.to_dict()
             }
 
-            return user_account_update, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders
+            return user_account_update, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders, reset_mix
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
 
 
-    async def user_account_close(self, bot, user, new_user_mix, dropped_leaders):
+    async def user_account_close(self, bot, user, new_user_mix, dropped_leaders, reset_mix):
         try:
             user_account_update = {
                 "mix": new_user_mix,
                 "account": {
-                    "reset_mix": False
+                    "reset_mix": reset_mix
                 }
             }
                       

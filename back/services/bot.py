@@ -67,7 +67,7 @@ class Bot:
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, dropped_leaders, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders, reset_mix = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, dropped_leaders, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
                         if user_account_update_success:
@@ -80,7 +80,7 @@ class Bot:
                         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
                             await self.app.scrap.update_leaders(bot, user)
                 
-                        user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new, dropped_leaders)
+                        user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new, dropped_leaders, reset_mix)
                         user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
                         
                         last_tick = utils.current_time()
@@ -111,8 +111,8 @@ class Bot:
 
     async def repay_debts(self, bot, user, positions_excess):
         if len(positions_excess) > 0:
-            print('positions_excess')
-            print(positions_excess)
+            # print('positions_excess')
+            # print(positions_excess)
             for symbol, position in positions_excess.iterrows():
                 try:
                     await self.app.binance.repay_position(bot, user, symbol, position["free"], position)
@@ -124,8 +124,8 @@ class Bot:
 
     async def close_positions(self, bot, user, closed_positions, new_user_mix):
         if len(closed_positions) > 0:
-            print('closed_positions')
-            print(closed_positions)
+            # print('closed_positions')
+            # print(closed_positions)
             for asset, position in closed_positions.iterrows():
                 try:
                     await self.app.binance.close_position(bot, user, asset, position["netAsset_TRUNCATED"], position, new_user_mix, 'FULL CLOSE', reverse=True)
@@ -134,8 +134,8 @@ class Bot:
 
     async def open_positions(self, bot, user, opened_positions, new_user_mix):
         if len(opened_positions) > 0:
-            print('opened_positions')
-            print(opened_positions)
+            # print('opened_positions')
+            # print(opened_positions)
             for symbol, position in opened_positions.iterrows():
                 try:
                     await self.app.binance.open_position(bot, user, symbol, position["TARGET_AMOUNT_TRUNCATED"], position, new_user_mix, 'FULL OPEN')

@@ -244,7 +244,10 @@ async def follow(binanceId: str):
 
         update = {
             "leaders": followed_leaders.to_dict(),
-            "account": {"fav_leaders": fav_leaders}
+            "account": {
+                "fav_leaders": fav_leaders, 
+                "reset_mix": True
+            }
         }
         await app.database.update(user, update, 'users')
 
@@ -257,7 +260,10 @@ async def unfollow(binanceId: str):
         followed_leaders = followed_leaders.drop(binanceId)
 
         update = {
-            "leaders": followed_leaders.to_dict()
+            "leaders": followed_leaders.to_dict(),
+            "account": {
+                "reset_mix": True
+            }
         }
         await app.database.update(user, update, 'users')
 
