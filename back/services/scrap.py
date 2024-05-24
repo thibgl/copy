@@ -271,9 +271,10 @@ class Scrap:
                         total_unlevered_value = abs(filtered_positions["UNLEVERED_VALUE"].sum())
                         # print(binance_id, filtered_positions["UNLEVERED_VALUE"]abs().sum())
 
-                        total_balance = float(leader["detail"]["data"]["marginBalance"]) + total_unlevered_value
-                        levered_ratio = total_levered_value / total_balance
-                        unlevered_ratio = total_unlevered_value / total_balance
+                        margin_balance = float(leader["detail"]["data"]["marginBalance"])
+                        total_balance = margin_balance + filtered_positions["UNLEVERED_VALUE"].sum()
+                        levered_ratio = total_levered_value / margin_balance
+                        unlevered_ratio = total_unlevered_value / margin_balance
 
                         filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
                         filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"].abs()
@@ -310,7 +311,7 @@ class Scrap:
                         grouped_positions = grouped_positions.set_index("ID")
 
                         invested_ratio = 1 + average_levered_ratio if average_levered_ratio < 1 else 1 / average_levered_ratio
-                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / total_balance * invested_ratio
+                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / margin_balance * invested_ratio
                         grouped_positions["PROFIT"] = -grouped_positions["unrealizedProfit"] / (grouped_positions["positionAmount"] * grouped_positions["markPrice"]) * 1000
                         grouped_positions["TICKS"] = ticks
                         grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
