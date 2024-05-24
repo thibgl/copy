@@ -126,9 +126,8 @@ class Binance:
         try:
             # print(new_positions['POSITION_SHARE'].sum())
             reset_mix = False
-            # leader_entries = new_positions.groupby("ID").agg({"TOTAL_BALANCE": 'first'})
+            # leader_entries = new_positions.groupby("ID").agg({"NOTIONAL_BALANCE": 'first'})
             leader_entries = pd.DataFrame(user["entries"]["data"])
-            previous_user_positions = pd.DataFrame(user["positions"]["data"])
             margin_account_data = self.client.margin_account()
 
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
@@ -157,7 +156,7 @@ class Binance:
             
             if len(new_positions) > 0:
                 new_positions = new_positions.merge(leader_entries.add_prefix("previous_"), left_index=True, right_index=True, how='left')
-                new_positions["LAST_ROI"] = new_positions["TOTAL_BALANCE"] / new_positions["previous_TOTAL_BALANCE"]
+                new_positions["LAST_ROI"] = new_positions["NOTIONAL_BALANCE"] / new_positions["previous_NOTIONAL_BALANCE"]
                 print(new_positions.copy().groupby('ID').first()[['LAST_ROI']])
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
                 if len(drifters) > 0:
@@ -271,11 +270,11 @@ class Binance:
                     print(all_positions_open_changed)
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]
-                    total_balances = new_positions.groupby('ID')['TOTAL_BALANCE'].first()
+                    notional_balances = new_positions.groupby('ID')['NOTIONAL_BALANCE'].first()
 
                     for leader_id in opened_changed_leaders:
                         if leader_id not in leader_entries.index:
-                            leader_entries.loc[leader_id] = total_balances.loc[leader_id]
+                            leader_entries.loc[leader_id] = notional_balances.loc[leader_id]
 
                     positions_opened_changed["CURRENT_VALUE"] = positions_opened_changed["netAsset"] * positions_opened_changed["leader_markPrice"]
                     positions_opened_changed["TARGET_AMOUNT"] = positions_opened_changed["TARGET_VALUE"] / positions_opened_changed["leader_markPrice"]
