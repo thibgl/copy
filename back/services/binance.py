@@ -17,7 +17,7 @@ class Binance:
         self.app = app
         self.client = Spot(api_key=self.BINANCE_API_KEY, api_secret=self.BINANCE_SECRET_KEY, base_url='https://api1.binance.com')
 
-    async def get_precision(self, bot, symbol):
+    async def get_precision(self, bot, user, symbol):
         try:
             symbol_precisions = pd.DataFrame(bot["precisions"]["data"])
             
@@ -44,16 +44,35 @@ class Binance:
                 await self.app.database.update(obj=bot, update=precisions_update, collection='bot')
 
                 return symbol, symbol_precisions.loc[symbol]   
-        except Exception as e:
-            await self.handle_exception(bot, bot, e, 'get_precision', symbol)
+        except Exception as error:
+            if error.args[1] == -1121:
+                if "ignored_symbols" in user["account"]["data"].keys():
+                    ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
+                else:
+                    ignored_symbols = pd.DataFrame(columns=["symbol", "time"]).set_index("symbol")
+                ignored_symbols.loc[symbol] = utils.current_time()
+                user_update = {
+                    "account": {
+                        "ignored_symbols": ignored_symbols.to_dict()
+                    }
+                }
+                await self.app.database.update(user, user_update, 'users')
 
-    async def get_precisions(self, bot, dataframe):
+                return symbol, pd.Series([])
+            else:
+                await self.handle_exception(bot, bot, error, 'get_precision', symbol)
+
+    async def get_precisions(self, bot, user, dataframe):
         precisions = pd.DataFrame(columns=["stepSize", "minQty", "minNotional"])
 
         for symbol in dataframe["final_symbol"].unique():
-            symbol, precision = await self.get_precision(bot, symbol)
-            precisions.loc[symbol] = precision
-        
+            symbol, precision = await self.get_precision(bot, user, symbol)
+
+            if not precision.empty:
+                precisions.loc[symbol] = precision
+            else:
+                dataframe = dataframe[dataframe['final_symbol'] != symbol]
+
         dataframe = dataframe.merge(precisions, left_on="final_symbol", right_index=True, how='left')
 
         return dataframe
@@ -159,7 +178,7 @@ class Binance:
                 live_pool["final_symbol"] = live_pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
                 live_pool = live_pool.merge(user_leaders.add_prefix("user_"), left_on="leader_ID", right_index=True, how='left')
 
-                live_pool = await self.get_precisions(bot, live_pool)
+                live_pool = await self.get_precisions(bot, user, live_pool)
                 active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
 
@@ -366,7 +385,7 @@ class Binance:
         except Exception as error:
             if error.args[1] == -2010 and not retry:
                 await self.app.binance.open_position(bot, user, symbol, amount, position, user_mix, f'{source} - AUTO', retry=True)
-            if error.args[1] == -3045:
+            if error.args[1] == -3045 or error.args[1] == 51097:
                 if "ignored_symbols" in user["account"]["data"].keys():
                     ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
                 else:
