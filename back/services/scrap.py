@@ -269,11 +269,11 @@ class Scrap:
 
                         total_levered_value = abs(filtered_positions["notionalValue"].sum())
                         total_unlevered_value = abs(filtered_positions["UNLEVERED_VALUE"].sum())
+                        # print(binance_id, filtered_positions["UNLEVERED_VALUE"]abs().sum())
 
-                        total_balance = float(leader["detail"]["data"]["marginBalance"]) + total_unlevered_value
+                        total_balance = float(leader["detail"]["data"]["marginBalance"])
                         levered_ratio = total_levered_value / total_balance
                         unlevered_ratio = total_unlevered_value / total_balance
-                        
                         scaled_unlevered_ratio = 4 / ((1 + unlevered_ratio) ** 2) * unlevered_ratio
 
                         filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
@@ -291,11 +291,6 @@ class Scrap:
 
                         average_leverage = grouped_positions["leverage_WEIGHTED"].mean()
 
-                        grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
-                        grouped_positions["ID"] = str(binance_id)
-                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / average_leverage / total_balance
-                        grouped_positions = grouped_positions.set_index("ID")
-
                         if "ticks" in leader["account"]["data"].keys():
                             ticks = leader["account"]["data"]["ticks"] + 1
                         else:
@@ -311,12 +306,16 @@ class Scrap:
                         else:
                             average_unlevered_ratio = leader["account"]["data"]["average_unlevered_ratio"] + (unlevered_ratio - leader["account"]["data"]["average_unlevered_ratio"]) / ticks
 
+                        grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
+                        grouped_positions["ID"] = str(binance_id)
+                        grouped_positions = grouped_positions.set_index("ID")
+
+                        invested_ratio = 1 + average_levered_ratio if average_levered_ratio < 1 else 2
+                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / total_balance  * invested_ratio
                         grouped_positions["PROFIT"] = -grouped_positions["unrealizedProfit"] / (grouped_positions["positionAmount"] * grouped_positions["markPrice"]) * 1000
                         grouped_positions["TICKS"] = ticks
                         grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
-                        # print(leader["performance"]["data"])
                         grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
-                        grouped_positions["LEVERED_RATIO"] = levered_ratio
                         grouped_positions["TOTAL_BALANCE"] = total_balance
 
                         positions_update = {
@@ -331,7 +330,7 @@ class Scrap:
                             "grouped_positions": grouped_positions.to_dict(),
                         }
 
-                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "TOTAL_BALANCE", "PROFIT", "SHARP", "ROI", "LEVERED_RATIO", "POSITION_SHARE"]]
+                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "TOTAL_BALANCE", "PROFIT", "SHARP", "ROI", "POSITION_SHARE"]]
                     
                 return {}, []
             else:

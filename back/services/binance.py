@@ -121,7 +121,7 @@ class Binance:
 
         return dataframe
 
-    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, mean_unlevered_ratio, lifecycle):
+    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, lifecycle):
         weigth = 10
         try:
             # print(new_positions['POSITION_SHARE'].sum())
@@ -158,7 +158,7 @@ class Binance:
             if len(new_positions) > 0:
                 new_positions = new_positions.merge(leader_entries.add_prefix("previous_"), left_index=True, right_index=True, how='left')
                 new_positions["LAST_ROI"] = new_positions["TOTAL_BALANCE"] / new_positions["previous_TOTAL_BALANCE"]
-                # print(new_positions)
+                print(new_positions)
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
                 if len(drifters) > 0:
                     drifters_ids = drifters.index.unique()
@@ -188,7 +188,7 @@ class Binance:
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
                     positions_closed = []
-                    leader_cap = user["detail"]["data"]["TARGET_RATIO"] / mean_unlevered_ratio / user["account"]["data"]["leverage"]
+                    leader_cap = user["detail"]["data"]["TARGET_RATIO"] / len(user_leaders)
 
                     positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap
 
