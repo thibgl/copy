@@ -158,7 +158,7 @@ class Binance:
             if len(new_positions) > 0:
                 new_positions = new_positions.merge(leader_entries.add_prefix("previous_"), left_index=True, right_index=True, how='left')
                 new_positions["LAST_ROI"] = new_positions["TOTAL_BALANCE"] / new_positions["previous_TOTAL_BALANCE"]
-                print(new_positions)
+                print(new_positions.copy().groupby('ID').first()[['LAST_ROI']])
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
                 if len(drifters) > 0:
                     drifters_ids = drifters.index.unique()
@@ -187,11 +187,11 @@ class Binance:
                 positions_opened_changed = live_pool.copy()[((~live_pool["leader_symbol"].isna()) | (live_pool["symbol"].isna())) & (~live_pool["final_symbol"].isin(ignored_symbols.index))]
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
+                    user_boost = 1.5
                     positions_closed = []
                     leader_cap = user["detail"]["data"]["TARGET_RATIO"] / len(user_leaders)
 
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap
-
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap * positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"] * user_boost
                     positions_opened_changed['ABSOLUTE_SHARE'] = positions_opened_changed["TARGET_SHARE"].abs()
                     positions_opened_changed['TOTAL_TARGET_SHARE'] = positions_opened_changed.groupby('final_symbol')['ABSOLUTE_SHARE'].transform('sum')
                     positions_opened_changed["POSITION_WEIGHT"] = positions_opened_changed["ABSOLUTE_SHARE"] / positions_opened_changed["TOTAL_TARGET_SHARE"]
@@ -227,8 +227,6 @@ class Binance:
                     # print(positions_opened_changed)
                     positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <=  user["detail"]["data"]["TARGET_RATIO"]]
                     user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
-
-                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
 
                     positions_closed = live_pool.copy().loc[(~live_pool["symbol"].isna()) & (~live_pool["symbol"].isin(positions_opened_changed["final_symbol"])) & (live_pool["symbol"] != last_symbol)]
                     

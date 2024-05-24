@@ -274,7 +274,6 @@ class Scrap:
                         total_balance = float(leader["detail"]["data"]["marginBalance"])
                         levered_ratio = total_levered_value / total_balance
                         unlevered_ratio = total_unlevered_value / total_balance
-                        scaled_unlevered_ratio = 4 / ((1 + unlevered_ratio) ** 2) * unlevered_ratio
 
                         filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
                         filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"].abs()
@@ -310,13 +309,14 @@ class Scrap:
                         grouped_positions["ID"] = str(binance_id)
                         grouped_positions = grouped_positions.set_index("ID")
 
-                        invested_ratio = 1 + average_levered_ratio if average_levered_ratio < 1 else 2
+                        invested_ratio = 1 + average_levered_ratio if average_levered_ratio < 1 else 1 / average_levered_ratio
                         grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / total_balance  * invested_ratio
                         grouped_positions["PROFIT"] = -grouped_positions["unrealizedProfit"] / (grouped_positions["positionAmount"] * grouped_positions["markPrice"]) * 1000
                         grouped_positions["TICKS"] = ticks
                         grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
                         grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
                         grouped_positions["TOTAL_BALANCE"] = total_balance
+                        grouped_positions["AVERAGE_LEVERED_RATIO"] = average_levered_ratio
 
                         positions_update = {
                             "account": {
@@ -330,7 +330,7 @@ class Scrap:
                             "grouped_positions": grouped_positions.to_dict(),
                         }
 
-                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "TOTAL_BALANCE", "PROFIT", "SHARP", "ROI", "POSITION_SHARE"]]
+                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "TOTAL_BALANCE", "PROFIT", "SHARP", "ROI", "AVERAGE_LEVERED_RATIO", "POSITION_SHARE"]]
                     
                 return {}, []
             else:
