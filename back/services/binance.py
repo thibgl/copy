@@ -185,7 +185,7 @@ class Binance:
 
                 positions_opened_changed = live_pool.copy()[((~live_pool["leader_symbol"].isna()) | (live_pool["symbol"].isna())) & (~live_pool["final_symbol"].isin(ignored_symbols.index))]
                 if len(positions_opened_changed) > 0:
-                    user_leverage = user["account"]["data"]["leverage"]
+                    user_leverage = user["account"]["data"]["leverage"] - 1
                     positions_closed = []
                     leader_cap = user["detail"]["data"]["TARGET_RATIO"] / len(user_leaders)
 
@@ -221,7 +221,7 @@ class Binance:
                     positions_opened_changed = positions_opened_changed.sort_values(by=["WEIGHTED_SHARP", "WEIGHTED_ROI", "TARGET_SHARE"], ascending=False)
 
                     positions_opened_changed["CUMULATIVE_SHARE"] = positions_opened_changed["TARGET_SHARE"].abs().cumsum()
-                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * account_data["value_USDT"] * (user_leverage - 1)
+                    positions_opened_changed["TARGET_VALUE"] = positions_opened_changed["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
 
                     last_position = positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].iloc[0] if not positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].empty else pd.Series([])
                     last_symbol = last_position["symbol"] if not last_position.empty else ''
@@ -254,7 +254,7 @@ class Binance:
                     if not last_position.empty:
                         last_diff_pass = False
                         last_position["TARGET_SHARE"] = user["detail"]["data"]["TARGET_RATIO"] - user_invested_ratio
-                        last_position["TARGET_VALUE"] = last_position["TARGET_SHARE"] * account_data["value_USDT"] * (user_leverage - 1)
+                        last_position["TARGET_VALUE"] = last_position["TARGET_SHARE"] * account_data["value_USDT"] * user_leverage
                         last_position["TARGET_VALUE"] = last_position["TARGET_VALUE"] * -1 if last_position["leader_positionAmount"] < 0 else last_position["TARGET_VALUE"]
                         last_diff_pass = abs(last_position["TARGET_VALUE"] / last_position["leader_markPrice"] - last_position["netAsset"]) / abs(last_position["netAsset"]) > 0.1 if last_position["netAsset"] else True
                         user_invested_ratio = user["detail"]["data"]["TARGET_RATIO"]
