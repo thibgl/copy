@@ -169,7 +169,7 @@ class Binance:
                             reset_mix = True
 
 
-                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.8) | (new_positions["LAST_ROI"].isna())]  
+                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.9) | (new_positions["LAST_ROI"].isna())]  
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
                 new_positions.loc[new_positions["thousand"], "markPrice"] /= 1000
 
@@ -377,7 +377,7 @@ class Binance:
 
             response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
             # print(response)
-            if float(response["executedQty"]) / abs(amount) < 0.8:
+            if float(response["executedQty"]) / abs(amount) < 0.9:
                 user_mix["BAG"].pop(symbol)
 
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Opened Position: {symbol} - {amount} / {round(position["TARGET_VALUE"], 2)}', details=str(position.to_dict()))
@@ -409,7 +409,7 @@ class Binance:
 
             response = self.client.new_margin_order(symbol=symbol, quantity=abs(amount), side=side, type='MARKET', sideEffectType=side_effect)
             # print(response)
-            if float(response["executedQty"]) / abs(amount) < 0.8:
+            if float(response["executedQty"]) / abs(amount) < 0.9:
                 user_mix["BAG"].pop(symbol)
 
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Closed Position: {symbol} - {amount} / {round(position["TARGET_VALUE"], 2)}', str(position.to_dict()))

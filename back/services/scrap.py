@@ -253,6 +253,11 @@ class Scrap:
     async def leader_positions_update(self, bot, leader, lifecycle):
         try:
             binance_id = leader["binanceId"]
+
+            if utils.current_time() - leader["detail"]["updated"] > 60000 * 5:
+                detail_update = await self.leader_detail_update(bot, leader=leader)
+                await self.app.database.update(obj=leader, update=detail_update, collection='leaders')
+
             positions_response = await self.fetch_data(bot, binance_id, 'positions')
 
             if positions_response["code"] == '000000':
@@ -271,14 +276,13 @@ class Scrap:
                         total_unlevered_value = abs(filtered_positions["UNLEVERED_VALUE"].sum())
                         # print(binance_id, filtered_positions["UNLEVERED_VALUE"]abs().sum())
 
-                        total_balance = float(leader["detail"]["data"]["marginBalance"]) + total_unlevered_value
-                        notional_balance = float(leader["detail"]["data"]["marginBalance"]) + filtered_positions["UNLEVERED_VALUE"].sum()
-                        levered_ratio = total_levered_value / total_balance
-                        unlevered_ratio = total_unlevered_value / total_balance
+                        balance = float(leader["detail"]["data"]["marginBalance"])
+                        levered_ratio = total_levered_value / balance
+                        unlevered_ratio = total_unlevered_value / balance
 
                         filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
                         filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"].abs()
-            
+
                         grouped_positions = filtered_positions.groupby("symbol").agg({
                             "markPrice": 'mean',
                             "positionAmount": 'sum',
@@ -311,12 +315,12 @@ class Scrap:
                         grouped_positions = grouped_positions.set_index("ID")
 
                         invested_ratio = 1 + average_levered_ratio if average_levered_ratio < 1 else 1 / average_levered_ratio
-                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / total_balance * invested_ratio
+                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / balance * invested_ratio
                         grouped_positions["PROFIT"] = -grouped_positions["unrealizedProfit"] / (grouped_positions["positionAmount"] * grouped_positions["markPrice"]) * 1000
                         grouped_positions["TICKS"] = ticks
                         grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
                         grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
-                        grouped_positions["NOTIONAL_BALANCE"] = notional_balance
+                        grouped_positions["NOTIONAL_BALANCE"] = balance
                         grouped_positions["AVERAGE_LEVERAGE"] = average_leverage
 
                         positions_update = {
