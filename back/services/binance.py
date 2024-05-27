@@ -156,7 +156,11 @@ class Binance:
             if len(new_positions) > 0:
                 new_positions = new_positions.merge(leader_entries.add_prefix("previous_"), left_index=True, right_index=True, how='left')
                 new_positions["LAST_ROI"] = new_positions["NOTIONAL_BALANCE"] / new_positions["previous_NOTIONAL_BALANCE"]
-                print(new_positions.copy().groupby('ID').first()[['LAST_ROI']])
+                print(new_positions.copy().groupby('ID').agg({
+                    'LAST_ROI': 'first',
+                    'PROFIT': 'mean',
+                    'symbol': 'unique'
+                }))
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
                 if len(drifters) > 0:
                     drifters_ids = drifters.index.unique()
@@ -224,7 +228,7 @@ class Binance:
 
                     last_position = positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].iloc[0] if not positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].empty else pd.Series([])
                     last_symbol = last_position["symbol"] if not last_position.empty else ''
-                    print(positions_opened_changed)
+                    # print(positions_opened_changed)
                     positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <= user["detail"]["data"]["TARGET_RATIO"]]
                     user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
 
@@ -266,7 +270,10 @@ class Binance:
                         if last_position["symbol"] == None or (last_position["final_symbol"] in mix_diff or len(positions_opened_changed) > 0) and last_diff_pass:
                             positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
 
-                    # print(all_positions_open_changed)
+                    all_positions_open_changed = all_positions_open_changed.sort_values(by=["TARGET_VALUE"], ascending=False)
+                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'CUMULATIVE_SHARE', 'TARGET_VALUE']])
+                    print(all_positions_open_changed["TARGET_VALUE"].abs().sum())
+
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]
                     notional_balances = new_positions.groupby('ID')['NOTIONAL_BALANCE'].first()
