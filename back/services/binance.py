@@ -121,11 +121,10 @@ class Binance:
 
         return dataframe
 
-    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, lifecycle):
+    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, reset_mix, lifecycle):
         weigth = 10
         try:
             # print(new_positions['POSITION_SHARE'].sum())
-            reset_mix = False
             # leader_entries = new_positions.groupby("ID").agg({"NOTIONAL_BALANCE": 'first'})
             leader_entries = pd.DataFrame(user["entries"]["data"])
             margin_account_data = self.client.margin_account()
@@ -172,7 +171,7 @@ class Binance:
                 new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.9) | (new_positions["LAST_ROI"].isna())]  
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
                 new_positions.loc[new_positions["thousand"], "markPrice"] /= 1000
-
+                # print(new_positions)
                 live_pool = live_pool.merge(new_positions.reset_index().add_prefix("leader_"), left_on="symbol", right_on="leader_final_symbol", how='outer')
                 live_pool["final_symbol"] = live_pool.apply(lambda row: pd.Series(row["leader_final_symbol"] if isinstance(row["leader_final_symbol"], str) else row["symbol"]), axis=1)
                 live_pool = live_pool.merge(user_leaders.add_prefix("user_"), left_on="leader_ID", right_index=True, how='left')
@@ -225,8 +224,8 @@ class Binance:
 
                     last_position = positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].iloc[0] if not positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].empty else pd.Series([])
                     last_symbol = last_position["symbol"] if not last_position.empty else ''
-                    # print(positions_opened_changed)
-                    positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <=  user["detail"]["data"]["TARGET_RATIO"]]
+                    print(positions_opened_changed)
+                    positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <= user["detail"]["data"]["TARGET_RATIO"]]
                     user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
 
                     positions_closed = live_pool.copy().loc[(~live_pool["symbol"].isna()) & (~live_pool["symbol"].isin(positions_opened_changed["final_symbol"])) & (live_pool["symbol"] != last_symbol)]
@@ -248,7 +247,7 @@ class Binance:
 
                     all_positions_open_changed = positions_opened_changed.copy()
                     # print(all_positions_open_changed)
-                    if account_data["collateral_margin_level"] > 1.15:
+                    if not reset_mix and account_data["collateral_margin_level"] > 1.15:
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
                     if not last_position.empty:
@@ -267,7 +266,7 @@ class Binance:
                         if last_position["symbol"] == None or (last_position["final_symbol"] in mix_diff or len(positions_opened_changed) > 0) and last_diff_pass:
                             positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
 
-                    print(all_positions_open_changed)
+                    # print(all_positions_open_changed)
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]
                     notional_balances = new_positions.groupby('ID')['NOTIONAL_BALANCE'].first()
@@ -331,17 +330,17 @@ class Binance:
                 "entries": leader_entries.to_dict()
             }
 
-            return user_account_update, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders, reset_mix
+            return user_account_update, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders
         except Exception as e:
             await self.handle_exception(bot, user, e, 'user_account_update', None)
 
 
-    async def user_account_close(self, bot, user, new_user_mix, dropped_leaders, reset_mix):
+    async def user_account_close(self, bot, user, new_user_mix, dropped_leaders):
         try:
             user_account_update = {
                 "mix": new_user_mix,
                 "account": {
-                    "reset_mix": reset_mix
+                    "reset_mix": False
                 }
             }
                       

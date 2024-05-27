@@ -272,15 +272,15 @@ class Scrap:
                     if len(filtered_positions) > 0:
                         filtered_positions["UNLEVERED_VALUE"] = filtered_positions["notionalValue"] / filtered_positions["leverage"]
 
-                        total_levered_value = abs(filtered_positions["notionalValue"].sum())
-                        total_unlevered_value = abs(filtered_positions["UNLEVERED_VALUE"].sum())
+                        total_levered_value = filtered_positions["notionalValue"].abs().sum()
+                        total_unlevered_value = filtered_positions["UNLEVERED_VALUE"].abs().sum()
                         # print(binance_id, filtered_positions["UNLEVERED_VALUE"]abs().sum())
 
                         balance = float(leader["detail"]["data"]["marginBalance"])
                         levered_ratio = total_levered_value / balance
                         unlevered_ratio = total_unlevered_value / balance
-
                         filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
+
                         filtered_positions["leverage_WEIGHTED"] = filtered_positions["leverage"] * filtered_positions["POSITION_SHARE"].abs()
 
                         grouped_positions = filtered_positions.groupby("symbol").agg({
@@ -314,8 +314,9 @@ class Scrap:
                         grouped_positions["ID"] = str(binance_id)
                         grouped_positions = grouped_positions.set_index("ID")
 
-                        invested_ratio = 1 + average_levered_ratio if average_levered_ratio < 1 else 1 / average_levered_ratio
-                        grouped_positions["POSITION_SHARE"] = grouped_positions["notionalValue"] / balance * invested_ratio
+                        invested_ratio = (1 + average_levered_ratio if average_levered_ratio < 1 else 2 / average_levered_ratio) * 0.5
+
+                        grouped_positions["POSITION_SHARE"] = grouped_positions["POSITION_SHARE"] * invested_ratio
                         grouped_positions["PROFIT"] = -grouped_positions["unrealizedProfit"] / (grouped_positions["positionAmount"] * grouped_positions["markPrice"]) * 1000
                         grouped_positions["TICKS"] = ticks
                         grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
