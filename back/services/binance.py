@@ -121,7 +121,7 @@ class Binance:
 
         return dataframe
 
-    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, reset_mix, lifecycle):
+    async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, lifecycle):
         weigth = 10
         try:
             # print(new_positions['POSITION_SHARE'].sum())
@@ -169,7 +169,7 @@ class Binance:
                         if drifter_id not in dropped_leaders:
                             dropped_leaders.append(drifter_id)
                             await self.app.log.create(bot, user, 'INFO', 'user_account_update', 'MANAGE', f'Removed Drifter: {drifter_id}', details=str(drifters.to_dict()))
-                            reset_mix = True
+                            lifecycle["reset_mix"] = True
 
 
                 new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.9) | (new_positions["LAST_ROI"].isna())]  
@@ -251,7 +251,7 @@ class Binance:
 
                     all_positions_open_changed = positions_opened_changed.copy()
                     # print(all_positions_open_changed)
-                    if not reset_mix and account_data["collateral_margin_level"] > 1.15:
+                    if not lifecycle["reset_mix"] and account_data["collateral_margin_level"] > 1.15:
                         positions_opened_changed = positions_opened_changed[positions_opened_changed["leader_symbol"].isin(mix_diff) | positions_opened_changed["symbol"].isna()]
 
                     if not last_position.empty:
@@ -271,8 +271,8 @@ class Binance:
                             positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
 
                     all_positions_open_changed = all_positions_open_changed.sort_values(by=["TARGET_VALUE"], ascending=False)
-                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'CUMULATIVE_SHARE', 'TARGET_VALUE']])
-                    print(all_positions_open_changed["TARGET_VALUE"].abs().sum())
+                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'TARGET_VALUE', 'leader_ID']].set_index('final_symbol'))
+                    print(all_positions_open_changed["TARGET_VALUE"].abs().sum(), all_positions_open_changed["CUMULATIVE_SHARE"].max())
 
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]
@@ -389,7 +389,7 @@ class Binance:
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Opened Position: {symbol} - {amount} / {round(position["TARGET_VALUE"], 2)}', details=str(position.to_dict()))
         except Exception as error:
             if error.args[1] == -2010 and not retry:
-                await self.app.binance.open_position(bot, user, symbol, amount, position, user_mix, f'{source} - AUTO', retry=True)
+                await self.open_position(bot, user, symbol, amount, position, user_mix, f'{source} - AUTO', retry=True)
             if error.args[1] == -3045 or error.args[1] == 51097:
                 if "ignored_symbols" in user["account"]["data"].keys():
                     ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
@@ -421,7 +421,7 @@ class Binance:
             await self.app.log.create(bot, user, 'INFO', source, 'TRADE', f'Closed Position: {symbol} - {amount} / {round(position["TARGET_VALUE"], 2)}', str(position.to_dict()))
         except Exception as error:
             if error.args[1] == -2010 and not retry:
-                await self.app.binance.close_position(bot, user, symbol, amount, position, user_mix, f'{source} - AUTO', retry=True)
+                await self.close_position(bot, user, symbol, amount, position, user_mix, f'{source} - AUTO', retry=True)
             else:
                 await self.handle_exception(bot, user, error, f'{source}: {symbol} - {amount} / {round(position["TARGET_VALUE"], 2)}', symbol, user_mix=user_mix, position=position)
 

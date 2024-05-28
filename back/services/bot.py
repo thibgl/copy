@@ -15,7 +15,8 @@ class Bot:
         start_time = utils.current_time()
         lifecycle = {
             "tick_boost": False,
-            "reset_rotate": False
+            "reset_rotate": False,
+            "reset_mix": False
         }
 
         if bot["account"]["data"]["active"]:
@@ -28,6 +29,7 @@ class Bot:
 
             async for user in users:
                 try:
+                    lifecycle["reset_mix"] = user["account"]["data"]["reset_mix"]
                     user_leaders = pd.DataFrame(user["leaders"]["data"])
                     
                     if user_leaders.size > 0:
@@ -51,6 +53,8 @@ class Bot:
                                                 leader_mix["BAG"] = leader_mix["BAG"] * leader_weight["WEIGHT"]
 
                                                 leader_mixes = pd.concat([leader_mixes, leader_mix]) if len(leader_mixes) > 0 else leader_mix
+                                        elif not leader["detail"]["data"]["positionShow"]:
+                                            dropped_leaders.append(binance_id)
                                     else:
                                         dropped_leaders.append(binance_id)
 
@@ -59,13 +63,13 @@ class Bot:
                                     print(trace)
                                     continue
                         
-                        reset_mix = user["account"]["data"]["reset_mix"]
                         user_mix_new = leader_mixes.groupby('symbol').agg('sum').to_dict()  
                         user_mix = pd.DataFrame(user["mix"]["data"]).to_dict()
                         user_mix_diff = [bag[0] for bag in set(user_mix_new["BAG"].items()).difference(set(user_mix["BAG"].items()))]
+                        print(user_mix_diff)
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
-                        user_account, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, dropped_leaders, reset_mix, lifecycle)
+                        user_account, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, dropped_leaders, lifecycle)
                         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
                         if user_account_update_success:

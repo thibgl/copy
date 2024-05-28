@@ -276,7 +276,7 @@ class Scrap:
                         total_unlevered_value = filtered_positions["UNLEVERED_VALUE"].abs().sum()
                         # print(binance_id, filtered_positions["UNLEVERED_VALUE"]abs().sum())
 
-                        balance = float(leader["detail"]["data"]["marginBalance"])
+                        balance = float(leader["detail"]["data"]["marginBalance"]) + filtered_positions["UNLEVERED_VALUE"].sum()
                         levered_ratio = total_levered_value / balance
                         unlevered_ratio = total_unlevered_value / balance
                         filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
