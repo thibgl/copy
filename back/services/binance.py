@@ -124,7 +124,6 @@ class Binance:
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, lifecycle):
         weigth = 10
         try:
-            # print(new_positions['POSITION_SHARE'].sum())
             # leader_entries = new_positions.groupby("ID").agg({"NOTIONAL_BALANCE": 'first'})
             leader_entries = pd.DataFrame(user["entries"]["data"])
             margin_account_data = self.client.margin_account()
@@ -153,6 +152,11 @@ class Binance:
 
             ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
             
+            levered_ratios = user_leaders.copy().merge(new_positions.reset_index()[["ID", "AVERAGE_LEVERED_RATIO"]].groupby("ID").first(), left_index=True, right_on="ID", how='left')
+            levered_ratios["WEIGHTED_RATIO"] = levered_ratios["WEIGHT"] * levered_ratios["AVERAGE_LEVERED_RATIO"]
+            average_levered_ratio = levered_ratios["WEIGHTED_RATIO"].mean()
+
+            new_positions = new_positions.copy().loc[new_positions["symbol"] != "EMPTY"]
             if len(new_positions) > 0:
                 new_positions = new_positions.merge(leader_entries.add_prefix("previous_"), left_index=True, right_index=True, how='left')
                 new_positions["LAST_ROI"] = new_positions["NOTIONAL_BALANCE"] / new_positions["previous_NOTIONAL_BALANCE"]
@@ -184,7 +188,7 @@ class Binance:
                 active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
 
-                print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} leaders')
+                print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} / {len(user_leaders)} leaders')
 
                 positions_opened_changed = live_pool.copy()[((~live_pool["leader_symbol"].isna()) | (live_pool["symbol"].isna())) & (~live_pool["final_symbol"].isin(ignored_symbols.index))]
                 if len(positions_opened_changed) > 0:
@@ -192,10 +196,9 @@ class Binance:
                     positions_closed = []
                     leader_cap = user["detail"]["data"]["TARGET_RATIO"] / len(user_leaders)
 
-                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] >= user_leverage, 'LEVERAGE_RATIO'] = user_leverage / positions_opened_changed["leader_AVERAGE_LEVERAGE"]
-                    positions_opened_changed.loc[positions_opened_changed["leader_AVERAGE_LEVERAGE"] < user_leverage, 'LEVERAGE_RATIO'] = positions_opened_changed["leader_AVERAGE_LEVERAGE"] / user_leverage
-
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap * positions_opened_changed["LEVERAGE_RATIO"] * user_leverage
+                    positions_opened_changed["LEVERED_RATIO"] = (average_levered_ratio / positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"]) * (user_leverage / average_levered_ratio) * user_leverage
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap * positions_opened_changed["LEVERED_RATIO"]
+                    
                     positions_opened_changed['ABSOLUTE_SHARE'] = positions_opened_changed["TARGET_SHARE"].abs()
                     positions_opened_changed['TOTAL_TARGET_SHARE'] = positions_opened_changed.groupby('final_symbol')['ABSOLUTE_SHARE'].transform('sum')
                     positions_opened_changed["POSITION_WEIGHT"] = positions_opened_changed["ABSOLUTE_SHARE"] / positions_opened_changed["TOTAL_TARGET_SHARE"]
