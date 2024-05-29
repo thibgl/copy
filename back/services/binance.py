@@ -162,7 +162,7 @@ class Binance:
                 new_positions["LAST_ROI"] = new_positions["NOTIONAL_BALANCE"] / new_positions["previous_NOTIONAL_BALANCE"]
                 print(new_positions.copy().groupby('ID').agg({
                     'LAST_ROI': 'first',
-                    'PROFIT': 'mean',
+                    # 'PROFIT': 'mean',
                     'symbol': 'unique'
                 }))
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
@@ -274,7 +274,7 @@ class Binance:
                             positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
 
                     all_positions_open_changed = all_positions_open_changed.sort_values(by=["TARGET_VALUE"], ascending=False)
-                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'TARGET_VALUE', 'leader_ID']].set_index('final_symbol'))
+                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'TARGET_VALUE']].set_index('final_symbol'))
                     print(all_positions_open_changed["TARGET_VALUE"].abs().sum(), all_positions_open_changed["CUMULATIVE_SHARE"].max())
 
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
