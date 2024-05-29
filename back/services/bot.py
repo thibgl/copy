@@ -69,30 +69,30 @@ class Bot:
                         user_positions_new = roster[roster.index.isin(user_leaders.index)]
 
                         user_account, positions_closed, positions_opened, positions_changed, positions_excess, dropped_leaders = await self.app.binance.user_account_update(bot, user, user_positions_new, user_leaders, user_mix_diff, dropped_leaders, lifecycle)
-                #         user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
+                        user_account_update_success = await self.app.database.update(obj=user, update=user_account, collection='users')
 
-                #         if user_account_update_success:
-                #             await self.close_positions(bot, user, positions_closed, user_mix_new)
-                #             await self.change_positions(bot, user, positions_changed, user_mix_new)
-                #             await self.open_positions(bot, user, positions_opened, user_mix_new)
-                #             await self.repay_debts(bot, user, positions_excess)
-                #             await self.set_stop_losses(bot, user, positions_opened, positions_changed)
+                        if user_account_update_success:
+                            await self.close_positions(bot, user, positions_closed, user_mix_new)
+                            await self.change_positions(bot, user, positions_changed, user_mix_new)
+                            await self.open_positions(bot, user, positions_opened, user_mix_new)
+                            await self.repay_debts(bot, user, positions_excess)
+                            await self.set_stop_losses(bot, user, positions_opened, positions_changed)
                         
-                #         if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
-                #             await self.app.scrap.update_leaders(bot, user)
+                        if not lifecycle["tick_boost"] and not lifecycle["reset_rotate"]:
+                            await self.app.scrap.update_leaders(bot, user)
                 
-                #         user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new, dropped_leaders)
-                #         user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
+                        user_account_close = await self.app.binance.user_account_close(bot, user, user_mix_new, dropped_leaders, lifecycle)
+                        user_account_close_success = await self.app.database.update(obj=user, update=user_account_close, collection='users')
                         
-                #         last_tick = utils.current_time()
-                #         bot_update = {
-                #             "account": {
-                #                 "last_tick": last_tick,
-                #                 "ticks": bot["account"]["data"]["ticks"] + 1
-                #             }
-                #         }
-                #         await self.app.database.update(bot, bot_update, 'bot')
-                #         tick["last_tick"] = last_tick
+                        last_tick = utils.current_time()
+                        bot_update = {
+                            "account": {
+                                "last_tick": last_tick,
+                                "ticks": bot["account"]["data"]["ticks"] + 1
+                            }
+                        }
+                        await self.app.database.update(bot, bot_update, 'bot')
+                        tick["last_tick"] = last_tick
                 # #! faire le transfer de TP
                 except Exception as e:
                     try:

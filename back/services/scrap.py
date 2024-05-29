@@ -280,8 +280,7 @@ class Scrap:
                         total_levered_value = filtered_positions["notionalValue"].abs().sum()
                         total_unlevered_value = filtered_positions["UNLEVERED_VALUE"].abs().sum()
 
-                        balance = float(leader["detail"]["data"]["marginBalance"]) + total_unlevered_value
-                        notional_balance = float(leader["detail"]["data"]["marginBalance"]) + filtered_positions["unrealizedProfit"].sum()
+                        balance = float(leader["detail"]["data"]["marginBalance"])
                         
                         levered_ratio = total_levered_value / balance
                         unlevered_ratio = total_unlevered_value / balance
@@ -321,7 +320,7 @@ class Scrap:
                         grouped_positions["PROFIT"] = grouped_positions["unrealizedProfit"] / balance
                         grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
                         grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
-                        grouped_positions["NOTIONAL_BALANCE"] = notional_balance
+                        grouped_positions["NOTIONAL_BALANCE"] = balance
                         grouped_positions["AVERAGE_LEVERED_RATIO"] = average_levered_ratio
 
                         positions_update = {
