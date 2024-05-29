@@ -165,7 +165,8 @@ class Binance:
                     # 'PROFIT': 'mean',
                     'symbol': 'unique'
                 }))
-                drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.9]
+                print(f'Average Levered Ratio: {round(average_levered_ratio, 2)}')
+                drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.8]
                 if len(drifters) > 0:
                     drifters_ids = drifters.index.unique()
 
@@ -176,7 +177,7 @@ class Binance:
                             lifecycle["reset_mix"] = True
 
 
-                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.9) | (new_positions["LAST_ROI"].isna())]  
+                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.8) | (new_positions["LAST_ROI"].isna())]  
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
                 new_positions.loc[new_positions["thousand"], "markPrice"] /= 1000
                 # print(new_positions)
@@ -231,7 +232,8 @@ class Binance:
 
                     last_position = positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].iloc[0] if not positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].empty else pd.Series([])
                     last_symbol = last_position["symbol"] if not last_position.empty else ''
-                    # print(positions_opened_changed)
+                    max_share = round(positions_opened_changed["CUMULATIVE_SHARE"].max(), 2)
+
                     positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <= user["detail"]["data"]["TARGET_RATIO"]]
                     user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
 
@@ -274,8 +276,11 @@ class Binance:
                             positions_opened_changed.loc[len(positions_opened_changed) + 1] = last_position
 
                     all_positions_open_changed = all_positions_open_changed.sort_values(by=["TARGET_VALUE"], ascending=False)
-                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'TARGET_VALUE']].set_index('final_symbol'))
-                    print(all_positions_open_changed["TARGET_VALUE"].abs().sum(), all_positions_open_changed["CUMULATIVE_SHARE"].max())
+                    all_positions_open_changed["n_leaders"] = all_positions_open_changed["leader_ID"].apply(len)
+                    total_value = round(all_positions_open_changed["TARGET_VALUE"].abs().sum(), 2)
+                    total_share = round(all_positions_open_changed["CUMULATIVE_SHARE"].max(), 2)
+                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'TARGET_VALUE', "n_leaders"]].set_index('final_symbol'))
+                    print(f'Total Value: {total_value} - Total Share: {total_share} - Max Share: {max_share}')
 
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]
