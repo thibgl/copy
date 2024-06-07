@@ -124,6 +124,7 @@ class Binance:
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, lifecycle):
         weigth = 10
         try:
+            print(user_leaders)
             # leader_entries = new_positions.groupby("ID").agg({"NOTIONAL_BALANCE": 'first'})
             leader_entries = pd.DataFrame(user["entries"]["data"])
             margin_account_data = self.client.margin_account()
@@ -152,10 +153,6 @@ class Binance:
 
             ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
             
-            levered_ratios = user_leaders.copy().merge(new_positions.reset_index()[["ID", "AVERAGE_LEVERED_RATIO"]].groupby("ID").first(), left_index=True, right_on="ID", how='left')
-            levered_ratios["WEIGHTED_RATIO"] = levered_ratios["WEIGHT"] * levered_ratios["AVERAGE_LEVERED_RATIO"]
-            average_levered_ratio = levered_ratios["WEIGHTED_RATIO"].mean()
-
             new_positions = new_positions.copy().loc[new_positions["symbol"] != "EMPTY"]
             if len(new_positions) > 0:
                 new_positions = new_positions.merge(leader_entries.add_prefix("previous_"), left_index=True, right_index=True, how='left')
@@ -165,7 +162,6 @@ class Binance:
                     # 'PROFIT': 'mean',
                     'symbol': 'unique'
                 }))
-                print(f'Average Levered Ratio: {round(average_levered_ratio, 2)}')
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.8]
                 if len(drifters) > 0:
                     drifters_ids = drifters.index.unique()
@@ -195,10 +191,9 @@ class Binance:
                 if len(positions_opened_changed) > 0:
                     user_leverage = user["account"]["data"]["leverage"] - 1
                     positions_closed = []
-                    leader_cap = user["detail"]["data"]["TARGET_RATIO"] / len(user_leaders)
-
-                    positions_opened_changed["LEVERED_RATIO"] = (average_levered_ratio / positions_opened_changed["leader_AVERAGE_LEVERED_RATIO"]) * (user_leverage / average_levered_ratio) * user_leverage
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap * positions_opened_changed["LEVERED_RATIO"]
+                    leader_cap = user["detail"]["data"]["TARGET_RATIO"] / user_leaders["WEIGHT"].sum()
+                    
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap
                     
                     positions_opened_changed['ABSOLUTE_SHARE'] = positions_opened_changed["TARGET_SHARE"].abs()
                     positions_opened_changed['TOTAL_TARGET_SHARE'] = positions_opened_changed.groupby('final_symbol')['ABSOLUTE_SHARE'].transform('sum')
@@ -232,7 +227,6 @@ class Binance:
 
                     last_position = positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].iloc[0] if not positions_opened_changed[positions_opened_changed['CUMULATIVE_SHARE'] > user["detail"]["data"]["TARGET_RATIO"]].empty else pd.Series([])
                     last_symbol = last_position["symbol"] if not last_position.empty else ''
-                    max_share = round(positions_opened_changed["CUMULATIVE_SHARE"].max(), 2)
 
                     positions_opened_changed = positions_opened_changed.loc[positions_opened_changed["CUMULATIVE_SHARE"] <= user["detail"]["data"]["TARGET_RATIO"]]
                     user_invested_ratio = positions_opened_changed["CUMULATIVE_SHARE"].values[-1]
@@ -280,7 +274,7 @@ class Binance:
                     total_value = round(all_positions_open_changed["TARGET_VALUE"].abs().sum(), 2)
                     total_share = round(all_positions_open_changed["CUMULATIVE_SHARE"].max(), 2)
                     print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'TARGET_VALUE', "n_leaders"]].set_index('final_symbol'))
-                    print(f'Total Value: {total_value} - Total Share: {total_share} - Max Share: {max_share}')
+                    print(f'Total Value: {total_value} - Total Share: {total_share}')
 
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
                     leader_entries = leader_entries.loc[leader_entries.index.isin(opened_changed_leaders)]

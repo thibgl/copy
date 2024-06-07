@@ -284,16 +284,16 @@ class Scrap:
                         
                         levered_ratio = total_levered_value / balance
                         unlevered_ratio = total_unlevered_value / balance
-                        average_leverage = total_levered_value / total_unlevered_value
+                        # average_leverage = total_levered_value / total_unlevered_value
 
-                        filtered_positions["LEVERED_POSITION_SHARE"] = filtered_positions["notionalValue"] / balance
+                        filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
 
                         grouped_positions = filtered_positions.groupby("symbol").agg({
                             "markPrice": 'mean',
                             "positionAmount": 'sum',
                             "notionalValue": 'sum',
                             "unrealizedProfit": 'sum',
-                            "LEVERED_POSITION_SHARE": 'sum',
+                            "POSITION_SHARE": 'sum',
                             }).reset_index()
 
                         
@@ -316,7 +316,7 @@ class Scrap:
                         grouped_positions["ID"] = str(binance_id)
                         grouped_positions = grouped_positions.set_index("ID")
 
-                        grouped_positions["POSITION_SHARE"] = grouped_positions["LEVERED_POSITION_SHARE"] / average_leverage 
+                        grouped_positions["POSITION_SHARE"] = grouped_positions["POSITION_SHARE"] * unlevered_ratio
                         grouped_positions["PROFIT"] = grouped_positions["unrealizedProfit"] / balance
                         grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
                         grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
@@ -335,7 +335,7 @@ class Scrap:
                             "grouped_positions": grouped_positions.to_dict(),
                         }
 
-                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "NOTIONAL_BALANCE", "PROFIT", "SHARP", "ROI", "AVERAGE_LEVERED_RATIO", "POSITION_SHARE"]]
+                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "NOTIONAL_BALANCE", "PROFIT", "SHARP", "ROI", "POSITION_SHARE"]]
                     
                 return {}, pd.DataFrame({"ID": str(binance_id),"symbol": ["EMPTY"], "positionAmount":["EMPTY"], "markPrice":["EMPTY"], "NOTIONAL_BALANCE":["EMPTY"], "PROFIT":["EMPTY"], "SHARP":["EMPTY"], "ROI":["EMPTY"], "AVERAGE_LEVERED_RATIO":[average_levered_ratio], "POSITION_SHARE":["EMPTY"]}).set_index("ID")
             else:
