@@ -193,7 +193,8 @@ class Binance:
                     positions_closed = []
                     leader_cap = user["detail"]["data"]["TARGET_RATIO"] / user_leaders["WEIGHT"].sum()
                     
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap
+                    # positions_opened_changed["LEVERED_RATIO"] = positions_opened_changed["leader_AVERAGE_LEVERAGE"] / user["account"]["data"]["leverage"]
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap #* positions_opened_changed["LEVERED_RATIO"]
                     
                     positions_opened_changed['ABSOLUTE_SHARE'] = positions_opened_changed["TARGET_SHARE"].abs()
                     positions_opened_changed['TOTAL_TARGET_SHARE'] = positions_opened_changed.groupby('final_symbol')['ABSOLUTE_SHARE'].transform('sum')

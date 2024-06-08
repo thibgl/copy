@@ -284,7 +284,7 @@ class Scrap:
                         
                         levered_ratio = total_levered_value / balance
                         unlevered_ratio = total_unlevered_value / balance
-                        # average_leverage = total_levered_value / total_unlevered_value
+                        average_leverage = total_levered_value / total_unlevered_value
 
                         filtered_positions["POSITION_SHARE"] = filtered_positions["notionalValue"] / total_levered_value
 
@@ -322,6 +322,7 @@ class Scrap:
                         grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
                         grouped_positions["NOTIONAL_BALANCE"] = balance
                         grouped_positions["AVERAGE_LEVERED_RATIO"] = average_levered_ratio
+                        grouped_positions["AVERAGE_LEVERAGE"] = average_leverage
 
                         positions_update = {
                             "account": {
@@ -335,7 +336,7 @@ class Scrap:
                             "grouped_positions": grouped_positions.to_dict(),
                         }
 
-                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "NOTIONAL_BALANCE", "PROFIT", "SHARP", "ROI", "POSITION_SHARE"]]
+                        return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "NOTIONAL_BALANCE", "PROFIT", "SHARP", "ROI", "POSITION_SHARE", "AVERAGE_LEVERAGE"]]
                     
                 return {}, pd.DataFrame({"ID": str(binance_id),"symbol": ["EMPTY"], "positionAmount":["EMPTY"], "markPrice":["EMPTY"], "NOTIONAL_BALANCE":["EMPTY"], "PROFIT":["EMPTY"], "SHARP":["EMPTY"], "ROI":["EMPTY"], "AVERAGE_LEVERED_RATIO":[average_levered_ratio], "POSITION_SHARE":["EMPTY"]}).set_index("ID")
             else:
