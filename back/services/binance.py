@@ -175,8 +175,7 @@ class Binance:
                             await self.app.log.create(bot, user, 'INFO', 'user_account_update', 'MANAGE', f'Removed Drifter: {drifter_id}', details=str(drifters.to_dict()))
                             lifecycle["reset_mix"] = True
 
-                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.8) | (new_positions["LAST_ROI"].isna())]
-                leader_entries = leader_entries.loc[leader_entries.index.isin(new_positions.index)]
+                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.8) | (new_positions["LAST_ROI"].isna())]                
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
                 new_positions.loc[new_positions["thousand"], "markPrice"] /= 1000
                 # print(new_positions)
@@ -187,6 +186,8 @@ class Binance:
                 live_pool = await self.get_precisions(bot, user, live_pool)
                 active_leaders = live_pool["leader_ID"].dropna().unique()
                 n_leaders = active_leaders.size
+                # print(new_positions)
+                # leader_entries = leader_entries.loc[leader_entries.index.isin(new_positions.index)]
 
                 print(f'[{utils.current_readable_time()}]: Updating Positions for {n_leaders} / {len(user_leaders)} leaders')
 
