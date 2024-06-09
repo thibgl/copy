@@ -263,10 +263,15 @@ class Scrap:
             if positions_response["code"] == '000000':
                 positions = pd.DataFrame(positions_response["data"])
  
-                if "average_levered_ratio" in leader["account"]["data"].keys():
-                    average_levered_ratio = leader["account"]["data"]["average_levered_ratio"]
+                # if "average_levered_ratio" in leader["account"]["data"].keys():
+                #     average_levered_ratio = leader["account"]["data"]["average_levered_ratio"]
+                # else:
+                #     average_levered_ratio = 0.5
+
+                if "average_average_leverage" in leader["account"]["data"].keys():
+                    average_average_leverage = leader["account"]["data"]["average_average_leverage"]
                 else:
-                    average_levered_ratio = 0.5
+                    average_average_leverage = 20
 
                 if len(positions) > 0:
                     positions["ID"] = binance_id
@@ -297,20 +302,30 @@ class Scrap:
                             }).reset_index()
 
                         
-                        if "ticks" in leader["account"]["data"].keys():
-                            ticks = leader["account"]["data"]["ticks"] + 1
-                        else:
-                            ticks = 1
+                        # if "ticks" in leader["account"]["data"].keys():
+                        #     ticks = leader["account"]["data"]["ticks"] + 1
+                        # else:
+                        #     ticks = 1
 
-                        if "average_levered_ratio" not in leader["account"]["data"].keys():
-                            average_levered_ratio = levered_ratio
+                        if "average_leverage_ticks" in leader["account"]["data"].keys():
+                            average_leverage_ticks = leader["account"]["data"]["average_leverage_ticks"] + 1
                         else:
-                            average_levered_ratio = average_levered_ratio + (levered_ratio - leader["account"]["data"]["average_levered_ratio"]) / ticks
+                            average_leverage_ticks = 1
 
-                        if "average_unlevered_ratio" not in leader["account"]["data"].keys():
-                            average_unlevered_ratio = unlevered_ratio
+                        if "average_average_leverage" not in leader["account"]["data"].keys():
+                            average_average_leverage = average_leverage
                         else:
-                            average_unlevered_ratio = leader["account"]["data"]["average_unlevered_ratio"] + (unlevered_ratio - leader["account"]["data"]["average_unlevered_ratio"]) / ticks
+                            average_average_leverage = average_average_leverage + (average_leverage - leader["account"]["data"]["average_average_leverage"]) / average_leverage_ticks
+
+                        # if "average_levered_ratio" not in leader["account"]["data"].keys():
+                        #     average_levered_ratio = levered_ratio
+                        # else:
+                        #     average_levered_ratio = average_levered_ratio + (levered_ratio - leader["account"]["data"]["average_levered_ratio"]) / ticks
+
+                        # if "average_unlevered_ratio" not in leader["account"]["data"].keys():
+                        #     average_unlevered_ratio = unlevered_ratio
+                        # else:
+                        #     average_unlevered_ratio = leader["account"]["data"]["average_unlevered_ratio"] + (unlevered_ratio - leader["account"]["data"]["average_unlevered_ratio"]) / ticks
 
                         grouped_positions = grouped_positions.loc[(grouped_positions["positionAmount"] != 0)]
                         grouped_positions["ID"] = str(binance_id)
@@ -321,16 +336,18 @@ class Scrap:
                         grouped_positions["ROI"] = leader["performance"]["data"]["roi"]
                         grouped_positions["SHARP"] = float(leader["performance"]["data"]["sharpRatio"]) if leader["performance"]["data"]["sharpRatio"] else 0
                         grouped_positions["NOTIONAL_BALANCE"] = balance
-                        grouped_positions["AVERAGE_LEVERED_RATIO"] = average_levered_ratio
+                        # grouped_positions["AVERAGE_LEVERED_RATIO"] = average_levered_ratio
                         grouped_positions["AVERAGE_LEVERAGE"] = average_leverage
 
                         positions_update = {
                             "account": {
-                                "ticks": ticks,
+                                # "ticks": ticks,
                                 "levered_ratio": levered_ratio,
                                 "unlevered_ratio": unlevered_ratio,
-                                "average_levered_ratio": average_levered_ratio,
-                                "average_unlevered_ratio": average_unlevered_ratio,
+                                # "average_levered_ratio": average_levered_ratio,
+                                # "average_unlevered_ratio": average_unlevered_ratio,
+                                "average_average_leverage": average_average_leverage,
+                                "average_leverage_ticks": average_leverage_ticks
                             },
                             "positions": filtered_positions.to_dict(),
                             "grouped_positions": grouped_positions.to_dict(),
@@ -338,7 +355,7 @@ class Scrap:
 
                         return positions_update, grouped_positions[["symbol", "positionAmount", "markPrice", "NOTIONAL_BALANCE", "PROFIT", "SHARP", "ROI", "POSITION_SHARE", "AVERAGE_LEVERAGE"]]
                     
-                return {}, pd.DataFrame({"ID": str(binance_id),"symbol": ["EMPTY"], "positionAmount":["EMPTY"], "markPrice":["EMPTY"], "NOTIONAL_BALANCE":["EMPTY"], "PROFIT":["EMPTY"], "SHARP":["EMPTY"], "ROI":["EMPTY"], "AVERAGE_LEVERED_RATIO":[average_levered_ratio], "POSITION_SHARE":["EMPTY"]}).set_index("ID")
+                return {}, pd.DataFrame({"ID": str(binance_id),"symbol": ["EMPTY"], "positionAmount":["EMPTY"], "markPrice":["EMPTY"], "NOTIONAL_BALANCE":["EMPTY"], "PROFIT":["EMPTY"], "SHARP":["EMPTY"], "ROI":["EMPTY"], "POSITION_SHARE":["EMPTY"], "AVERAGE_LEVERAGE": [average_average_leverage]}).set_index("ID")
             else:
                 await self.handle_exception(bot, 'e', f'leader_positions_update - NO FETCH for {binance_id}', None)
                 lifecycle["tick_boost"], lifecycle["reset_rotate"] = True, True

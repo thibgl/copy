@@ -124,7 +124,7 @@ class Binance:
     async def user_account_update(self, bot, user, new_positions, user_leaders, mix_diff, dropped_leaders, lifecycle):
         weigth = 10
         try:
-            print(user_leaders)
+            user_leaders = user_leaders.merge(new_positions[['AVERAGE_LEVERAGE']], left_index=True, right_index=True, how='left').groupby(level=0).first()
             # leader_entries = new_positions.groupby("ID").agg({"NOTIONAL_BALANCE": 'first'})
             leader_entries = pd.DataFrame(user["entries"]["data"])
             margin_account_data = self.client.margin_account()
@@ -192,10 +192,9 @@ class Binance:
                     user_leverage = user["account"]["data"]["leverage"] - 1
                     positions_closed = []
                     leader_cap = user["detail"]["data"]["TARGET_RATIO"] / user_leaders["WEIGHT"].sum()
-                    
-                    # positions_opened_changed["LEVERED_RATIO"] = positions_opened_changed["leader_AVERAGE_LEVERAGE"] / user["account"]["data"]["leverage"]
-                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap #* positions_opened_changed["LEVERED_RATIO"]
-                    
+                    leverage_ratio = user_leaders["AVERAGE_LEVERAGE"].mean() / user["account"]["data"]["leverage"]
+
+                    positions_opened_changed["TARGET_SHARE"] = positions_opened_changed["leader_POSITION_SHARE"] * positions_opened_changed["user_WEIGHT"] * leader_cap * leverage_ratio
                     positions_opened_changed['ABSOLUTE_SHARE'] = positions_opened_changed["TARGET_SHARE"].abs()
                     positions_opened_changed['TOTAL_TARGET_SHARE'] = positions_opened_changed.groupby('final_symbol')['ABSOLUTE_SHARE'].transform('sum')
                     positions_opened_changed["POSITION_WEIGHT"] = positions_opened_changed["ABSOLUTE_SHARE"] / positions_opened_changed["TOTAL_TARGET_SHARE"]
