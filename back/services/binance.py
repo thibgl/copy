@@ -129,7 +129,7 @@ class Binance:
         try:
             user_leaders = user_leaders.merge(new_positions[['AVERAGE_LEVERAGE']], left_index=True, right_index=True, how='left').groupby(level=0).first()
             # leader_entries = new_positions.groupby("ID").agg({"NOTIONAL_BALANCE": 'first'})
-            leader_entries = pd.DataFrame(user["entries"]["data"])
+            leader_entries = pd.DataFrame(user["entries"]["data"]).dropna()
             margin_account_data = self.client.margin_account()
 
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
