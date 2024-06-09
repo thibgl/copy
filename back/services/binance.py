@@ -130,7 +130,6 @@ class Binance:
             user_leaders = user_leaders.merge(new_positions[['AVERAGE_LEVERAGE']], left_index=True, right_index=True, how='left').groupby(level=0).first()
             # leader_entries = new_positions.groupby("ID").agg({"NOTIONAL_BALANCE": 'first'})
             leader_entries = pd.DataFrame(user["entries"]["data"])
-            leader_entries = leader_entries.loc["LAST_ROI" != None]
             margin_account_data = self.client.margin_account()
 
             assetBTC = float(margin_account_data["totalNetAssetOfBtc"])
@@ -176,8 +175,8 @@ class Binance:
                             await self.app.log.create(bot, user, 'INFO', 'user_account_update', 'MANAGE', f'Removed Drifter: {drifter_id}', details=str(drifters.to_dict()))
                             lifecycle["reset_mix"] = True
 
-
-                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.8) | (new_positions["LAST_ROI"].isna())]  
+                new_positions = new_positions.loc[(new_positions["LAST_ROI"] >= 0.8) | (new_positions["LAST_ROI"].isna())]
+                leader_entries = leader_entries.loc[leader_entries.index.isin(new_positions.index)]
                 new_positions[["final_symbol", "thousand"]] = new_positions["symbol"].apply(lambda symbol: self.get_final_symbol(symbol))
                 new_positions.loc[new_positions["thousand"], "markPrice"] /= 1000
                 # print(new_positions)
