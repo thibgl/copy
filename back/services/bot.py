@@ -112,8 +112,8 @@ class Bot:
 
     async def repay_debts(self, bot, user, positions_excess):
         if len(positions_excess) > 0:
-            print('positions_excess')
-            print(positions_excess)
+            # print('positions_excess')
+            # print(positions_excess)
             for symbol, position in positions_excess.iterrows():
                 try:
                     await self.app.binance.repay_position(bot, user, symbol, position["free"], position)
@@ -125,8 +125,8 @@ class Bot:
 
     async def close_positions(self, bot, user, closed_positions, new_user_mix):
         if len(closed_positions) > 0:
-            print('closed_positions')
-            print(closed_positions)
+            # print('closed_positions')
+            # print(closed_positions)
             for asset, position in closed_positions.iterrows():
                 try:
                     await self.app.binance.close_position(bot, user, asset, position["netAsset_TRUNCATED"], position, new_user_mix, 'FULL CLOSE', reverse=True)
@@ -135,8 +135,8 @@ class Bot:
 
     async def open_positions(self, bot, user, opened_positions, new_user_mix):
         if len(opened_positions) > 0:
-            print('opened_positions')
-            print(opened_positions)
+            # print('opened_positions')
+            # print(opened_positions)
             for symbol, position in opened_positions.iterrows():
                 try:
                     await self.app.binance.open_position(bot, user, symbol, position["TARGET_AMOUNT_TRUNCATED"], position, new_user_mix, 'FULL OPEN')
@@ -145,8 +145,8 @@ class Bot:
 
     async def change_positions(self, bot, user, changed_positions, new_user_mix):
         if len(changed_positions) > 0:
-            print('changed_positions')
-            print(changed_positions)
+            # print('changed_positions')
+            # print(changed_positions)
             for symbol, position in changed_positions.iterrows():
                 try:
                     if position["SWITCH_DIRECTION"]:

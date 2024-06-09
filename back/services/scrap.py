@@ -428,8 +428,36 @@ class Scrap:
         except Exception as e:
             await self.handle_exception(bot, e, 'get_leader', None)
 
-    async def update_leader(self, bot, leader):
-        if utils.current_time() - leader["detail"]["updated"] > 3600000:
+    async def update_leader(self, bot, leader, active=False):
+        if active:
+            update = {}
+            if utils.current_time() - leader["detail"]["updated"] > 3600000:
+                detail_update = await self.leader_detail_update(bot, leader=leader)
+
+                if detail_update:
+                    update.update(detail_update)
+                    detail = detail_update["detail"]
+
+                    if detail["positionShow"] and detail["status"] == "ACTIVE" and detail["initInvestAsset"] == "USDT":
+                        status = 'ACTIVE'
+                    else:
+                        status = 'INACTIVE'
+                else:
+                    status = 'CLOSED'
+
+                update["status"] = status
+            
+            if utils.current_time() - leader["chart"]["updated"] > 3600000:
+                chart_update = await self.leader_chart_update(bot, leader=leader)
+                update.update(chart_update)
+
+            if utils.current_time() - leader["performance"]["updated"] > 3600000:
+                performance_update = await self.leader_performance_update(bot, leader=leader)
+                update.update(performance_update)
+
+            await self.app.database.update(obj=leader, update=update, collection='leaders')
+
+        elif utils.current_time() - leader["detail"]["updated"] > 3600000:
             update = {}
             detail_update = await self.leader_detail_update(bot, leader=leader)
 
@@ -454,7 +482,6 @@ class Scrap:
 
             update["status"] = status
             await self.app.database.update(obj=leader, update=update, collection='leaders')
-            
             # if status == 'CLOSED':
             #     return None
                     
@@ -463,7 +490,7 @@ class Scrap:
             active_leaders = user["leaders"]["data"]["WEIGHT"].keys()
             for binance_id in active_leaders:
                 leader = await self.app.db.leaders.find_one({"binanceId": binance_id})
-                await self.update_leader(bot, leader)
+                await self.update_leader(bot, leader, active=True)
 
             limit = 20 - len(active_leaders)
             unactive_leaders = self.app.db.leaders.find({'status': 'ACTIVE', 'updated': {'$lt': utils.current_time() - 3600000 * 8}}).limit(limit)

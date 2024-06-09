@@ -9,6 +9,9 @@ import math
 from decimal import Decimal, ROUND_DOWN
 import uuid
 
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
+
 class Binance:
     def __init__(self, app):
         self.BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY")
@@ -160,7 +163,7 @@ class Binance:
                 print(new_positions.copy().groupby('ID').agg({
                     'LAST_ROI': 'first',
                     # 'PROFIT': 'mean',
-                    'symbol': 'unique'
+                    # 'symbol': 'unique'
                 }))
                 drifters = new_positions.copy().loc[new_positions["LAST_ROI"] < 0.8]
                 if len(drifters) > 0:
@@ -273,7 +276,7 @@ class Binance:
                     all_positions_open_changed["n_leaders"] = all_positions_open_changed["leader_ID"].apply(len)
                     total_value = round(all_positions_open_changed["TARGET_VALUE"].abs().sum(), 2)
                     total_share = round(all_positions_open_changed["CUMULATIVE_SHARE"].max(), 2)
-                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'TARGET_VALUE', "n_leaders"]].set_index('final_symbol'))
+                    print(all_positions_open_changed[["final_symbol", 'TARGET_SHARE', 'TARGET_VALUE', "leader_ID", "n_leaders"]].set_index('final_symbol'))
                     print(f'Total Value: {total_value} - Total Share: {total_share}')
 
                     opened_changed_leaders = set(np.concatenate(all_positions_open_changed["leader_ID"].values).flatten())
@@ -397,7 +400,7 @@ class Binance:
         except Exception as error:
             if error.args[1] == -2010 and not retry:
                 await self.open_position(bot, user, symbol, amount, position, user_mix, f'{source} - AUTO', retry=True)
-            if error.args[1] == -3045 or error.args[1] == 51097:
+            if error.args[1] == -3045 or error.args[1] == 51097 or error.args[1] == -3021:
                 if "ignored_symbols" in user["account"]["data"].keys():
                     ignored_symbols = pd.DataFrame(user["account"]["data"]["ignored_symbols"])
                 else:
